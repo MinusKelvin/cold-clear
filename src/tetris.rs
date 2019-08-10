@@ -5,13 +5,14 @@ use std::collections::VecDeque;
 
 #[derive(Clone, Debug)]
 pub struct BoardState {
-    cells: ArrayVec<[[bool; 10]; 40]>,
+    pub cells: ArrayVec<[[bool; 10]; 40]>,
     pub column_heights: [i32; 10],
     pub total_garbage: u32,
     pub combo: u32,
     pub b2b_bonus: bool,
     pub hold_piece: Option<Piece>,
     pub next_pieces: VecDeque<Piece>,
+    pub piece_count: u32,
     in_bag: EnumSet<Piece>
 }
 
@@ -26,6 +27,7 @@ impl BoardState {
             b2b_bonus: false,
             hold_piece: None,
             next_pieces: VecDeque::new(),
+            piece_count: 0,
             in_bag: EnumSet::all()
         }
     }
@@ -34,7 +36,21 @@ impl BoardState {
     /// 
     /// If the next queue is nonempty, the set will contain only the first piece of the next queue.
     pub fn get_next_piece_possiblities(&self) -> EnumSet<Piece> {
-        self.next_pieces.front().map_or(self.in_bag, |&p| EnumSet::only(p))
+        self.next_pieces.front().map_or(/*self.in_bag*/ EnumSet::empty(), |&p| EnumSet::only(p))
+    }
+
+    pub fn generate_next_piece(&self) -> Piece {
+        use rand::prelude::*;
+        let choices: ArrayVec<[_; 7]> = self.in_bag.iter().collect();
+        *choices.choose(&mut thread_rng()).unwrap()
+    }
+
+    pub fn add_next_piece(&mut self, piece: Piece) {
+        self.in_bag.remove(piece);
+        if self.in_bag.is_empty() {
+            self.in_bag = EnumSet::all();
+        }
+        self.next_pieces.push_back(piece);
     }
 
     fn remove_cleared_lines(&mut self) -> usize {
@@ -75,10 +91,12 @@ impl BoardState {
 
         let mut garbage_sent = clear_kind.base_garbage();
 
+        let mut did_b2b = false;
         if clear_kind.is_clear() {
             if clear_kind.is_hard() {
                 if self.b2b_bonus {
                     garbage_sent += 1;
+                    did_b2b = true;
                 }
                 self.b2b_bonus = true;
             } else {
@@ -104,9 +122,12 @@ impl BoardState {
         }
 
         self.total_garbage += garbage_sent;
+        self.piece_count += 1;
 
         LockResult {
-            clear_kind, garbage_sent, perfect_clear
+            clear_kind, garbage_sent, perfect_clear,
+            combo: if self.combo == 0 { None } else { Some(self.combo-1) },
+            b2b: did_b2b
         }
     }
 }
@@ -114,8 +135,22 @@ impl BoardState {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct LockResult {
     pub clear_kind: ClearKind,
+    pub b2b: bool,
+    pub combo: Option<u32>,
     pub garbage_sent: u32,
     pub perfect_clear: bool
+}
+
+impl Default for LockResult {
+    fn default() -> Self {
+        LockResult {
+            clear_kind: ClearKind::None,
+            b2b: false,
+            combo: None,
+            garbage_sent: 0,
+            perfect_clear: false
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
@@ -222,6 +257,8 @@ impl FallingPiece {
                         } else {
                             self.tspin = TspinStatus::Mini;
                         }
+                    } else {
+                        self.tspin = TspinStatus::None;
                     }
                 }
                 return true
@@ -443,6 +480,24 @@ impl ClearKind {
             _ => unreachable!()
         }
     }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ClearKind::None       => "             ",
+            ClearKind::Clear1     => "Single       ",
+            ClearKind::Clear2     => "Double       ",
+            ClearKind::Clear3     => "Triple       ",
+            ClearKind::Clear4     => "Tetris       ",
+            ClearKind::MiniTspin  => "Mini T-Spin  ",
+            ClearKind::MiniTspin1 => "Mini T-Spin 1",
+            ClearKind::MiniTspin2 => "Mini T-Spin 2",
+            ClearKind::Tspin      => "T-Spin       ",
+            ClearKind::Tspin1     => "T-Spin Single",
+            ClearKind::Tspin2     => "T-Spin Double",
+            ClearKind::Tspin3     => "T-Spin Triple",
+
+        }
+    }
 }
 
 impl rand::distributions::Distribution<Piece> for rand::distributions::Standard {
@@ -456,6 +511,20 @@ impl rand::distributions::Distribution<Piece> for rand::distributions::Standard 
             5 => Piece::S,
             6 => Piece::Z,
             _ => unreachable!()
+        }
+    }
+}
+
+impl Piece {
+    pub fn to_char(self) -> char {
+        match self {
+            Piece::I => 'I',
+            Piece::T => 'T',
+            Piece::O => 'O',
+            Piece::L => 'L',
+            Piece::J => 'J',
+            Piece::S => 'S',
+            Piece::Z => 'Z',
         }
     }
 }
