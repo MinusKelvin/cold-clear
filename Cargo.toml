@@ -1,5 +1,5 @@
 [package]
-name = "tetris-ai"
+name = "cold-clear"
 version = "0.1.0"
 authors = ["MinusKelvin <minuskelvin.carlson@gmail.com>"]
 edition = "2018"
