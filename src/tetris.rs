@@ -95,6 +95,12 @@ impl<R: Row> BoardState<R> {
             .any(|(x, y)| self.occupied(x, y))
     }
 
+    pub fn above_stack(&self, piece: &FallingPiece) -> bool {
+        piece.cells()
+            .into_iter()
+            .all(|(x, y)| y >= self.column_heights[x as usize])
+    }
+
     /// Does all logic associated with locking a piece.
     /// 
     /// Clears lines, detects clear kind, calculates garbage, maintains combo and back-to-back
@@ -202,11 +208,21 @@ pub struct FallingPiece {
     pub x: i32,
     pub y: i32,
     pub tspin: TspinStatus,
-    sonic_dropped: bool,
-    soft_dropped: bool
+    pub sonic_dropped: bool,
+    pub soft_dropped: bool
 }
 
 impl FallingPiece {
+    fn start(kind: PieceState, x: i32) -> Self {
+        FallingPiece {
+            x, kind,
+            y: 19,
+            tspin: TspinStatus::None,
+            sonic_dropped: false,
+            soft_dropped: false
+        }
+    }
+
     pub fn spawn(piece: Piece, board: &BoardState) -> Option<FallingPiece> {
         let mut this = FallingPiece {
             kind: PieceState(piece, RotationState::North),

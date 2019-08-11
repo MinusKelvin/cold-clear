@@ -26,7 +26,7 @@ fn main() {
         covered_cells_sq: -10
     };
 
-    const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroG;
+    const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroGFinesse;
 
     let mut root_board = BoardState::new();
     const QUEUE_SIZE: usize = 6;
@@ -84,7 +84,7 @@ fn main() {
                 .min().unwrap();
             let &idx = branches.choose_weighted(
                 &mut thread_rng(),
-                |&idx| branch.branch(idx).2.evaluation.unwrap() - min + 10
+                |&idx| { let e = branch.branch(idx).2.evaluation.unwrap() - min; e*e + 10 }
             ).unwrap();
             let (mv, _, t) = branch.branch_mut(idx);
 
@@ -111,7 +111,6 @@ fn main() {
             }
         }
 
-        // drop(branch);
         tree.repropagate(path);
     }
 
@@ -121,14 +120,12 @@ fn main() {
         println!("That's one move every {:?}", moves::TIME_TAKEN / m);
         println!("Found on average {:.2} moves per call", moves::MOVES_FOUND as f64 / moves::FIND_CALLS as f64);
         println!("Checked on average {:.2} positions per piece", moves::CHECKED_POSITIONS as f64 / moves::FIND_CALLS as f64);
-        println!("Spent {:?}/move on rotate", moves::TIME_TAKEN_ROTATE / m);
-        println!("Spent {:?}/move on shift", moves::TIME_TAKEN_SHIFT / m);
-        println!("Spent {:?}/move on sonic drop", moves::TIME_TAKEN_SONIC_DROP / m);
+        println!("Spent {:?}/move on intial positions", moves::TIME_TAKEN_INIT / m);
+        println!("Spent {:?}/move on on-stack manipulation", moves::TIME_TAKEN_ON_STACK / m);
         println!("Spent {:?}/move on pos check", moves::TIME_TAKEN_POS_CHECK / m);
         println!("Spent {:?}/move on locking", moves::TIME_TAKEN_LOCK / m);
-        println!("Spent {:?}/move on pushback", moves::TIME_TAKEN_PUSHBACK / m);
-        println!("Spent {:?}/move on other overhead (including timing)",
-            (moves::TIME_TAKEN - moves::TIME_TAKEN_ROTATE - moves::TIME_TAKEN_SHIFT - moves::TIME_TAKEN_SONIC_DROP - moves::TIME_TAKEN_POS_CHECK - moves::TIME_TAKEN_LOCK - moves::TIME_TAKEN_PUSHBACK) / m);
+        println!("Spent {:?}/move on other overhead (including timing)", (moves::TIME_TAKEN -
+            moves::TIME_TAKEN_ON_STACK - moves::TIME_TAKEN_LOCK - moves::TIME_TAKEN_INIT) / m);
         println!();
         println!("Evaluated a total of {} boards in {:?}",
             evaluation::BOARDS_EVALUATED, evaluation::TIME_TAKEN);
@@ -153,5 +150,13 @@ fn main() {
     println!("Plan:");
     display::write_drawings(&mut std::io::stdout(), &plan).unwrap();
 
-    display::write_drawings(&mut std::fs::File::create("playout").unwrap(), &drawings).unwrap();
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .map_err(|e| -(e.duration().as_secs() as i64))
+        .unwrap_or_else(|v| v);
+    display::write_drawings(
+        &mut std::fs::File::create(format!("playout-{}", t)).unwrap(),
+        &drawings
+    ).unwrap();
 }
