@@ -26,17 +26,34 @@ pub enum MovementMode {
 }
 
 pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_PUSHBACK: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_LOCK: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_SONIC_DROP: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_POS_CHECK: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_SHIFT: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_ROTATE: std::time::Duration = std::time::Duration::from_secs(0);
 pub static mut MOVES_FOUND: usize = 0;
+pub static mut FIND_CALLS: usize = 0;
+pub static mut CHECKED_POSITIONS: usize = 0;
+
+macro_rules! time {
+    ($var:ident: $e:expr) => {
+        unsafe {
+            let n = std::time::Instant::now();
+            let v = $e;
+            $var += n.elapsed();
+            v
+        }
+    };
+}
 
 pub fn find_moves(
     board: &BoardState,
     mut spawned: FallingPiece,
     mode: MovementMode
-) -> Vec<Move> {
-    let t = std::time::Instant::now();
-
-    let mut locks = HashMap::new();
-    let mut checked = HashSet::new();
+) -> Vec<Move> { time!(TIME_TAKEN: {
+    let mut locks = HashMap::with_capacity(1024);
+    let mut checked = HashSet::with_capacity(1024);
     let mut check_queue = VecDeque::new();
 
     if mode == MovementMode::TwentyG {
@@ -48,54 +65,62 @@ pub fn find_moves(
 
     while let Some((moves, position)) = check_queue.pop_front() {
         let mut change = position;
-        if change.shift(board, -1) {
+        if time!(TIME_TAKEN_SHIFT: change.shift(board, -1)) {
             let drop_input = mode == MovementMode::TwentyG && change.sonic_drop(board);
-            if checked.insert(change) {
+            if time!(TIME_TAKEN_POS_CHECK: checked.insert(change)) {
+                time!(TIME_TAKEN_PUSHBACK: {
                 let mut m = moves.clone();
                 m.push(Input::Left);
                 if drop_input {
                     m.push(Input::SonicDrop);
                 }
                 check_queue.push_back((m, change));
+                })
             }
         }
 
         let mut change = position;
-        if change.shift(board, 1) {
+        if time!(TIME_TAKEN_SHIFT: change.shift(board, 1)) {
             let drop_input = mode == MovementMode::TwentyG && change.sonic_drop(board);
-            if checked.insert(change) {
+            if time!(TIME_TAKEN_POS_CHECK: checked.insert(change)) {
+                time!(TIME_TAKEN_PUSHBACK: {
                 let mut m = moves.clone();
                 m.push(Input::Right);
                 if drop_input {
                     m.push(Input::SonicDrop);
                 }
                 check_queue.push_back((m, change));
+                })
             }
         }
 
         let mut change = position;
-        if change.cw(board) {
+        if time!(TIME_TAKEN_ROTATE: change.cw(board)) {
             let drop_input = mode == MovementMode::TwentyG && change.sonic_drop(board);
-            if checked.insert(change) {
+            if time!(TIME_TAKEN_POS_CHECK: checked.insert(change)) {
+                time!(TIME_TAKEN_PUSHBACK: {
                 let mut m = moves.clone();
                 m.push(Input::Cw);
                 if drop_input {
                     m.push(Input::SonicDrop);
                 }
                 check_queue.push_back((m, change));
+                })
             }
         }
 
         let mut change = position;
-        if change.ccw(board) {
+        if time!(TIME_TAKEN_ROTATE: change.ccw(board)) {
             let drop_input = mode == MovementMode::TwentyG && change.sonic_drop(board);
-            if checked.insert(change) {
+            if time!(TIME_TAKEN_POS_CHECK: checked.insert(change)) {
+                time!(TIME_TAKEN_PUSHBACK: {
                 let mut m = moves.clone();
                 m.push(Input::Ccw);
                 if drop_input {
                     m.push(Input::SonicDrop);
                 }
                 check_queue.push_back((m, change));
+                })
             }
         }
 
@@ -118,11 +143,13 @@ pub fn find_moves(
         }
 
         let mut change = position;
-        if change.sonic_drop(board) {
-            if checked.insert(change) {
+        if time!(TIME_TAKEN_SONIC_DROP: change.sonic_drop(board)) {
+            if time!(TIME_TAKEN_POS_CHECK: checked.insert(change)) {
+                time!(TIME_TAKEN_PUSHBACK: {
                 let mut m = moves.clone();
                 m.push(Input::SonicDrop);
                 check_queue.push_back((m, change));
+                })
             }
         }
 
@@ -130,7 +157,7 @@ pub fn find_moves(
         if cells.iter().all(|&(_, y)| y >= 20) {
             continue
         }
-        match locks.entry(cells) {
+        time!(TIME_TAKEN_LOCK: match locks.entry(cells) {
             Entry::Vacant(entry) => {
                 entry.insert(Move {
                     inputs: moves,
@@ -149,15 +176,17 @@ pub fn find_moves(
                     };
                 }
             }
-        }
+        })
     }
 
     let v: Vec<_> = locks.into_iter().map(|(_, v)| v).collect();
     unsafe {
-        TIME_TAKEN += t.elapsed();
         MOVES_FOUND += v.len();
+        CHECKED_POSITIONS += checked.len();
+        FIND_CALLS += 1;
     }
     v
+    })
 }
 
 impl Input {

@@ -1,34 +1,36 @@
-use crate::tetris::{ BoardState, LockResult };
+use crate::tetris::{ BoardState, LockResult, Row };
 use crate::moves::Move;
 use arrayvec::ArrayString;
 
 type Drawing = [ArrayString<[u8; 22]>; 28];
 
-pub fn draw_move(
-    board: &BoardState,
+pub fn draw_move<R: Row>(
+    from_board: &BoardState<R>,
+    to_board: &BoardState<R>,
     mv: &Move,
-    evaluation: Option<i32>,
+    evaluation: Option<i64>,
     depth: u32,
-    lock_result: LockResult
+    lock_result: LockResult,
+    hold: bool
 ) -> Drawing {
     let mut drawing = [ArrayString::new(); 28];
 
     // Inputs
-    let moves = mv.inputs.iter()
-        .map(|&i| i.to_char())
-        .take(21)
-        .chain(std::iter::repeat(
-            if mv.inputs.len() < 22 {
-                ' '
-            } else if mv.inputs.len() == 22 {
-                mv.inputs[21].to_char()
-            } else {
-                '*'
-            }
-        ))
-        .take(22);
-    for c in moves {
-        drawing[0].push(c);
+    let mut moves = String::new();
+    if hold {
+        moves.push('H');
+    }
+    for i in &mv.inputs {
+        moves.push(i.to_char());
+    }
+    if moves.len() > 22 {
+        drawing[0].push_str(&moves[..21]);
+        drawing[0].push('*');
+    } else {
+        drawing[0].push_str(&moves);
+        for _ in drawing[0].len()..22 {
+            drawing[0].push(' ');
+        }
     }
 
     // Playfield
@@ -37,8 +39,12 @@ pub fn draw_move(
         drawing[i+1].push(if y == 20 { '+' } else { '|' });
         for x in 0..10 {
             if cells.contains(&(x, y)) {
-                drawing[i+1].push_str("<>");
-            } else if board.occupied(x, y) {
+                if from_board.occupied(x, y) {
+                    drawing[i+1].push_str("??");
+                } else {
+                    drawing[i+1].push_str("<>");
+                }
+            } else if from_board.occupied(x, y) {
                 drawing[i+1].push_str("[]");
             } else {
                 drawing[i+1].push_str("  ");
@@ -46,25 +52,31 @@ pub fn draw_move(
         }
         drawing[i+1].push(if y == 20 { '+' } else { '|' });
     }
+
     drawing[23].push_str("+--------------------+");
+    // drawing[23].push('+');
+    // for x in 0..10 {
+    //     use std::fmt::Write;
+    //     write!(&mut drawing[23], "{:2}", from_board.column_heights[x]).unwrap();
+    // }
+    // drawing[23].push('+');
 
     // Queue
     drawing[24].push('(');
-    if let Some(hold) = board.hold_piece {
+    if let Some(hold) = to_board.hold_piece {
         drawing[24].push(hold.to_char());
     } else {
         drawing[24].push(' ');
     }
     drawing[24].push(')');
-    let pieces = board.next_pieces.iter()
-        .skip(1)
+    let pieces = to_board.next_pieces.iter()
         .map(|&i| i.to_char())
         .take(18)
         .chain(std::iter::repeat(
-            if board.next_pieces.len() < 20 {
+            if to_board.next_pieces.len() < 20 {
                 ' '
-            } else if board.next_pieces.len() == 20 {
-                board.next_pieces[8].to_char()
+            } else if to_board.next_pieces.len() == 20 {
+                to_board.next_pieces[8].to_char()
             } else {
                 '*'
             }
@@ -97,7 +109,7 @@ pub fn draw_move(
 
     // Evaluation and depth
     let evalstr = if let Some(evaluation) = evaluation {
-        (evaluation - board.total_garbage as i32 * 100).to_string()
+        (evaluation - from_board.total_garbage as i64 * 100).to_string()
     } else {
         "DEAD".to_owned()
     };
@@ -110,11 +122,11 @@ pub fn draw_move(
 
     // Garbage sent, piece count
     let garbstr = if lock_result.garbage_sent == 0 {
-        board.total_garbage.to_string()
+        from_board.total_garbage.to_string()
     } else {
-        format!("{} +{}", board.total_garbage, lock_result.garbage_sent)
+        format!("{} +{}", from_board.total_garbage, lock_result.garbage_sent)
     };
-    let piecestr = format!("#{}", board.piece_count+1);
+    let piecestr = format!("#{}", from_board.piece_count+1);
     drawing[27].push_str(&garbstr);
     for _ in piecestr.len()..22-garbstr.len() {
         drawing[27].push(' ');

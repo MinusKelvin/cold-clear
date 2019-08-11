@@ -4,50 +4,57 @@ use crate::tetris::BoardState;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
 pub struct Weights {
-    pub back_to_back: i32,
-    pub bumpiness: i32,
-    pub bumpiness_sq: i32,
-    pub height: i32,
-    pub top_half: i32,
-    pub top_quarter: i32,
-    pub cavity_cells: i32,
-    pub cavity_cells_sq: i32,
-    pub overhang_cells: i32,
-    pub overhang_cells_sq: i32,
-    pub covered_cells: i32,
-    pub covered_cells_sq: i32,
+    pub back_to_back: i64,
+    pub bumpiness: i64,
+    pub bumpiness_sq: i64,
+    pub height: i64,
+    pub top_half: i64,
+    pub top_quarter: i64,
+    pub cavity_cells: i64,
+    pub cavity_cells_sq: i64,
+    pub overhang_cells: i64,
+    pub overhang_cells_sq: i64,
+    pub covered_cells: i64,
+    pub covered_cells_sq: i64,
 }
 
 pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
 pub static mut BOARDS_EVALUATED: usize = 0;
 
-pub fn evaluate(board: &BoardState, weights: &Weights) -> i32 {
+pub fn evaluate(board: &BoardState, weights: &Weights) -> i64 {
     let t = std::time::Instant::now();
 
-    let mut evaluation = board.total_garbage as i32 * 100;
+    let mut evaluation = board.total_garbage as i64 * 100;
 
     if board.b2b_bonus {
         evaluation += weights.back_to_back;
     }
 
-    let highest_point = board.column_heights.iter().max().unwrap();
+    let highest_point = *board.column_heights.iter().max().unwrap() as i64;
     evaluation += weights.height * highest_point;
     evaluation += weights.top_half * (highest_point - 10).max(0);
     evaluation += weights.top_quarter * (highest_point - 15).max(0);
 
-    let (bump, bump_sq) = bumpiness(board);
-    evaluation += bump * weights.bumpiness;
-    evaluation += bump_sq * weights.bumpiness_sq;
+    if weights.bumpiness * weights.bumpiness_sq != 0 {
+        let (bump, bump_sq) = bumpiness(board);
+        evaluation += bump * weights.bumpiness;
+        evaluation += bump_sq * weights.bumpiness_sq;
+    }
 
-    let (cavity_cells, overhang_cells) = cavities_and_overhangs(board);
-    evaluation += cavity_cells * weights.cavity_cells;
-    evaluation += cavity_cells * cavity_cells * weights.cavity_cells_sq;
-    evaluation += overhang_cells * weights.overhang_cells;
-    evaluation += overhang_cells * overhang_cells * weights.overhang_cells_sq;
+    if weights.cavity_cells * weights.overhang_cells
+            * weights.overhang_cells_sq * weights.cavity_cells_sq != 0 {
+        let (cavity_cells, overhang_cells) = cavities_and_overhangs(board);
+        evaluation += cavity_cells * weights.cavity_cells;
+        evaluation += cavity_cells * cavity_cells * weights.cavity_cells_sq;
+        evaluation += overhang_cells * weights.overhang_cells;
+        evaluation += overhang_cells * overhang_cells * weights.overhang_cells_sq;
+    }
 
-    let (covered_cells, covered_cells_sq) = covered_cells(board);
-    evaluation += covered_cells * weights.covered_cells;
-    evaluation += covered_cells_sq * weights.covered_cells_sq;
+    if weights.covered_cells * weights.covered_cells_sq != 0 {
+        let (covered_cells, covered_cells_sq) = covered_cells(board);
+        evaluation += covered_cells * weights.covered_cells;
+        evaluation += covered_cells_sq * weights.covered_cells_sq;
+    }
 
     unsafe {
         TIME_TAKEN += t.elapsed();
@@ -62,7 +69,7 @@ pub fn evaluate(board: &BoardState, weights: &Weights) -> i32 {
 /// The first returned value is the total amount of height change outside of an apparent well. The
 /// second returned value is the sum of the squares of the height changes outside of an apparent
 /// well.
-fn bumpiness(board: &BoardState) -> (i32, i32) {
+fn bumpiness(board: &BoardState) -> (i64, i64) {
     let mut well = 0;
     for x in 1..10 {
         if board.column_heights[x] < board.column_heights[well] {
@@ -85,14 +92,14 @@ fn bumpiness(board: &BoardState) -> (i32, i32) {
         bumpiness_sq += dh * dh;
     }
 
-    (bumpiness.abs(), bumpiness_sq.abs())
+    (bumpiness.abs() as i64, bumpiness_sq.abs() as i64)
 }
 
 /// Evaluates the holes in the playfield.
 /// 
 /// The first returned value is the number of cells that make up fully enclosed spaces (cavities).
 /// The second is the number of cells that make up partially enclosed spaces (overhangs).
-fn cavities_and_overhangs(board: &BoardState) -> (i32, i32) {
+fn cavities_and_overhangs(board: &BoardState) -> (i64, i64) {
     let mut checked = ArrayVec::from([[false; 10]; 40]);
 
     let mut cavity_cells = 0;
@@ -100,7 +107,7 @@ fn cavities_and_overhangs(board: &BoardState) -> (i32, i32) {
 
     for y in 0..40 {
         for x in 0..10 {
-            if board.cells[y as usize][x as usize] ||
+            if board.occupied(x, y) ||
                     checked[y as usize][x as usize] ||
                     y >= board.column_heights[x as usize] {
                 continue
@@ -113,7 +120,7 @@ fn cavities_and_overhangs(board: &BoardState) -> (i32, i32) {
 
             while let Some((x, y)) = to_check.pop_front() {
                 if x < 0 || y < 0 || x >= 10 || y >= 40 ||
-                        board.cells[y as usize][x as usize] || checked[y as usize][x as usize] {
+                        board.occupied(x, y) || checked[y as usize][x as usize] {
                     continue
                 }
 
@@ -146,14 +153,14 @@ fn cavities_and_overhangs(board: &BoardState) -> (i32, i32) {
 /// 
 /// The first returned value is the number of filled cells cover the topmost hole in the columns.
 /// The second value is the sum of the squares of those values.
-fn covered_cells(board: &BoardState) -> (i32, i32) {
+fn covered_cells(board: &BoardState) -> (i64, i64) {
     let mut covered = 0;
     let mut covered_sq = 0;
 
     for x in 0..10 {
         let mut cells = 0;
         for y in (0..board.column_heights[x] as usize).rev() {
-            if !board.cells[y][x] {
+            if !board.occupied(x as i32, y as i32) {
                 covered += cells;
                 covered_sq += cells * cells;
                 break

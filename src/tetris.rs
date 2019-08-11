@@ -4,8 +4,8 @@ use enumset::EnumSetType;
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug)]
-pub struct BoardState {
-    pub cells: ArrayVec<[[bool; 10]; 40]>,
+pub struct BoardState<R=u16> {
+    cells: ArrayVec<[R; 40]>,
     pub column_heights: [i32; 10],
     pub total_garbage: u32,
     pub combo: u32,
@@ -13,14 +13,23 @@ pub struct BoardState {
     pub hold_piece: Option<Piece>,
     pub next_pieces: VecDeque<Piece>,
     pub piece_count: u32,
+    pub was_soft_dropped: bool,
+    pub last_lock_kind: ClearKind,
     in_bag: EnumSet<Piece>
 }
 
-impl BoardState {
+pub trait Row: Default + Copy + Clone {
+    fn set(&mut self, x: usize, color: CellColor);
+    fn get(&self, x: usize) -> bool;
+    fn is_full(&self) -> bool;
+    fn cell_color(&self, x: usize) -> CellColor;
+}
+
+impl<R: Row> BoardState<R> {
     /// Creates a new empty board with no history.
     pub fn new() -> Self {
         BoardState {
-            cells: [[false; 10]; 40].into(),
+            cells: [R::default(); 40].into(),
             column_heights: [0; 10],
             total_garbage: 0,
             combo: 0,
@@ -28,21 +37,28 @@ impl BoardState {
             hold_piece: None,
             next_pieces: VecDeque::new(),
             piece_count: 0,
+            was_soft_dropped: false,
+            last_lock_kind: ClearKind::None,
             in_bag: EnumSet::all()
         }
-    }
-
-    /// Returns the set of possible pieces that will spawn next.
-    /// 
-    /// If the next queue is nonempty, the set will contain only the first piece of the next queue.
-    pub fn get_next_piece_possiblities(&self) -> EnumSet<Piece> {
-        self.next_pieces.front().map_or(/*self.in_bag*/ EnumSet::empty(), |&p| EnumSet::only(p))
     }
 
     pub fn generate_next_piece(&self) -> Piece {
         use rand::prelude::*;
         let choices: ArrayVec<[_; 7]> = self.in_bag.iter().collect();
         *choices.choose(&mut thread_rng()).unwrap()
+    }
+
+    /// Retrieves the next piece in the queue.
+    /// 
+    /// If the queue is empty, returns the set of possible next pieces.
+    pub fn get_next_piece(&self) -> Result<Piece, EnumSet<Piece>> {
+        self.next_pieces.front().copied().ok_or(self.in_bag)
+    }
+
+    /// Retrieves the piece after the next piece in the queue if it is known.
+    pub fn get_next_next_piece(&self) -> Option<Piece> {
+        self.next_pieces.get(1).copied()
     }
 
     pub fn add_next_piece(&mut self, piece: Piece) {
@@ -54,16 +70,23 @@ impl BoardState {
     }
 
     fn remove_cleared_lines(&mut self) -> usize {
-        self.cells.retain(|r| !r.iter().all(|&b| b));
+        self.cells.retain(|&mut r| !r.is_full());
         let cleared = 40 - self.cells.len();
         for _ in 0..cleared {
-            self.cells.push([false; 10]);
+            self.cells.push(R::default());
+        }
+        for x in 0..10 {
+            self.column_heights[x] -= cleared as i32;
+            while self.column_heights[x] > 0 &&
+                    !self.cells[self.column_heights[x] as usize-1].get(x) {
+                self.column_heights[x] -= 1;
+            }
         }
         cleared
     }
 
     pub fn occupied(&self, x: i32, y: i32) -> bool {
-        x < 0 || y < 0 || x >= 10 || y >= 40 || self.cells[y as usize][x as usize]
+        x < 0 || y < 0 || x >= 10 || y >= 40 || (self.cells[y as usize].get(x as usize))
     }
 
     fn obstructed(&self, piece: &FallingPiece) -> bool {
@@ -78,15 +101,12 @@ impl BoardState {
     /// state, detects perfect clears.
     pub fn lock_piece(&mut self, piece: FallingPiece) -> LockResult {
         for (x, y) in piece.cells() {
-            self.cells[y as usize][x as usize] = true;
+            self.cells[y as usize].set(x as usize, piece.kind.0.color());
             if self.column_heights[x as usize] < y+1 {
                 self.column_heights[x as usize] = y+1;
             }
         }
         let cleared = self.remove_cleared_lines();
-        for x in 0..10 {
-            self.column_heights[x] -= cleared as i32;
-        }
         let clear_kind = ClearKind::get(cleared, piece.tspin);
 
         let mut garbage_sent = clear_kind.base_garbage();
@@ -123,12 +143,35 @@ impl BoardState {
 
         self.total_garbage += garbage_sent;
         self.piece_count += 1;
+        self.was_soft_dropped = piece.soft_dropped;
+        self.last_lock_kind = clear_kind;
 
         LockResult {
             clear_kind, garbage_sent, perfect_clear,
             combo: if self.combo == 0 { None } else { Some(self.combo-1) },
             b2b: did_b2b
         }
+    }
+
+    /// Advances the queue, and holds the piece if requested.
+    /// 
+    /// Returns the piece that should have been spawned, or `None` if the queue is empty.
+    pub fn advance_queue(&mut self, hold: bool) -> Option<Piece> {
+        self.next_pieces.pop_front()
+            .and_then(|next| if hold {
+                match self.hold_piece {
+                    Some(hold) => {
+                        self.hold_piece = Some(next);
+                        Some(hold)
+                    },
+                    None => {
+                        self.hold_piece = Some(next);
+                        self.next_pieces.pop_front()
+                    }
+                }
+            } else {
+                Some(next)
+            })
     }
 }
 
@@ -158,7 +201,9 @@ pub struct FallingPiece {
     pub kind: PieceState,
     pub x: i32,
     pub y: i32,
-    pub tspin: TspinStatus
+    pub tspin: TspinStatus,
+    sonic_dropped: bool,
+    soft_dropped: bool
 }
 
 impl FallingPiece {
@@ -166,7 +211,9 @@ impl FallingPiece {
         let mut this = FallingPiece {
             kind: PieceState(piece, RotationState::North),
             x: 4, y: 20,
-            tspin: TspinStatus::None
+            tspin: TspinStatus::None,
+            sonic_dropped: false,
+            soft_dropped: false
         };
 
         if board.obstructed(&this) {
@@ -197,20 +244,38 @@ impl FallingPiece {
             false
         } else {
             self.tspin = TspinStatus::None;
+            if self.sonic_dropped {
+                self.soft_dropped = true;
+            }
             true
         }
     }
 
     pub fn sonic_drop(&mut self, board: &BoardState) -> bool {
-        let mut fell = false;
-        loop {
-            self.y -= 1;
-            if board.obstructed(self) {
-                self.y += 1;
-                return fell;
-            }
-            fell = true;
+        let drop_by = self.cells()
+            .into_iter()
+            .map(|(x, y)| y - board.column_heights[x as usize])
+            .min().unwrap();
+        if drop_by > 0 {
+            self.sonic_dropped = true;
             self.tspin = TspinStatus::None;
+            self.y -= drop_by;
+            true
+        } else if drop_by < 0 {
+            let mut fell = false;
+            loop {
+                self.y -= 1;
+                if board.obstructed(self) {
+                    self.y += 1;
+                    break
+                }
+                fell = true;
+                self.tspin = TspinStatus::None;
+            }
+            self.sonic_dropped = fell;
+            fell
+        } else {
+            false
         }
     }
 
@@ -261,6 +326,9 @@ impl FallingPiece {
                         self.tspin = TspinStatus::None;
                     }
                 }
+                if self.sonic_dropped {
+                    self.soft_dropped = true;
+                }
                 return true
             }
         }
@@ -280,6 +348,14 @@ impl FallingPiece {
         target.ccw();
         self.rotate(target, board)
     }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum CellColor {
+    I, O, T, L, J, S, Z,
+    Garbage,
+    Unclearable,
+    Empty
 }
 
 #[derive(Debug, Hash, EnumSetType)]
@@ -527,6 +603,18 @@ impl Piece {
             Piece::Z => 'Z',
         }
     }
+
+    pub fn color(self) -> CellColor {
+        match self {
+            Piece::I => CellColor::I,
+            Piece::T => CellColor::T,
+            Piece::O => CellColor::O,
+            Piece::L => CellColor::L,
+            Piece::J => CellColor::J,
+            Piece::S => CellColor::S,
+            Piece::Z => CellColor::Z,
+        }
+    }
 }
 
 const COMBO_GARBAGE: &[u32] = &[
@@ -543,3 +631,52 @@ const COMBO_GARBAGE: &[u32] = &[
     4,
     5
 ];
+
+impl Row for u16 {
+    fn set(&mut self, x: usize, color: CellColor) {
+        *self |= 1 << x;
+    }
+
+    fn get(&self, x: usize) -> bool {
+        *self & (1 << x) != 0
+    }
+
+    fn is_full(&self) -> bool {
+        *self == 0b11111_11111
+    }
+
+    fn cell_color(&self, x: usize) -> CellColor {
+        if self.get(x) {
+            CellColor::Garbage
+        } else {
+            CellColor::Empty
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ColoredRow([CellColor; 10]);
+
+impl Default for ColoredRow {
+    fn default() -> Self {
+        ColoredRow([CellColor::Empty; 10])
+    }
+}
+
+impl Row for ColoredRow {
+    fn set(&mut self, x: usize, color: CellColor) {
+        self.0[x] = color;
+    }
+
+    fn get(&self, x: usize) -> bool {
+        self.0[x] != CellColor::Empty
+    }
+
+    fn is_full(&self) -> bool {
+        self.0.iter().all(|&c| c != CellColor::Empty)
+    }
+
+    fn cell_color(&self, x: usize) -> CellColor {
+        self.0[x]
+    }
+}
