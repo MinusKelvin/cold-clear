@@ -1,9 +1,15 @@
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
-use crate::tetris::BoardState;
+use crate::tetris::{ BoardState, LockResult, ClearKind };
+
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub struct Evaluation {
+    pub accumulated: i64,
+    pub transient: i64
+}
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
-pub struct Weights {
+pub struct BoardWeights {
     pub back_to_back: i64,
     pub bumpiness: i64,
     pub bumpiness_sq: i64,
@@ -18,42 +24,107 @@ pub struct Weights {
     pub covered_cells_sq: i64,
 }
 
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
+pub struct PlacementWeights {
+    pub b2b_clear: i64,
+    pub clear1: i64,
+    pub clear2: i64,
+    pub clear3: i64,
+    pub clear4: i64,
+    pub tspin1: i64,
+    pub tspin2: i64,
+    pub tspin3: i64,
+    pub mini_tspin1: i64,
+    pub mini_tspin2: i64,
+    pub perfect_clear: i64,
+    pub combo_table: [i64; 12],
+    pub soft_drop: i64
+}
+
 pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
 pub static mut BOARDS_EVALUATED: usize = 0;
 
-pub fn evaluate(board: &BoardState, weights: &Weights) -> i64 {
+pub fn evaluate(
+    lock: &LockResult,
+    board: &BoardState,
+    board_weights: &BoardWeights,
+    placement_weights: &PlacementWeights
+) -> Evaluation {
     let t = std::time::Instant::now();
 
-    let mut evaluation = board.total_garbage as i64 * 100;
+    let mut transient_eval = 0;
+    let mut acc_eval = 0;
+
+    if lock.perfect_clear {
+        acc_eval += placement_weights.perfect_clear;
+    } else {
+        if lock.b2b {
+            acc_eval += placement_weights.b2b_clear;
+        }
+        if let Some(combo) = lock.combo {
+            let combo = combo.min(11) as usize;
+            acc_eval += placement_weights.combo_table[combo];
+        }
+        match lock.clear_kind {
+            ClearKind::Clear1 => {
+                acc_eval += placement_weights.clear1;
+            }
+            ClearKind::Clear2 => {
+                acc_eval += placement_weights.clear2;
+            }
+            ClearKind::Clear3 => {
+                acc_eval += placement_weights.clear3;
+            }
+            ClearKind::Clear4 => {
+                acc_eval += placement_weights.clear4;
+            }
+            ClearKind::Tspin1 => {
+                acc_eval += placement_weights.tspin1;
+            }
+            ClearKind::Tspin2 => {
+                acc_eval += placement_weights.tspin2;
+            }
+            ClearKind::Tspin3 => {
+                acc_eval += placement_weights.tspin3;
+            }
+            ClearKind::MiniTspin1 => {
+                acc_eval += placement_weights.mini_tspin1;
+            }
+            ClearKind::MiniTspin2 => {
+                acc_eval += placement_weights.mini_tspin2;
+            }
+            _ => {}
+        }
+    }
 
     if board.b2b_bonus {
-        evaluation += weights.back_to_back;
+        transient_eval += board_weights.back_to_back;
     }
 
     let highest_point = *board.column_heights.iter().max().unwrap() as i64;
-    evaluation += weights.height * highest_point;
-    evaluation += weights.top_half * (highest_point - 10).max(0);
-    evaluation += weights.top_quarter * (highest_point - 15).max(0);
+    transient_eval += board_weights.height * highest_point;
+    transient_eval += board_weights.top_half * (highest_point - 10).max(0);
+    transient_eval += board_weights.top_quarter * (highest_point - 15).max(0);
 
-    if weights.bumpiness * weights.bumpiness_sq != 0 {
+    if board_weights.bumpiness | board_weights.bumpiness_sq != 0 {
         let (bump, bump_sq) = bumpiness(board);
-        evaluation += bump * weights.bumpiness;
-        evaluation += bump_sq * weights.bumpiness_sq;
+        transient_eval += bump * board_weights.bumpiness;
+        transient_eval += bump_sq * board_weights.bumpiness_sq;
     }
 
-    if weights.cavity_cells * weights.overhang_cells
-            * weights.overhang_cells_sq * weights.cavity_cells_sq != 0 {
+    if board_weights.cavity_cells | board_weights.cavity_cells_sq |
+            board_weights.overhang_cells | board_weights.overhang_cells_sq != 0 {
         let (cavity_cells, overhang_cells) = cavities_and_overhangs(board);
-        evaluation += cavity_cells * weights.cavity_cells;
-        evaluation += cavity_cells * cavity_cells * weights.cavity_cells_sq;
-        evaluation += overhang_cells * weights.overhang_cells;
-        evaluation += overhang_cells * overhang_cells * weights.overhang_cells_sq;
+        transient_eval += board_weights.cavity_cells * cavity_cells;
+        transient_eval += board_weights.cavity_cells_sq * cavity_cells * cavity_cells;
+        transient_eval += board_weights.overhang_cells * overhang_cells;
+        transient_eval += board_weights.overhang_cells_sq * overhang_cells * overhang_cells;
     }
 
-    if weights.covered_cells * weights.covered_cells_sq != 0 {
+    if board_weights.cavity_cells | board_weights.cavity_cells_sq != 0 {
         let (covered_cells, covered_cells_sq) = covered_cells(board);
-        evaluation += covered_cells * weights.covered_cells;
-        evaluation += covered_cells_sq * weights.covered_cells_sq;
+        transient_eval += board_weights.covered_cells * covered_cells;
+        transient_eval += board_weights.covered_cells_sq * covered_cells_sq;
     }
 
     unsafe {
@@ -61,7 +132,10 @@ pub fn evaluate(board: &BoardState, weights: &Weights) -> i64 {
         BOARDS_EVALUATED += 1;
     }
 
-    evaluation
+    Evaluation {
+        accumulated: acc_eval,
+        transient: transient_eval
+    }
 }
 
 /// Evaluates the bumpiness of the playfield.

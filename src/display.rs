@@ -109,7 +109,7 @@ pub fn draw_move<R: Row>(
 
     // Evaluation and depth
     let evalstr = if let Some(evaluation) = evaluation {
-        (evaluation - from_board.total_garbage as i64 * 100).to_string()
+        evaluation.to_string()
     } else {
         "DEAD".to_owned()
     };

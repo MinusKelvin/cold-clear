@@ -13,8 +13,6 @@ pub struct BoardState<R=u16> {
     pub hold_piece: Option<Piece>,
     pub next_pieces: VecDeque<Piece>,
     pub piece_count: u32,
-    pub was_soft_dropped: bool,
-    pub last_lock_kind: ClearKind,
     in_bag: EnumSet<Piece>
 }
 
@@ -37,8 +35,6 @@ impl<R: Row> BoardState<R> {
             hold_piece: None,
             next_pieces: VecDeque::new(),
             piece_count: 0,
-            was_soft_dropped: false,
-            last_lock_kind: ClearKind::None,
             in_bag: EnumSet::all()
         }
     }
@@ -149,13 +145,12 @@ impl<R: Row> BoardState<R> {
 
         self.total_garbage += garbage_sent;
         self.piece_count += 1;
-        self.was_soft_dropped = piece.soft_dropped;
-        self.last_lock_kind = clear_kind;
 
         LockResult {
             clear_kind, garbage_sent, perfect_clear,
             combo: if self.combo == 0 { None } else { Some(self.combo-1) },
-            b2b: did_b2b
+            b2b: did_b2b,
+            soft_dropped: piece.soft_dropped
         }
     }
 
@@ -187,7 +182,8 @@ pub struct LockResult {
     pub b2b: bool,
     pub combo: Option<u32>,
     pub garbage_sent: u32,
-    pub perfect_clear: bool
+    pub perfect_clear: bool,
+    pub soft_dropped: bool
 }
 
 impl Default for LockResult {
@@ -197,7 +193,8 @@ impl Default for LockResult {
             b2b: false,
             combo: None,
             garbage_sent: 0,
-            perfect_clear: false
+            perfect_clear: false,
+            soft_dropped: false
         }
     }
 }
@@ -633,7 +630,7 @@ impl Piece {
     }
 }
 
-const COMBO_GARBAGE: &[u32] = &[
+pub const COMBO_GARBAGE: [u32; 12] = [
     0,
     0,
     1,

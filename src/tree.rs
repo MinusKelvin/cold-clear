@@ -5,6 +5,7 @@ use crate::moves::Move;
 
 pub struct Tree {
     pub board: BoardState,
+    pub raw_eval: crate::evaluation::Evaluation,
     pub evaluation: Option<i64>,
     // TODO: newtype this vec type
     children: Vec<(Move, LockResult, Tree)>,
@@ -26,10 +27,16 @@ enum ChildMut<'a> {
 }
 
 impl Tree {
-    pub fn new(board: BoardState, weight: &crate::evaluation::Weights) -> Self {
+    pub fn new(
+        board: BoardState,
+        lock: &LockResult,
+        transient_weights: &crate::evaluation::BoardWeights,
+        acc_weights: &crate::evaluation::PlacementWeights
+    ) -> Self {
+        let raw_eval = crate::evaluation::evaluate(lock, &board, transient_weights, acc_weights);
         Tree {
-            evaluation: Some(crate::evaluation::evaluate(&board, weight)),
-            board,
+            raw_eval, board,
+            evaluation: Some(raw_eval.accumulated + raw_eval.transient),
             children: vec![],
             hold_case: None
         }
@@ -39,7 +46,8 @@ impl Tree {
         match path.pop_front() {
             None => match self.best_child() {
                 Child::HoldCase(t) => self.evaluation = t.evaluation,
-                Child::Move(_, _, _, t) => self.evaluation = t.evaluation,
+                Child::Move(_, _, _, t) =>
+                    self.evaluation = Some(t.evaluation.unwrap() + self.raw_eval.accumulated),
                 Child::None => {}
             }
             Some(None) => {
@@ -47,7 +55,8 @@ impl Tree {
                 hold.repropagate(path);
                 match self.best_child() {
                     Child::HoldCase(t) => self.evaluation = t.evaluation,
-                    Child::Move(_, _, _, t) => self.evaluation = t.evaluation,
+                    Child::Move(_, _, _, t) =>
+                        self.evaluation = Some(t.evaluation.unwrap() + self.raw_eval.accumulated),
                     Child::None => self.evaluation = None
                 }
             }
@@ -60,7 +69,8 @@ impl Tree {
                 }
                 match self.best_child() {
                     Child::HoldCase(t) => self.evaluation = t.evaluation,
-                    Child::Move(_, _, _, t) => self.evaluation = t.evaluation,
+                    Child::Move(_, _, _, t) =>
+                        self.evaluation = Some(t.evaluation.unwrap() + self.raw_eval.accumulated),
                     Child::None => self.evaluation = None
                 }
             }
@@ -223,9 +233,11 @@ impl Tree {
     pub fn extend(&mut self, hold: bool, mv: Move, result: LockResult, subtree: Tree) {
         if hold {
             let b = &self.board;
+            let raw_eval = self.raw_eval;
             self.hold_case.get_or_insert_with(|| Box::new(Tree {
                 board: b.clone(),
                 evaluation: None,
+                raw_eval,
                 hold_case: None,
                 children: vec![]
             })).children.push((mv, result, subtree));

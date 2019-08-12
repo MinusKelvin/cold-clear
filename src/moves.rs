@@ -29,36 +29,20 @@ pub enum MovementMode {
 }
 
 pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut TIME_TAKEN_INIT: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut TIME_TAKEN_ON_STACK: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut TIME_TAKEN_POS_CHECK: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut TIME_TAKEN_LOCK: std::time::Duration = std::time::Duration::from_secs(0);
 pub static mut MOVES_FOUND: usize = 0;
-pub static mut FIND_CALLS: usize = 0;
-pub static mut CHECKED_POSITIONS: usize = 0;
-
-macro_rules! time {
-    ($var:ident: $e:expr) => {
-        unsafe {
-            let n = std::time::Instant::now();
-            let v = $e;
-            $var += n.elapsed();
-            v
-        }
-    };
-}
 
 pub fn find_moves(
     board: &BoardState,
     mut spawned: FallingPiece,
     mode: MovementMode
-) -> Vec<Move> { time!(TIME_TAKEN: {
+) -> Vec<Move> {
+    let t = std::time::Instant::now();
+
     let mut locks = HashMap::with_capacity(1024);
     let mut checked = HashSet::with_capacity(1024);
     let mut check_queue = VecDeque::new();
     let fast_mode;
 
-    time!(TIME_TAKEN_INIT: {
     if board.column_heights.iter().all(|&v| v < 16) {
         let starts = match mode {
             MovementMode::TwentyG => vec![(spawned, [Input::SonicDrop].iter().copied().collect())],
@@ -83,10 +67,9 @@ pub fn find_moves(
         checked.insert(spawned);
         check_queue.push_back((inputs, spawned));
     }
-    });
 
     while let Some((moves, position)) = check_queue.pop_front() {
-        if !moves.is_full() { time!(TIME_TAKEN_ON_STACK: {
+        if !moves.is_full() {
             attempt(
                 board, &moves, position,
                 &mut checked, &mut check_queue,
@@ -131,28 +114,26 @@ pub fn find_moves(
                     Input::DasRight
                 );
             }
-        })}
+        }
 
         let mut change = position;
         if change.sonic_drop(board) && !moves.is_full() {
-            if time!(TIME_TAKEN_POS_CHECK: checked.insert(change)) {
+            if checked.insert(change) {
                 let mut m = moves.clone();
                 m.push(Input::SonicDrop);
                 check_queue.push_back((m, change));
             }
         }
 
-        time!(TIME_TAKEN_LOCK: lock_check(change, &mut locks, moves));
+        lock_check(change, &mut locks, moves);
     }
 
     let v: Vec<_> = locks.into_iter().map(|(_, v)| v).collect();
     unsafe {
         MOVES_FOUND += v.len();
-        CHECKED_POSITIONS += checked.len();
-        FIND_CALLS += 1;
+        TIME_TAKEN += t.elapsed();
     }
     v
-    })
 }
 
 fn lock_check(
@@ -199,7 +180,7 @@ fn attempt(
     if input.apply(&mut piece, board) {
         if !fast_mode || !board.above_stack(&piece) {
             let drop_input = twenty_g && piece.sonic_drop(board);
-            if time!(TIME_TAKEN_POS_CHECK: checked.insert(piece)) {
+            if checked.insert(piece) {
                 let mut m = moves.clone();
                 m.push(input);
                 if drop_input && !m.is_full() {

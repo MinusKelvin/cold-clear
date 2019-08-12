@@ -1,5 +1,6 @@
 use rand::prelude::*;
 use std::collections::VecDeque;
+use arrayvec::ArrayVec;
 
 mod display;
 mod evaluation;
@@ -11,11 +12,11 @@ use crate::tetris::BoardState;
 use crate::tree::Tree;
 
 fn main() {
-    let weights = evaluation::Weights {
+    let transient_weights = evaluation::BoardWeights {
         back_to_back: 50,
         bumpiness: -5,
         bumpiness_sq: -1,
-        height: -1,
+        height: 1,
         top_half: -20,
         top_quarter: -1000,
         cavity_cells: -50,
@@ -26,6 +27,26 @@ fn main() {
         covered_cells_sq: -10
     };
 
+    let acc_weights = evaluation::PlacementWeights {
+        soft_drop: -20,
+        b2b_clear: 100,
+        clear1: -200,
+        clear2: -100,
+        clear3: -50,
+        clear4: 400,
+        tspin1: 100,
+        tspin2: 400,
+        tspin3: 600,
+        mini_tspin1: 0,
+        mini_tspin2: 100,
+        perfect_clear: 1000,
+        combo_table: crate::tetris::COMBO_GARBAGE.iter()
+            .map(|&v| v as i64)
+            .collect::<ArrayVec<[i64; 12]>>()
+            .into_inner()
+            .unwrap()
+    };
+
     const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroGFinesse;
 
     let mut root_board = BoardState::new();
@@ -33,7 +54,12 @@ fn main() {
     for _ in 0..QUEUE_SIZE {
         root_board.add_next_piece(root_board.generate_next_piece());
     }
-    let mut tree = Tree::new(root_board, &weights);
+    let mut tree = Tree::new(
+        root_board,
+        &crate::tetris::LockResult::default(),
+        &transient_weights,
+        &acc_weights
+    );
 
     let mut drawings = vec![];
 
@@ -107,7 +133,10 @@ fn main() {
                 assert!(p == Some(mv.location.kind.0));
 
                 let lock = result.lock_piece(mv.location);
-                branch.extend(hold, mv, lock, Tree::new(result, &weights));
+                branch.extend(
+                    hold, mv, lock,
+                    Tree::new(result, &lock, &transient_weights, &acc_weights)
+                );
             }
         }
 
@@ -115,17 +144,8 @@ fn main() {
     }
 
     unsafe {
-        let m = moves::MOVES_FOUND as u32;
         println!("Found a total of {} moves in {:?}", moves::MOVES_FOUND, moves::TIME_TAKEN);
-        println!("That's one move every {:?}", moves::TIME_TAKEN / m);
-        println!("Found on average {:.2} moves per call", moves::MOVES_FOUND as f64 / moves::FIND_CALLS as f64);
-        println!("Checked on average {:.2} positions per piece", moves::CHECKED_POSITIONS as f64 / moves::FIND_CALLS as f64);
-        println!("Spent {:?}/move on intial positions", moves::TIME_TAKEN_INIT / m);
-        println!("Spent {:?}/move on on-stack manipulation", moves::TIME_TAKEN_ON_STACK / m);
-        println!("Spent {:?}/move on pos check", moves::TIME_TAKEN_POS_CHECK / m);
-        println!("Spent {:?}/move on locking", moves::TIME_TAKEN_LOCK / m);
-        println!("Spent {:?}/move on other overhead (including timing)", (moves::TIME_TAKEN -
-            moves::TIME_TAKEN_ON_STACK - moves::TIME_TAKEN_LOCK - moves::TIME_TAKEN_INIT) / m);
+        println!("That's one move every {:?}", moves::TIME_TAKEN / moves::MOVES_FOUND as u32);
         println!();
         println!("Evaluated a total of {} boards in {:?}",
             evaluation::BOARDS_EVALUATED, evaluation::TIME_TAKEN);
