@@ -15,22 +15,22 @@ fn main() {
     let transient_weights = evaluation::BoardWeights {
         back_to_back: 50,
         bumpiness: -5,
-        bumpiness_sq: -1,
-        height: 1,
+        bumpiness_sq: -5,
+        height: -10,
         top_half: -20,
         top_quarter: -1000,
-        cavity_cells: -50,
-        cavity_cells_sq: -10,
-        overhang_cells: -20,
+        cavity_cells: -100,
+        cavity_cells_sq: -5,
+        overhang_cells: -50,
         overhang_cells_sq: -10,
         covered_cells: -10,
         covered_cells_sq: -10
     };
 
     let acc_weights = evaluation::PlacementWeights {
-        soft_drop: -20,
+        soft_drop: -50,
         b2b_clear: 100,
-        clear1: -200,
+        clear1: -150,
         clear2: -100,
         clear3: -50,
         clear4: 400,
@@ -67,7 +67,7 @@ fn main() {
     let mut times_failed_to_extend = 0;
 
     loop {
-        const PIECE_TIME: std::time::Duration = std::time::Duration::from_millis(0_250);
+        const PIECE_TIME: std::time::Duration = std::time::Duration::from_millis(0_100);
         if start.elapsed() >= PIECE_TIME || times_failed_to_extend > 20 {
             if let Some((h, m, r, mut t)) = tree.take_best_move() {
                 let drawing = display::draw_move(
