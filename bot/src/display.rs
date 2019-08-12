@@ -1,16 +1,16 @@
-use crate::tetris::{ BoardState, LockResult, Row };
+use libtetris::{ Board, LockResult, Row };
 use crate::moves::Move;
 use arrayvec::ArrayString;
 
 type Drawing = [ArrayString<[u8; 22]>; 28];
 
 pub fn draw_move<R: Row>(
-    from_board: &BoardState<R>,
-    to_board: &BoardState<R>,
+    from_board: &Board<R>,
+    to_board: &Board<R>,
     mv: &Move,
     evaluation: Option<i64>,
-    depth: u32,
-    lock_result: LockResult,
+    depth: u32, garbage: u32, pieces: u32,
+    lock_result: &LockResult,
     hold: bool
 ) -> Drawing {
     let mut drawing = [ArrayString::new(); 28];
@@ -63,27 +63,19 @@ pub fn draw_move<R: Row>(
 
     // Queue
     drawing[24].push('(');
-    if let Some(hold) = to_board.hold_piece {
+    if let Some(hold) = to_board.hold_piece() {
         drawing[24].push(hold.to_char());
     } else {
         drawing[24].push(' ');
     }
     drawing[24].push(')');
-    let pieces = to_board.next_pieces.iter()
-        .map(|&i| i.to_char())
-        .take(18)
-        .chain(std::iter::repeat(
-            if to_board.next_pieces.len() < 20 {
-                ' '
-            } else if to_board.next_pieces.len() == 20 {
-                to_board.next_pieces[8].to_char()
-            } else {
-                '*'
-            }
-        ))
-        .take(19);
-    for c in pieces {
-        drawing[24].push(c);
+    for (i, c) in to_board.next_queue().enumerate() {
+        if i == 20 {
+            drawing[24].pop();
+            drawing[24].push('*');
+            break
+        }
+        drawing[24].push(c.to_char());
     }
 
     // Lock result
@@ -95,7 +87,7 @@ pub fn draw_move<R: Row>(
     if lock_result.perfect_clear {
         drawing[25].push_str("Perfect Clear");
     } else {
-        drawing[25].push_str(lock_result.clear_kind.name());
+        drawing[25].push_str(&format!("{:13.13}", lock_result.placement_kind.name()));
     }
     if let Some(combo) = lock_result.combo {
         let combo_text = format!(" x{}", combo);
@@ -122,11 +114,11 @@ pub fn draw_move<R: Row>(
 
     // Garbage sent, piece count
     let garbstr = if lock_result.garbage_sent == 0 {
-        from_board.total_garbage.to_string()
+        garbage.to_string()
     } else {
-        format!("{} +{}", from_board.total_garbage, lock_result.garbage_sent)
+        format!("{} +{}", garbage, lock_result.garbage_sent)
     };
-    let piecestr = format!("#{}", from_board.piece_count+1);
+    let piecestr = format!("#{}", pieces+1);
     drawing[27].push_str(&garbstr);
     for _ in piecestr.len()..22-garbstr.len() {
         drawing[27].push(' ');

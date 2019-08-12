@@ -1,6 +1,6 @@
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
-use crate::tetris::{ BoardState, LockResult, ClearKind };
+use libtetris::{ Board, LockResult, PlacementKind };
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Evaluation {
@@ -46,9 +46,10 @@ pub static mut BOARDS_EVALUATED: usize = 0;
 
 pub fn evaluate(
     lock: &LockResult,
-    board: &BoardState,
+    board: &Board,
     board_weights: &BoardWeights,
-    placement_weights: &PlacementWeights
+    placement_weights: &PlacementWeights,
+    soft_dropped: bool
 ) -> Evaluation {
     let t = std::time::Instant::now();
 
@@ -65,43 +66,47 @@ pub fn evaluate(
             let combo = combo.min(11) as usize;
             acc_eval += placement_weights.combo_table[combo];
         }
-        match lock.clear_kind {
-            ClearKind::Clear1 => {
+        match lock.placement_kind {
+            PlacementKind::Clear1 => {
                 acc_eval += placement_weights.clear1;
             }
-            ClearKind::Clear2 => {
+            PlacementKind::Clear2 => {
                 acc_eval += placement_weights.clear2;
             }
-            ClearKind::Clear3 => {
+            PlacementKind::Clear3 => {
                 acc_eval += placement_weights.clear3;
             }
-            ClearKind::Clear4 => {
+            PlacementKind::Clear4 => {
                 acc_eval += placement_weights.clear4;
             }
-            ClearKind::Tspin1 => {
+            PlacementKind::Tspin1 => {
                 acc_eval += placement_weights.tspin1;
             }
-            ClearKind::Tspin2 => {
+            PlacementKind::Tspin2 => {
                 acc_eval += placement_weights.tspin2;
             }
-            ClearKind::Tspin3 => {
+            PlacementKind::Tspin3 => {
                 acc_eval += placement_weights.tspin3;
             }
-            ClearKind::MiniTspin1 => {
+            PlacementKind::MiniTspin1 => {
                 acc_eval += placement_weights.mini_tspin1;
             }
-            ClearKind::MiniTspin2 => {
+            PlacementKind::MiniTspin2 => {
                 acc_eval += placement_weights.mini_tspin2;
             }
             _ => {}
         }
     }
 
-    if board.b2b_bonus {
+    if soft_dropped {
+        acc_eval += placement_weights.soft_drop;
+    }
+
+    if board.has_back_to_back_active() {
         transient_eval += board_weights.back_to_back;
     }
 
-    let highest_point = *board.column_heights.iter().max().unwrap() as i64;
+    let highest_point = *board.column_heights().iter().max().unwrap() as i64;
     transient_eval += board_weights.height * highest_point;
     transient_eval += board_weights.top_half * (highest_point - 10).max(0);
     transient_eval += board_weights.top_quarter * (highest_point - 15).max(0);
@@ -143,10 +148,10 @@ pub fn evaluate(
 /// The first returned value is the total amount of height change outside of an apparent well. The
 /// second returned value is the sum of the squares of the height changes outside of an apparent
 /// well.
-fn bumpiness(board: &BoardState) -> (i64, i64) {
+fn bumpiness(board: &Board) -> (i64, i64) {
     let mut well = 0;
     for x in 1..10 {
-        if board.column_heights[x] < board.column_heights[well] {
+        if board.column_heights()[x] < board.column_heights()[well] {
             well = x;
         }
     }
@@ -155,13 +160,13 @@ fn bumpiness(board: &BoardState) -> (i64, i64) {
     let mut bumpiness_sq = -1;
 
     for i in 1..well {
-        let dh = (board.column_heights[i-1] - board.column_heights[i]).abs();
+        let dh = (board.column_heights()[i-1] - board.column_heights()[i]).abs();
         bumpiness += dh;
         bumpiness_sq += dh * dh;
     }
 
     for i in well+2..10 {
-        let dh = (board.column_heights[i-1] - board.column_heights[i]).abs();
+        let dh = (board.column_heights()[i-1] - board.column_heights()[i]).abs();
         bumpiness += dh;
         bumpiness_sq += dh * dh;
     }
@@ -173,7 +178,7 @@ fn bumpiness(board: &BoardState) -> (i64, i64) {
 /// 
 /// The first returned value is the number of cells that make up fully enclosed spaces (cavities).
 /// The second is the number of cells that make up partially enclosed spaces (overhangs).
-fn cavities_and_overhangs(board: &BoardState) -> (i64, i64) {
+fn cavities_and_overhangs(board: &Board) -> (i64, i64) {
     let mut checked = ArrayVec::from([[false; 10]; 40]);
 
     let mut cavity_cells = 0;
@@ -183,7 +188,7 @@ fn cavities_and_overhangs(board: &BoardState) -> (i64, i64) {
         for x in 0..10 {
             if board.occupied(x, y) ||
                     checked[y as usize][x as usize] ||
-                    y >= board.column_heights[x as usize] {
+                    y >= board.column_heights()[x as usize] {
                 continue
             }
 
@@ -198,7 +203,7 @@ fn cavities_and_overhangs(board: &BoardState) -> (i64, i64) {
                     continue
                 }
 
-                if y >= board.column_heights[x as usize] {
+                if y >= board.column_heights()[x as usize] {
                     is_overhang = true;
                     continue
                 }
@@ -227,13 +232,13 @@ fn cavities_and_overhangs(board: &BoardState) -> (i64, i64) {
 /// 
 /// The first returned value is the number of filled cells cover the topmost hole in the columns.
 /// The second value is the sum of the squares of those values.
-fn covered_cells(board: &BoardState) -> (i64, i64) {
+fn covered_cells(board: &Board) -> (i64, i64) {
     let mut covered = 0;
     let mut covered_sq = 0;
 
     for x in 0..10 {
         let mut cells = 0;
-        for y in (0..board.column_heights[x] as usize).rev() {
+        for y in (0..board.column_heights()[x] as usize).rev() {
             if !board.occupied(x as i32, y as i32) {
                 covered += cells;
                 covered_sq += cells * cells;

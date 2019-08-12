@@ -5,10 +5,9 @@ use arrayvec::ArrayVec;
 mod display;
 mod evaluation;
 mod moves;
-mod tetris;
 mod tree;
 
-use crate::tetris::BoardState;
+use libtetris::Board;
 use crate::tree::Tree;
 
 fn main() {
@@ -28,7 +27,7 @@ fn main() {
     };
 
     let acc_weights = evaluation::PlacementWeights {
-        soft_drop: -50,
+        soft_drop: 0,
         b2b_clear: 100,
         clear1: -150,
         clear2: -100,
@@ -40,7 +39,7 @@ fn main() {
         mini_tspin1: 0,
         mini_tspin2: 100,
         perfect_clear: 1000,
-        combo_table: crate::tetris::COMBO_GARBAGE.iter()
+        combo_table: libtetris::COMBO_GARBAGE.iter()
             .map(|&v| v as i64)
             .collect::<ArrayVec<[i64; 12]>>()
             .into_inner()
@@ -49,19 +48,22 @@ fn main() {
 
     const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroGFinesse;
 
-    let mut root_board = BoardState::new();
+    let mut root_board = Board::new();
     const QUEUE_SIZE: usize = 6;
     for _ in 0..QUEUE_SIZE {
         root_board.add_next_piece(root_board.generate_next_piece());
     }
     let mut tree = Tree::new(
         root_board,
-        &crate::tetris::LockResult::default(),
+        &Default::default(),
+        false,
         &transient_weights,
         &acc_weights
     );
 
     let mut drawings = vec![];
+    let mut pieces = 0;
+    let mut attack = 0;
 
     let mut start = std::time::Instant::now();
     let mut times_failed_to_extend = 0;
@@ -75,17 +77,19 @@ fn main() {
                     &t.board,
                     &m,
                     t.evaluation,
-                    t.depth(),
-                    r,
+                    t.depth(), attack, pieces,
+                    &r,
                     h
                 );
+                attack += r.garbage_sent;
+                pieces += 1;
                 display::write_drawings(&mut std::io::stdout(), &[drawing]).unwrap();
                 drawings.push(drawing);
-                while t.board.next_pieces.len() < QUEUE_SIZE {
+                while t.board.next_queue().count() < QUEUE_SIZE {
                     t.add_next_piece(t.board.generate_next_piece());
                 }
                 tree = t;
-                if tree.evaluation == None || tree.board.piece_count >= 200 {
+                if tree.evaluation == None || pieces >= 200 {
                     break
                 }
             } else if tree.extensions(MOVEMENT_MODE).is_empty() {
@@ -129,14 +133,19 @@ fn main() {
 
             for (hold, mv) in extensions {
                 let mut result = branch.board.clone();
-                let p = result.advance_queue(hold);
+                if hold { result.hold(); }
+                let p = result.advance_queue();
                 assert!(p == Some(mv.location.kind.0));
 
                 let lock = result.lock_piece(mv.location);
-                branch.extend(
-                    hold, mv, lock,
-                    Tree::new(result, &lock, &transient_weights, &acc_weights)
+                let leaf = Tree::new(
+                    result,
+                    &lock,
+                    mv.soft_dropped,
+                    &transient_weights,
+                    &acc_weights
                 );
+                branch.extend(hold, mv, lock, leaf);
             }
         }
 
@@ -160,10 +169,12 @@ fn main() {
             &t.board,
             &mv,
             t.evaluation,
-            t.depth(),
-            r,
+            t.depth(), attack, pieces,
+            &r,
             h
         ));
+        pieces += 1;
+        attack += r.garbage_sent;
         tree = t;
     }
 

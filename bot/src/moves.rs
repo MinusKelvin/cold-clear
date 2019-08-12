@@ -1,4 +1,4 @@
-use crate::tetris::{ BoardState, FallingPiece, Piece, RotationState };
+use libtetris::{ Board, FallingPiece, Piece, RotationState, TspinStatus };
 use arrayvec::ArrayVec;
 use std::collections::{ HashMap, HashSet, VecDeque, hash_map::Entry };
 
@@ -18,7 +18,8 @@ type InputList = ArrayVec<[Input; 32]>;
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Move {
     pub inputs: InputList,
-    pub location: FallingPiece
+    pub location: FallingPiece,
+    pub soft_dropped: bool
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -32,7 +33,7 @@ pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(
 pub static mut MOVES_FOUND: usize = 0;
 
 pub fn find_moves(
-    board: &BoardState,
+    board: &Board,
     mut spawned: FallingPiece,
     mode: MovementMode
 ) -> Vec<Move> {
@@ -43,7 +44,7 @@ pub fn find_moves(
     let mut check_queue = VecDeque::new();
     let fast_mode;
 
-    if board.column_heights.iter().all(|&v| v < 16) {
+    if board.column_heights().iter().all(|&v| v < 16) {
         let starts = match mode {
             MovementMode::TwentyG => vec![(spawned, [Input::SonicDrop].iter().copied().collect())],
             MovementMode::ZeroG => zero_g_starts(spawned.kind.0),
@@ -148,19 +149,18 @@ fn lock_check(
     match locks.entry(cells) {
         Entry::Vacant(entry) => {
             entry.insert(Move {
+                soft_dropped: moves.contains(&Input::SonicDrop),
                 inputs: moves,
-                location: piece
+                location: piece,
             });
         }
         Entry::Occupied(mut entry) => {
             let mv = entry.get_mut();
-            let us_sdrops = moves.iter().filter(|&&v| v == Input::SonicDrop).count();
-            let them_sdrops = mv.inputs.iter().filter(|&&v| v == Input::SonicDrop).count();
-            if us_sdrops < them_sdrops ||
-                    (us_sdrops == them_sdrops && moves.len() < mv.inputs.len()) {
+            if moves.len() < mv.inputs.len() {
                 *mv = Move {
+                    soft_dropped: moves.contains(&Input::SonicDrop),
                     inputs: moves,
-                    location: piece
+                    location: piece,
                 };
             }
         }
@@ -168,7 +168,7 @@ fn lock_check(
 }
 
 fn attempt(
-    board: &BoardState,
+    board: &Board,
     moves: &InputList,
     mut piece: FallingPiece,
     checked: &mut HashSet<FallingPiece>,
@@ -185,7 +185,7 @@ fn attempt(
                 m.push(input);
                 if drop_input && !m.is_full() {
                     // If the move list is full this has to be the last movement anyways
-                    // that is, it can't lead to positions unreachable in 20G.
+                    // that is, it can't lead to positions unreachable under 20G.
                     m.push(Input::SonicDrop);
                 }
                 check_queue.push_back((m, piece));
@@ -207,7 +207,7 @@ impl Input {
         }
     }
 
-    fn apply(self, piece: &mut FallingPiece, board: &BoardState) -> bool {
+    fn apply(self, piece: &mut FallingPiece, board: &Board) -> bool {
         match self {
             Input::Left => piece.shift(board, -1),
             Input::Right => piece.shift(board, 1),
@@ -233,8 +233,8 @@ impl Input {
 }
 
 fn zero_g_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
-    use crate::tetris::Piece::*;
-    use crate::tetris::RotationState::*;
+    use Piece::*;
+    use RotationState::*;
     use Input::*;
     match p {
         O => vec![
@@ -324,9 +324,8 @@ fn zero_g_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
 }
 
 fn zero_g_finesse_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
-    
-    use crate::tetris::Piece::*;
-    use crate::tetris::RotationState::*;
+    use Piece::*;
+    use RotationState::*;
     use Input::*;
     match p {
         O => vec![
@@ -417,11 +416,9 @@ fn zero_g_finesse_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
 
 fn start(p: Piece, r: RotationState, x: i32, i: &[Input]) -> (FallingPiece, InputList) {
     (FallingPiece {
-        kind: crate::tetris::PieceState(p, r),
+        kind: libtetris::PieceState(p, r),
         x,
         y: 19,
-        tspin: crate::tetris::TspinStatus::None,
-        soft_dropped: false,
-        sonic_dropped: false
+        tspin: TspinStatus::None
     }, i.iter().copied().collect())
 }

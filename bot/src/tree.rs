@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
-use crate::tetris::{ BoardState, LockResult, Piece, FallingPiece };
+use libtetris::{ Board, LockResult, Piece, FallingPiece };
 use crate::moves::Move;
 
 pub struct Tree {
-    pub board: BoardState,
+    pub board: Board,
     pub raw_eval: crate::evaluation::Evaluation,
     pub evaluation: Option<i64>,
     // TODO: newtype this vec type
@@ -28,12 +28,14 @@ enum ChildMut<'a> {
 
 impl Tree {
     pub fn new(
-        board: BoardState,
+        board: Board,
         lock: &LockResult,
+        soft_dropped: bool,
         transient_weights: &crate::evaluation::BoardWeights,
         acc_weights: &crate::evaluation::PlacementWeights
     ) -> Self {
-        let raw_eval = crate::evaluation::evaluate(lock, &board, transient_weights, acc_weights);
+        use crate::evaluation::evaluate;
+        let raw_eval = evaluate(lock, &board, transient_weights, acc_weights, soft_dropped);
         Tree {
             raw_eval, board,
             evaluation: Some(raw_eval.accumulated + raw_eval.transient),
@@ -206,7 +208,7 @@ impl Tree {
                     for mv in crate::moves::find_moves(&self.board, spawned, mode) {
                         extensions.push((false, mv));
                     }
-                    let hold = self.board.hold_piece
+                    let hold = self.board.hold_piece()
                         .or(self.board.get_next_next_piece())
                         .and_then(|p|
                             if p == piece {
