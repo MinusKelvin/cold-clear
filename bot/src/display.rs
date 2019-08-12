@@ -77,6 +77,9 @@ pub fn draw_move<R: Row>(
         }
         drawing[24].push(c.to_char());
     }
+    while !drawing[24].is_full() {
+        drawing[24].push(' ');
+    }
 
     // Lock result
     if lock_result.b2b {
