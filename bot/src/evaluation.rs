@@ -22,6 +22,9 @@ pub struct BoardWeights {
     pub overhang_cells_sq: i64,
     pub covered_cells: i64,
     pub covered_cells_sq: i64,
+    pub tslot_present: i64,
+    pub well_depth: i64,
+    pub max_well_depth: i64
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
@@ -111,8 +114,27 @@ pub fn evaluate(
     transient_eval += board_weights.top_half * (highest_point - 10).max(0);
     transient_eval += board_weights.top_quarter * (highest_point - 15).max(0);
 
+    let mut well = 0;
+    for x in 1..10 {
+        if board.column_heights()[x] < board.column_heights()[well] {
+            well = x;
+        }
+    }
+
+    let mut depth = 0;
+    'yloop: for y in board.column_heights()[well] .. 20 {
+        for x in 0..10 {
+            if x as usize != well && !board.occupied(x, y) {
+                break 'yloop;
+            }
+            depth += 1;
+        }
+    }
+    let depth = depth.min(board_weights.max_well_depth);
+    transient_eval += board_weights.well_depth * depth;
+
     if board_weights.bumpiness | board_weights.bumpiness_sq != 0 {
-        let (bump, bump_sq) = bumpiness(board);
+        let (bump, bump_sq) = bumpiness(board, well);
         transient_eval += bump * board_weights.bumpiness;
         transient_eval += bump_sq * board_weights.bumpiness_sq;
     }
@@ -126,10 +148,14 @@ pub fn evaluate(
         transient_eval += board_weights.overhang_cells_sq * overhang_cells * overhang_cells;
     }
 
-    if board_weights.cavity_cells | board_weights.cavity_cells_sq != 0 {
+    if board_weights.covered_cells | board_weights.covered_cells_sq != 0 {
         let (covered_cells, covered_cells_sq) = covered_cells(board);
         transient_eval += board_weights.covered_cells * covered_cells;
         transient_eval += board_weights.covered_cells_sq * covered_cells_sq;
+    }
+
+    if tslot(&board) {
+        transient_eval += board_weights.tslot_present;
     }
 
     unsafe {
@@ -148,27 +174,19 @@ pub fn evaluate(
 /// The first returned value is the total amount of height change outside of an apparent well. The
 /// second returned value is the sum of the squares of the height changes outside of an apparent
 /// well.
-fn bumpiness(board: &Board) -> (i64, i64) {
-    let mut well = 0;
-    for x in 1..10 {
-        if board.column_heights()[x] < board.column_heights()[well] {
-            well = x;
-        }
-    }
-
+fn bumpiness(board: &Board, well: usize) -> (i64, i64) {
     let mut bumpiness = -1;
     let mut bumpiness_sq = -1;
 
-    for i in 1..well {
-        let dh = (board.column_heights()[i-1] - board.column_heights()[i]).abs();
+    let mut prev = if well == 0 { 1 } else { 0 };
+    for i in 1..10 {
+        if i == well {
+            continue
+        }
+        let dh = (board.column_heights()[prev] - board.column_heights()[i]).abs();
         bumpiness += dh;
         bumpiness_sq += dh * dh;
-    }
-
-    for i in well+2..10 {
-        let dh = (board.column_heights()[i-1] - board.column_heights()[i]).abs();
-        bumpiness += dh;
-        bumpiness_sq += dh * dh;
+        prev = i;
     }
 
     (bumpiness.abs() as i64, bumpiness_sq.abs() as i64)
@@ -249,4 +267,51 @@ fn covered_cells(board: &Board) -> (i64, i64) {
     }
 
     (covered, covered_sq)
+}
+
+
+/// Evaluates the existence of a reachable T slot on the board.
+fn tslot(board: &Board) -> bool {
+    if board.next_queue().take(6).all(|p| p != libtetris::Piece::T) {
+        if board.hold_piece().map_or(true, |p| p != libtetris::Piece::T) {
+            return false
+        }
+    }
+
+    let mut left_t = libtetris::FallingPiece {
+        kind: libtetris::PieceState(libtetris::Piece::T, libtetris::RotationState::West),
+        tspin: libtetris::TspinStatus::None,
+        x: 0,
+        y: 0
+    };
+    let mut right_t = left_t;
+    right_t.kind.1 = libtetris::RotationState::East;
+
+    for y in 1..20 {
+        'l:
+        for x in 1..9 {
+            left_t.x = x;
+            left_t.y = y;
+            right_t.x = x;
+            right_t.y = y;
+            if board.obstructed(&left_t) || board.obstructed(&right_t) {
+                continue
+            }
+            if !board.occupied(x-1, y-1) || !board.occupied(x+1, y-1) {
+                continue
+            }
+            if board.above_stack(&left_t) && board.occupied(x+1, y+1) ||
+                    board.above_stack(&right_t) && board.occupied(x-1, y+1) {
+                // for rx in 0..10 {
+                //     if rx < x-1 || rx > x+1 {
+                //         if !board.occupied(rx, y) || !board.occupied(rx, y-1) {
+                //             continue 'l
+                //         }
+                //     }
+                // }
+                return true
+            }
+        }
+    }
+    false
 }

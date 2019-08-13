@@ -29,8 +29,10 @@ pub enum MovementMode {
     TwentyG,
 }
 
-pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_INIT: std::time::Duration = std::time::Duration::from_secs(0);
+pub static mut TIME_TAKEN_ON_STACK: std::time::Duration = std::time::Duration::from_secs(0);
 pub static mut MOVES_FOUND: usize = 0;
+pub static mut CALLS: usize = 0;
 
 pub fn find_moves(
     board: &Board,
@@ -50,14 +52,16 @@ pub fn find_moves(
             MovementMode::ZeroG => zero_g_starts(spawned.kind.0),
             MovementMode::ZeroGFinesse => zero_g_finesse_starts(spawned.kind.0)
         };
+        fast_mode = mode != MovementMode::TwentyG;
         for (mut place, mut inputs) in starts {
             place.sonic_drop(board);
-            checked.insert(place);
+            if !fast_mode {
+                checked.insert(place);
+            }
             lock_check(place, &mut locks, inputs.clone());
             inputs.push(Input::SonicDrop);
             check_queue.push_back((inputs, place));
         }
-        fast_mode = mode != MovementMode::TwentyG;
     } else {
         fast_mode = false;
         let mut inputs = ArrayVec::new();
@@ -68,6 +72,8 @@ pub fn find_moves(
         checked.insert(spawned);
         check_queue.push_back((inputs, spawned));
     }
+
+    let h = std::time::Instant::now();
 
     while let Some((moves, position)) = check_queue.pop_front() {
         if !moves.is_full() {
@@ -117,36 +123,38 @@ pub fn find_moves(
             }
         }
 
-        let mut change = position;
-        if change.sonic_drop(board) && !moves.is_full() {
-            if checked.insert(change) {
-                let mut m = moves.clone();
-                m.push(Input::SonicDrop);
-                check_queue.push_back((m, change));
-            }
-        }
+        let mut change = attempt(
+            board, &moves, position,
+            &mut checked, &mut check_queue,
+            mode == MovementMode::TwentyG, fast_mode,
+            Input::SonicDrop
+        );
 
         lock_check(change, &mut locks, moves);
     }
 
+    let n = std::time::Instant::now();
+
     let v: Vec<_> = locks.into_iter().map(|(_, v)| v).collect();
     unsafe {
         MOVES_FOUND += v.len();
-        TIME_TAKEN += t.elapsed();
+        TIME_TAKEN_INIT += h - t;
+        TIME_TAKEN_ON_STACK += n - h;
+        CALLS += 1;
     }
     v
 }
 
 fn lock_check(
     piece: FallingPiece,
-    locks: &mut HashMap<ArrayVec<[(i32, i32); 4]>, Move>,
+    locks: &mut HashMap<(ArrayVec<[(i32, i32); 4]>, TspinStatus), Move>,
     moves: InputList
 ) {
     let cells = piece.cells();
     if cells.iter().all(|&(_, y)| y >= 20) {
         return
     }
-    match locks.entry(cells) {
+    match locks.entry((cells, piece.tspin)) {
         Entry::Vacant(entry) => {
             entry.insert(Move {
                 soft_dropped: moves.contains(&Input::SonicDrop),
@@ -176,9 +184,9 @@ fn attempt(
     twenty_g: bool,
     fast_mode: bool,
     input: Input
-) {
+) -> FallingPiece {
     if input.apply(&mut piece, board) {
-        if !fast_mode || !board.above_stack(&piece) {
+        if !fast_mode || piece.tspin != TspinStatus::None || !board.above_stack(&piece) {
             let drop_input = twenty_g && piece.sonic_drop(board);
             if checked.insert(piece) {
                 let mut m = moves.clone();
@@ -192,6 +200,7 @@ fn attempt(
             }
         }
     }
+    piece
 }
 
 impl Input {

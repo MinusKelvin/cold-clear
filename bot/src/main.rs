@@ -13,17 +13,20 @@ use crate::tree::Tree;
 fn main() {
     let transient_weights = evaluation::BoardWeights {
         back_to_back: 50,
-        bumpiness: -5,
+        bumpiness: -10,
         bumpiness_sq: -5,
-        height: -10,
-        top_half: -20,
+        height: -40,
+        top_half: -150,
         top_quarter: -1000,
-        cavity_cells: -100,
-        cavity_cells_sq: -5,
+        cavity_cells: -150,
+        cavity_cells_sq: -10,
         overhang_cells: -50,
         overhang_cells_sq: -10,
         covered_cells: -10,
-        covered_cells_sq: -10
+        covered_cells_sq: -10,
+        tslot_present: 150,
+        well_depth: 50,
+        max_well_depth: 8
     };
 
     let acc_weights = evaluation::PlacementWeights {
@@ -33,7 +36,7 @@ fn main() {
         clear2: -100,
         clear3: -50,
         clear4: 400,
-        tspin1: 100,
+        tspin1: 130,
         tspin2: 400,
         tspin3: 600,
         mini_tspin1: 0,
@@ -89,7 +92,7 @@ fn main() {
                     t.add_next_piece(t.board.generate_next_piece());
                 }
                 tree = t;
-                if tree.evaluation == None || pieces >= 200 {
+                if tree.evaluation == None || pieces >= 1500 {
                     break
                 }
             } else if tree.extensions(MOVEMENT_MODE).is_empty() {
@@ -114,7 +117,10 @@ fn main() {
                 .min().unwrap();
             let &idx = branches.choose_weighted(
                 &mut thread_rng(),
-                |&idx| { let e = branch.branch(idx).2.evaluation.unwrap() - min; e*e + 10 }
+                |&idx| {
+                    let e = branch.branch(idx).2.evaluation.unwrap() - min;
+                    e*e + 10
+                }
             ).unwrap();
             let (mv, _, t) = branch.branch_mut(idx);
 
@@ -153,8 +159,12 @@ fn main() {
     }
 
     unsafe {
-        println!("Found a total of {} moves in {:?}", moves::MOVES_FOUND, moves::TIME_TAKEN);
-        println!("That's one move every {:?}", moves::TIME_TAKEN / moves::MOVES_FOUND as u32);
+        println!("Found a total of {} moves in {} calls in {:?}", moves::MOVES_FOUND,
+            moves::CALLS, moves::TIME_TAKEN_INIT + moves::TIME_TAKEN_ON_STACK);
+        println!("That's {:?} per move", (moves::TIME_TAKEN_INIT + moves::TIME_TAKEN_ON_STACK) / moves::MOVES_FOUND as u32);
+        println!("That's {:?} per call", (moves::TIME_TAKEN_INIT + moves::TIME_TAKEN_ON_STACK) / moves::CALLS as u32);
+        println!("{:?} per call on initialization", moves::TIME_TAKEN_INIT / moves::CALLS as u32);
+        println!("{:?} per call on stack movement", moves::TIME_TAKEN_ON_STACK / moves::CALLS as u32);
         println!();
         println!("Evaluated a total of {} boards in {:?}",
             evaluation::BOARDS_EVALUATED, evaluation::TIME_TAKEN);
