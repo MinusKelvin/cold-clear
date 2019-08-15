@@ -4,44 +4,44 @@ use libtetris::{ Board, LockResult, PlacementKind };
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Evaluation {
-    pub accumulated: i64,
-    pub transient: i64
+    pub accumulated: i32,
+    pub transient: i32
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
 pub struct BoardWeights {
-    pub back_to_back: i64,
-    pub bumpiness: i64,
-    pub bumpiness_sq: i64,
-    pub height: i64,
-    pub top_half: i64,
-    pub top_quarter: i64,
-    pub cavity_cells: i64,
-    pub cavity_cells_sq: i64,
-    pub overhang_cells: i64,
-    pub overhang_cells_sq: i64,
-    pub covered_cells: i64,
-    pub covered_cells_sq: i64,
-    pub tslot_present: i64,
-    pub well_depth: i64,
-    pub max_well_depth: i64
+    pub back_to_back: i32,
+    pub bumpiness: i32,
+    pub bumpiness_sq: i32,
+    pub height: i32,
+    pub top_half: i32,
+    pub top_quarter: i32,
+    pub cavity_cells: i32,
+    pub cavity_cells_sq: i32,
+    pub overhang_cells: i32,
+    pub overhang_cells_sq: i32,
+    pub covered_cells: i32,
+    pub covered_cells_sq: i32,
+    pub tslot_present: i32,
+    pub well_depth: i32,
+    pub max_well_depth: i32
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
 pub struct PlacementWeights {
-    pub b2b_clear: i64,
-    pub clear1: i64,
-    pub clear2: i64,
-    pub clear3: i64,
-    pub clear4: i64,
-    pub tspin1: i64,
-    pub tspin2: i64,
-    pub tspin3: i64,
-    pub mini_tspin1: i64,
-    pub mini_tspin2: i64,
-    pub perfect_clear: i64,
-    pub combo_table: [i64; 12],
-    pub soft_drop: i64
+    pub b2b_clear: i32,
+    pub clear1: i32,
+    pub clear2: i32,
+    pub clear3: i32,
+    pub clear4: i32,
+    pub tspin1: i32,
+    pub tspin2: i32,
+    pub tspin3: i32,
+    pub mini_tspin1: i32,
+    pub mini_tspin2: i32,
+    pub perfect_clear: i32,
+    pub combo_table: [i32; 12],
+    pub soft_drop: i32
 }
 
 pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
@@ -109,7 +109,7 @@ pub fn evaluate(
         transient_eval += board_weights.back_to_back;
     }
 
-    let highest_point = *board.column_heights().iter().max().unwrap() as i64;
+    let highest_point = *board.column_heights().iter().max().unwrap() as i32;
     transient_eval += board_weights.height * highest_point;
     transient_eval += board_weights.top_half * (highest_point - 10).max(0);
     transient_eval += board_weights.top_quarter * (highest_point - 15).max(0);
@@ -174,7 +174,7 @@ pub fn evaluate(
 /// The first returned value is the total amount of height change outside of an apparent well. The
 /// second returned value is the sum of the squares of the height changes outside of an apparent
 /// well.
-fn bumpiness(board: &Board, well: usize) -> (i64, i64) {
+fn bumpiness(board: &Board, well: usize) -> (i32, i32) {
     let mut bumpiness = -1;
     let mut bumpiness_sq = -1;
 
@@ -189,14 +189,14 @@ fn bumpiness(board: &Board, well: usize) -> (i64, i64) {
         prev = i;
     }
 
-    (bumpiness.abs() as i64, bumpiness_sq.abs() as i64)
+    (bumpiness.abs() as i32, bumpiness_sq.abs() as i32)
 }
 
 /// Evaluates the holes in the playfield.
 /// 
 /// The first returned value is the number of cells that make up fully enclosed spaces (cavities).
 /// The second is the number of cells that make up partially enclosed spaces (overhangs).
-fn cavities_and_overhangs(board: &Board) -> (i64, i64) {
+fn cavities_and_overhangs(board: &Board) -> (i32, i32) {
     let mut checked = ArrayVec::from([[false; 10]; 40]);
 
     let mut cavity_cells = 0;
@@ -250,7 +250,7 @@ fn cavities_and_overhangs(board: &Board) -> (i64, i64) {
 /// 
 /// The first returned value is the number of filled cells cover the topmost hole in the columns.
 /// The second value is the sum of the squares of those values.
-fn covered_cells(board: &Board) -> (i64, i64) {
+fn covered_cells(board: &Board) -> (i32, i32) {
     let mut covered = 0;
     let mut covered_sq = 0;
 

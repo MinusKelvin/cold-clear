@@ -6,7 +6,7 @@ use crate::moves::Move;
 pub struct Tree {
     pub board: Board,
     pub raw_eval: crate::evaluation::Evaluation,
-    pub evaluation: Option<i64>,
+    pub evaluation: Option<i32>,
     // TODO: newtype this vec type
     children: Vec<(Move, LockResult, Tree)>,
     // TODO: switch to Option<Vec<(Move, LockResult, Tree)>>

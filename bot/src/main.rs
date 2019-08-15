@@ -43,8 +43,8 @@ fn main() {
         mini_tspin2: 100,
         perfect_clear: 1000,
         combo_table: libtetris::COMBO_GARBAGE.iter()
-            .map(|&v| v as i64)
-            .collect::<ArrayVec<[i64; 12]>>()
+            .map(|&v| v as i32)
+            .collect::<ArrayVec<[_; 12]>>()
             .into_inner()
             .unwrap()
     };
@@ -118,7 +118,7 @@ fn main() {
             let &idx = branches.choose_weighted(
                 &mut thread_rng(),
                 |&idx| {
-                    let e = branch.branch(idx).2.evaluation.unwrap() - min;
+                    let e = (branch.branch(idx).2.evaluation.unwrap() - min) as i64;
                     e*e + 10
                 }
             ).unwrap();

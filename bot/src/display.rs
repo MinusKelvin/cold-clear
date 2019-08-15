@@ -8,7 +8,7 @@ pub fn draw_move<R: Row>(
     from_board: &Board<R>,
     to_board: &Board<R>,
     mv: &Move,
-    evaluation: Option<i64>,
+    evaluation: Option<i32>,
     depth: u32, garbage: u32, pieces: u32,
     lock_result: &LockResult,
     hold: bool
