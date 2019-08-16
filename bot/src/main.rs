@@ -139,9 +139,16 @@ fn main() {
 
             for (hold, mv) in extensions {
                 let mut result = branch.board.clone();
-                if hold { result.hold(); }
-                let p = result.advance_queue();
-                assert!(p == Some(mv.location.kind.0));
+                let p = if hold {
+                    let next = result.advance_queue().unwrap();
+                    match result.hold(next) {
+                        Some(p) => p,
+                        None => result.advance_queue().unwrap()
+                    }
+                } else {
+                    result.advance_queue().unwrap()
+                };
+                assert!(p == mv.location.kind.0);
 
                 let lock = result.lock_piece(mv.location);
                 let leaf = Tree::new(

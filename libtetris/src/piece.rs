@@ -2,6 +2,7 @@ use arrayvec::ArrayVec;
 use enumset::EnumSetType;
 
 use crate::Board;
+use crate::Row;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FallingPiece {
@@ -12,7 +13,7 @@ pub struct FallingPiece {
 }
 
 impl FallingPiece {
-    pub fn spawn(piece: Piece, board: &Board) -> Option<FallingPiece> {
+    pub fn spawn<R: Row>(piece: Piece, board: &Board<R>) -> Option<FallingPiece> {
         let mut this = FallingPiece {
             kind: PieceState(piece, RotationState::North),
             x: 4, y: 20,
@@ -40,10 +41,12 @@ impl FallingPiece {
             .collect()
     }
 
-    pub fn shift(&mut self, board: &Board, dx: i32) -> bool {
+    pub fn shift<R: Row>(&mut self, board: &Board<R>, dx: i32, dy: i32) -> bool {
         self.x += dx;
+        self.y += dy;
         if board.obstructed(self) {
             self.x -= dx;
+            self.y -= dy;
             false
         } else {
             self.tspin = TspinStatus::None;
@@ -51,7 +54,7 @@ impl FallingPiece {
         }
     }
 
-    pub fn sonic_drop(&mut self, board: &Board) -> bool {
+    pub fn sonic_drop<R: Row>(&mut self, board: &Board<R>) -> bool {
         let drop_by = self.cells()
             .into_iter()
             .map(|(x, y)| y - board.column_heights()[x as usize])
@@ -77,7 +80,7 @@ impl FallingPiece {
         }
     }
 
-    fn rotate(&mut self, target: PieceState, board: &Board) -> bool {
+    fn rotate<R: Row>(&mut self, target: PieceState, board: &Board<R>) -> bool {
         let initial = *self;
         self.kind = target;
         let kicks = initial.kind.rotation_points().into_iter()
@@ -132,13 +135,13 @@ impl FallingPiece {
         false
     }
 
-    pub fn cw(&mut self, board: &Board) -> bool {
+    pub fn cw<R: Row>(&mut self, board: &Board<R>) -> bool {
         let mut target = self.kind;
         target.cw();
         self.rotate(target, board)
     }
 
-    pub fn ccw(&mut self, board: &Board) -> bool {
+    pub fn ccw<R: Row>(&mut self, board: &Board<R>) -> bool {
         let mut target = self.kind;
         target.ccw();
         self.rotate(target, board)

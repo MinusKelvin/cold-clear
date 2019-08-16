@@ -218,20 +218,20 @@ impl Input {
 
     fn apply(self, piece: &mut FallingPiece, board: &Board) -> bool {
         match self {
-            Input::Left => piece.shift(board, -1),
-            Input::Right => piece.shift(board, 1),
+            Input::Left => piece.shift(board, -1, 0),
+            Input::Right => piece.shift(board, 1, 0),
             Input::Ccw => piece.ccw(board),
             Input::Cw => piece.cw(board),
             Input::DasLeft => {
                 let mut did = false;
-                while piece.shift(board, -1) {
+                while piece.shift(board, -1, 0) {
                     did = true;
                 }
                 did
             }
             Input::DasRight => {
                 let mut did = false;
-                while piece.shift(board, 1) {
+                while piece.shift(board, 1, 0) {
                     did = true;
                 }
                 did

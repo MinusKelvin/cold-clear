@@ -114,6 +114,12 @@ impl<R: Row> Board<R> {
             .all(|(x, y)| y >= self.column_heights[x as usize])
     }
 
+    pub fn on_stack(&self, piece: &FallingPiece) -> bool {
+        piece.cells()
+            .into_iter()
+            .any(|(x, y)| self.occupied(x, y - 1))
+    }
+
     /// Does all logic associated with locking a piece.
     /// 
     /// Clears lines, detects clear kind, calculates garbage, maintains combo and back-to-back
@@ -196,23 +202,13 @@ impl<R: Row> Board<R> {
         }
     }
 
-    /// Preforms a hold action.
+    /// Holds the passed piece, returning the previous hold piece.
     /// 
-    /// If there is a piece in hold, it is swapped with the next piece.
-    /// If there is not a piece in hold, the next piece is put in hold and the queue is advanced.
-    /// 
-    /// Returns false if the next queue is empty.
-    pub fn hold(&mut self) -> bool {
-        match self.next_pieces.pop_front() {
-            Some(next) => {
-                if let Some(hold) = self.hold_piece {
-                    self.next_pieces.push_front(hold);
-                }
-                self.hold_piece = Some(next);
-                true
-            }
-            None => false
-        }
+    /// If there is a piece in hold, it is returned.
+    pub fn hold(&mut self, piece: Piece) -> Option<Piece> {
+        let hold = self.hold_piece;
+        self.hold_piece = Some(piece);
+        hold
     }
 
     pub fn hold_piece(&self) -> Option<Piece> {
