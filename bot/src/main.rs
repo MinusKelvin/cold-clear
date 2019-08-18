@@ -107,21 +107,20 @@ fn main() {
         let mut branch = &mut tree;
 
         loop {
-            let branches = branch.branches();
+            let mut branches = branch.branches();
             if branches.is_empty() {
                 break
             }
 
-            let min = branches.iter()
-                .map(|&idx| branch.branch(idx).2.evaluation.unwrap())
-                .min().unwrap();
-            let &idx = branches.choose_weighted(
-                &mut thread_rng(),
-                |&idx| {
-                    let e = (branch.branch(idx).2.evaluation.unwrap() - min) as i64;
-                    e*e + 10
-                }
-            ).unwrap();
+            branches.sort_by_key(|&idx| -branch.branch(idx).2.evaluation.unwrap());
+            let min = branch.branch(*branches.last().unwrap()).2.evaluation.unwrap();
+            let weights = branches.iter().enumerate().map(|(i, &idx)| {
+                let e = (branch.branch(idx).2.evaluation.unwrap() - min) as i64;
+                e * e / (i + 1) as i64
+            });
+
+            let sampler = rand::distributions::weighted::WeightedIndex::new(weights).unwrap();
+            let idx = branches[thread_rng().sample(sampler)];
             let (mv, _, t) = branch.branch_mut(idx);
 
             if idx.0 {
