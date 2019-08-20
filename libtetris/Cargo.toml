@@ -10,6 +10,3 @@ edition = "2018"
 arrayvec = "0.4.11"
 rand = "0.7.0"
 enumset = "0.4.0"
-
-[features]
-statistics = []

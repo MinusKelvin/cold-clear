@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use crate::*;
 
 #[derive(Clone, Debug)]
-pub struct Board<R=u16> {
+pub struct Board<R=u16, S=()> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
     combo: u32,
@@ -13,8 +13,7 @@ pub struct Board<R=u16> {
     hold_piece: Option<Piece>,
     next_pieces: VecDeque<Piece>,
     bag: EnumSet<Piece>,
-    #[cfg(feature="statistics")]
-    pub statistics: Statistics
+    pub statistics: S
 }
 
 pub trait Row: Default + Copy + Clone {
@@ -24,7 +23,7 @@ pub trait Row: Default + Copy + Clone {
     fn cell_color(&self, x: usize) -> CellColor;
 }
 
-impl<R: Row> Board<R> {
+impl<R: Row, S: Stats> Board<R, S> {
     /// Creates a blank board with an empty queue.
     pub fn new() -> Self {
         Board {
@@ -35,8 +34,7 @@ impl<R: Row> Board<R> {
             hold_piece: None,
             next_pieces: VecDeque::new(),
             bag: EnumSet::all(),
-            #[cfg(feature="statistics")]
-            statistics: Statistics::default()
+            statistics: S::default()
         }
     }
 
@@ -167,39 +165,16 @@ impl<R: Row> Board<R> {
             garbage_sent = 10;
         }
 
-        #[cfg(feature="statistics")]
-        {
-            self.statistics.pieces += 1;
-            self.statistics.attack += garbage_sent as u64;
-            self.statistics.lines += cleared.len() as u64;
-            match placement_kind {
-                PlacementKind::None => {}
-                PlacementKind::Clear1 => self.statistics.singles += 1,
-                PlacementKind::Clear2 => self.statistics.doubles += 1,
-                PlacementKind::Clear3 => self.statistics.triples += 1,
-                PlacementKind::Clear4 => self.statistics.tetrises += 1,
-                PlacementKind::Tspin => self.statistics.tspin_zeros += 1,
-                PlacementKind::Tspin1 => self.statistics.tspin_singles += 1,
-                PlacementKind::Tspin2 => self.statistics.tspin_doubles += 1,
-                PlacementKind::Tspin3 => self.statistics.tspin_triples += 1,
-                PlacementKind::MiniTspin => self.statistics.mini_tspin_zeros += 1,
-                PlacementKind::MiniTspin1 => self.statistics.mini_tspin_singles += 1,
-                PlacementKind::MiniTspin2 => self.statistics.mini_tspin_doubles += 1,
-            }
-            if perfect_clear {
-                self.statistics.perfect_clears += 1;
-            }
-            if self.combo > 0 {
-                self.statistics.max_combo = self.statistics.max_combo.max(self.combo as u64 - 1);
-            }
-        }
-
-        LockResult {
+        let l = LockResult {
             placement_kind, garbage_sent, perfect_clear,
             combo: if self.combo == 0 { None } else { Some(self.combo-1) },
             b2b: did_b2b,
             cleared_lines: cleared
-        }
+        };
+
+        self.statistics.update(&l);
+
+        l
     }
 
     /// Holds the passed piece, returning the previous hold piece.
@@ -230,6 +205,16 @@ impl<R: Row> Board<R> {
 
     pub fn has_back_to_back_active(&self) -> bool {
         self.b2b_bonus
+    }
+
+    pub fn add_garbage(&mut self, col: usize) {
+        let mut row = R::default();
+        for x in 0..10 {
+            if x != col {
+                row.set(x, CellColor::Garbage);
+            }
+        }
+        self.cells.insert(0, row);
     }
 }
 

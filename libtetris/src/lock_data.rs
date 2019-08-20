@@ -28,28 +28,6 @@ pub enum PlacementKind {
     Tspin3
 }
 
-#[cfg(feature="statistics")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash)]
-pub struct Statistics {
-    pub pieces: u64,
-    pub lines: u64,
-    pub attack: u64,
-
-    pub singles: u64,
-    pub doubles: u64,
-    pub triples: u64,
-    pub tetrises: u64,
-    pub tspin_zeros: u64,
-    pub tspin_singles: u64,
-    pub tspin_doubles: u64,
-    pub tspin_triples: u64,
-    pub mini_tspin_zeros: u64,
-    pub mini_tspin_singles: u64,
-    pub mini_tspin_doubles: u64,
-    pub perfect_clears: u64,
-    pub max_combo: u64
-}
-
 impl PlacementKind {
     /// The amount of garbage this clear kind normally sends.
     pub fn garbage(self) -> u32 {
@@ -131,3 +109,70 @@ pub const COMBO_GARBAGE: [u32; 12] = [
     4, 4,
     4, 5
 ];
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash)]
+pub struct Statistics {
+    pub pieces: u64,
+    pub lines: u64,
+    pub attack: u64,
+
+    pub singles: u64,
+    pub doubles: u64,
+    pub triples: u64,
+    pub tetrises: u64,
+    pub tspin_zeros: u64,
+    pub tspin_singles: u64,
+    pub tspin_doubles: u64,
+    pub tspin_triples: u64,
+    pub mini_tspin_zeros: u64,
+    pub mini_tspin_singles: u64,
+    pub mini_tspin_doubles: u64,
+    pub perfect_clears: u64,
+    pub max_combo: u64
+}
+
+pub trait Stats: Default {
+    fn update(&mut self, lock_data: &LockResult);
+    fn as_statistics(&self) -> Statistics;
+}
+
+impl Stats for () {
+    fn update(&mut self, _: &LockResult) {}
+    fn as_statistics(&self) -> Statistics { Default::default() }
+}
+
+impl Stats for Statistics {
+    fn update(&mut self, l: &LockResult) {
+        self.attack += l.garbage_sent as u64;
+        self.lines += l.cleared_lines.len() as u64;
+        self.pieces += 1;
+
+        if l.perfect_clear {
+            self.perfect_clears += 1;
+        }
+        if let Some(combo) = l.combo {
+            if combo as u64 > self.max_combo {
+                self.max_combo = combo as u64;
+            }
+        }
+
+        match l.placement_kind {
+            PlacementKind::None => {},
+            PlacementKind::Clear1 => self.singles += 1,
+            PlacementKind::Clear2 => self.doubles += 1,
+            PlacementKind::Clear3 => self.triples += 1,
+            PlacementKind::Clear4 => self.tetrises += 1,
+            PlacementKind::Tspin => self.tspin_zeros += 1,
+            PlacementKind::Tspin1 => self.tspin_singles += 1,
+            PlacementKind::Tspin2 => self.tspin_doubles += 1,
+            PlacementKind::Tspin3 => self.tspin_triples += 1,
+            PlacementKind::MiniTspin => self.mini_tspin_zeros += 1,
+            PlacementKind::MiniTspin1 => self.mini_tspin_singles += 1,
+            PlacementKind::MiniTspin2 => self.mini_tspin_doubles += 1
+        }
+    }
+
+    fn as_statistics(&self) -> Statistics {
+        *self
+    }
+}

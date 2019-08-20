@@ -1,4 +1,5 @@
 use crate::*;
+use rand::prelude::*;
 
 #[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct Controller {
@@ -12,8 +13,9 @@ pub struct Controller {
 }
 
 pub struct Game {
-    pub board: Board<ColoredRow>,
+    pub board: Board<ColoredRow, Statistics>,
     pub state: GameState,
+    pub garbage_queue: u32,
     config: GameConfig,
     did_hold: bool,
     prev: Controller,
@@ -35,8 +37,6 @@ pub struct GameConfig {
 }
 
 pub enum Event {
-    NothingOfInterest,
-    SpawnDelayStart,
     PieceSpawned { new_in_queue: Piece },
     PieceMoved,
     PieceRotated,
@@ -48,6 +48,7 @@ pub enum Event {
         locked: LockResult,
         hard_drop_distance: Option<i32>
     },
+    GarbageAdded(Vec<usize>),
     GameOver
 }
 
@@ -63,7 +64,8 @@ impl Game {
             used: Default::default(),
             did_hold: false,
             das_delay: config.delayed_auto_shift,
-            state: GameState::SpawnDelay(config.next_queue_size)
+            state: GameState::SpawnDelay(config.next_queue_size),
+            garbage_queue: 0
         }
     }
 
@@ -123,11 +125,13 @@ impl Game {
             }
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
-                vec![Event::SpawnDelayStart]
+                let mut events = vec![];
+                self.deal_garbage(&mut events);
+                events
             }
             GameState::LineClearDelay(ref mut delay) => {
                 *delay -= 1;
-                vec![Event::NothingOfInterest]
+                vec![]
             }
             GameState::GameOver => vec![Event::GameOver],
             GameState::Falling(ref mut falling) => {
@@ -215,18 +219,8 @@ impl Game {
                     p.sonic_drop(&self.board);
                     let low_y = p.cells().into_iter().map(|(_,y)| y).min().unwrap();
                     if low_y >= falling.lowest_y {
-                        let locked = self.board.lock_piece(p);
-                        self.did_hold = false;
-                        if low_y >= 20 {
-                            self.state = GameState::GameOver;
-                        } else if locked.cleared_lines.is_empty() {
-                            self.state = GameState::SpawnDelay(self.config.spawn_delay);
-                        } else {
-                            self.state = GameState::LineClearDelay(self.config.line_clear_delay);
-                        }
-                        events.push(Event::PiecePlaced {
-                            locked, hard_drop_distance: None
-                        });
+                        let f = *falling;
+                        self.lock(f, &mut events, None);
                         return events;
                     }
                 }
@@ -235,20 +229,9 @@ impl Game {
                 if self.used.hard_drop {
                     let y = falling.piece.y;
                     falling.piece.sonic_drop(&self.board);
-                    let locked = self.board.lock_piece(falling.piece);
                     let distance = y - falling.piece.y;
-                    self.did_hold = false;
-                    let low_y = falling.piece.cells().into_iter().map(|(_,y)| y).min().unwrap();
-                    if low_y >= 20 {
-                        self.state = GameState::GameOver;
-                    } else if locked.cleared_lines.is_empty() {
-                        self.state = GameState::SpawnDelay(self.config.spawn_delay);
-                    } else {
-                        self.state = GameState::LineClearDelay(self.config.line_clear_delay);
-                    }
-                    events.push(Event::PiecePlaced {
-                        locked, hard_drop_distance: Some(distance)
-                    });
+                    let f = *falling;
+                    self.lock(f, &mut events, Some(distance));
                     return events;
                 }
 
@@ -260,18 +243,8 @@ impl Game {
                     falling.lock_delay -= 1;
                     falling.gravity = self.config.gravity;
                     if falling.lock_delay == 0 {
-                        let locked = self.board.lock_piece(falling.piece);
-                        self.did_hold = false;
-                        if low_y >= 20 {
-                            self.state = GameState::GameOver;
-                        } else if locked.cleared_lines.is_empty() {
-                            self.state = GameState::SpawnDelay(self.config.spawn_delay);
-                        } else {
-                            self.state = GameState::LineClearDelay(self.config.line_clear_delay);
-                        }
-                        events.push(Event::PiecePlaced {
-                            locked, hard_drop_distance: None
-                        });
+                        let f = *falling;
+                        self.lock(f, &mut events, None);
                         return events;
                     }
                 } else {
@@ -310,6 +283,46 @@ impl Game {
             }
         }
     }
+
+    fn lock(&mut self, falling: FallingState, events: &mut Vec<Event>, dist: Option<i32>) {
+        let low_y = falling.piece.cells().into_iter().map(|(_,y)| y).min().unwrap();
+        let mut locked = self.board.lock_piece(falling.piece);
+        self.did_hold = false;
+        if locked.garbage_sent > self.garbage_queue {
+            locked.garbage_sent -= self.garbage_queue;
+            self.garbage_queue = 0;
+        } else {
+            self.garbage_queue -= locked.garbage_sent;
+            locked.garbage_sent = 0;
+        }
+        if low_y >= 20 {
+            self.state = GameState::GameOver;
+        } else if locked.cleared_lines.is_empty() {
+            self.state = GameState::SpawnDelay(self.config.spawn_delay);
+            self.deal_garbage(events);
+        } else {
+            self.state = GameState::LineClearDelay(self.config.line_clear_delay);
+        }
+        events.push(Event::PiecePlaced {
+            locked, hard_drop_distance: dist
+        });
+    }
+
+    fn deal_garbage(&mut self, events: &mut Vec<Event>) {
+        if self.garbage_queue > 0 {
+            let mut col = thread_rng().gen_range(0, 10);
+            let mut garbage_columns = vec![];
+            for _ in 0..self.garbage_queue {
+                if thread_rng().gen_bool(1.0/3.0) {
+                    col = thread_rng().gen_range(0, 10);
+                }
+                self.board.add_garbage(col);
+                garbage_columns.push(col);
+            }
+            self.garbage_queue = 0;
+            events.push(Event::GarbageAdded(garbage_columns));
+        }
+    }
 }
 
 fn update_input(used: &mut bool, prev: bool, current: bool) {
@@ -327,6 +340,7 @@ pub enum GameState {
     GameOver
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct FallingState {
     piece: FallingPiece,
     lowest_y: i32,
