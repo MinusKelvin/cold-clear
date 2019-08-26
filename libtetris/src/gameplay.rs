@@ -44,7 +44,8 @@ pub enum Event {
     PieceHeld,
     StackTouched,
     SoftDropped,
-    PieceFalling(FallingPiece),
+    PieceFalling(FallingPiece, FallingPiece),
+    EndOfLineClearDelay,
     PiecePlaced {
         piece: FallingPiece,
         locked: LockResult,
@@ -80,9 +81,8 @@ impl Game {
         update_input(&mut self.used.hold, self.prev.hold, current.hold);
         self.used.hard_drop = !self.prev.hard_drop && current.hard_drop;
         self.used.soft_drop = current.soft_drop;
-        self.prev = current;
 
-        if current.left || current.right {
+        if current.left != current.right && self.prev.left == current.left {
             if self.used.left || self.used.right {
                 // While movement is buffered, don't let the time
                 // until the next shift fall below the auto-repeat rate.
@@ -103,6 +103,8 @@ impl Game {
             self.das_delay = self.config.delayed_auto_shift;
         }
 
+        self.prev = current;
+
         match self.state {
             GameState::SpawnDelay(0) => {
                 let next_piece = self.board.advance_queue().unwrap();
@@ -117,9 +119,11 @@ impl Game {
                         lock_delay: 30,
                         soft_drop_delay: 0
                     });
+                    let mut ghost = spawned;
+                    ghost.sonic_drop(&self.board);
                     vec![
                         Event::PieceSpawned { new_in_queue: new_piece },
-                        Event::PieceFalling(spawned)
+                        Event::PieceFalling(spawned, ghost)
                     ]
                 } else {
                     self.state = GameState::GameOver;
@@ -132,7 +136,7 @@ impl Game {
             }
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
-                let mut events = vec![];
+                let mut events = vec![Event::EndOfLineClearDelay];
                 self.deal_garbage(&mut events);
                 events
             }
@@ -159,7 +163,9 @@ impl Game {
                                 lock_delay: 30,
                                 soft_drop_delay: 0
                             };
-                            events.push(Event::PieceFalling(spawned));
+                            let mut ghost = spawned;
+                            ghost.sonic_drop(&self.board);
+                            events.push(Event::PieceFalling(spawned, ghost));
                         } else {
                             self.state = GameState::GameOver;
                             events.push(Event::GameOver);
@@ -287,7 +293,9 @@ impl Game {
                     }
                 }
 
-                events.push(Event::PieceFalling(falling.piece));
+                let mut ghost = falling.piece;
+                ghost.sonic_drop(&self.board);
+                events.push(Event::PieceFalling(falling.piece, ghost));
 
                 events
             }

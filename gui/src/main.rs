@@ -51,6 +51,7 @@ fn main() {
         .window_mode(ggez::conf::WindowMode {
             width: 1024.0,
             height: 576.0,
+            resizable: true,
             // fullscreen_type: ggez::conf::FullscreenType::Desktop,
             ..Default::default()
         })

@@ -1,6 +1,6 @@
 use ggez::event::{ self, EventHandler };
 use ggez::{ Context, GameResult };
-use ggez::graphics::{ self, Image, DrawParam };
+use ggez::graphics::{ self, Image, DrawParam, Rect };
 use ggez::timer;
 use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
@@ -52,11 +52,16 @@ impl EventHandler for LocalGame {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let scale = graphics::size(ctx).1 / 25.0;
+        let size = graphics::drawable_size(ctx);
+        let scale = size.1 / 25.0;
+        graphics::set_screen_coordinates(ctx, Rect {
+            x: 0.0, y: 0.0, w: size.0, h: size.1
+        })?;
         graphics::push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
             .to_matrix()));
-        graphics::apply_transformations(ctx);
+        graphics::apply_transformations(ctx)?;
+        graphics::clear(ctx, graphics::BLACK);
         self.player_1_graphics.draw(ctx, &self.image)?;
         graphics::pop_transform(ctx);
         graphics::present(ctx)
