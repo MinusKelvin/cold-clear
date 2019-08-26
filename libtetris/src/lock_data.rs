@@ -5,10 +5,11 @@ use crate::piece::TspinStatus;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Default)]
 pub struct LockResult {
     pub placement_kind: PlacementKind,
+    pub locked_out: bool,
     pub b2b: bool,
+    pub perfect_clear: bool,
     pub combo: Option<u32>,
     pub garbage_sent: u32,
-    pub perfect_clear: bool,
     pub cleared_lines: ArrayVec<[i32; 4]>
 }
 

@@ -134,12 +134,16 @@ impl<R: Row, S: Stats> Board<R, S> {
     /// Does all logic associated with locking a piece.
     /// 
     /// Clears lines, detects clear kind, calculates garbage, maintains combo and back-to-back
-    /// state, detects perfect clears.
+    /// state, detects perfect clears, detects lockout.
     pub fn lock_piece(&mut self, piece: FallingPiece) -> LockResult {
+        let mut locked_out = true;
         for (x, y) in piece.cells() {
             self.cells[y as usize].set(x as usize, piece.kind.0.color());
             if self.column_heights[x as usize] < y+1 {
                 self.column_heights[x as usize] = y+1;
+            }
+            if y < 20 {
+                locked_out = false;
             }
         }
         let cleared = self.remove_cleared_lines();
@@ -177,7 +181,7 @@ impl<R: Row, S: Stats> Board<R, S> {
         }
 
         let l = LockResult {
-            placement_kind, garbage_sent, perfect_clear,
+            placement_kind, garbage_sent, perfect_clear, locked_out,
             combo: if self.combo == 0 { None } else { Some(self.combo-1) },
             b2b: did_b2b,
             cleared_lines: cleared

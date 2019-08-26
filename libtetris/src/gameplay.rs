@@ -46,8 +46,8 @@ pub enum Event {
     SoftDropped,
     PieceFalling(FallingPiece),
     PiecePlaced {
+        piece: FallingPiece,
         locked: LockResult,
-        location: FallingPiece,
         hard_drop_distance: Option<i32>
     },
     GarbageAdded(Vec<usize>),
@@ -295,10 +295,8 @@ impl Game {
     }
 
     fn lock(&mut self, falling: FallingState, events: &mut Vec<Event>, dist: Option<i32>) {
-        let piece = falling.piece;
-        let low_y = piece.cells().into_iter().map(|(_,y)| y).min().unwrap();
-        let mut locked = self.board.lock_piece(piece);
         self.did_hold = false;
+        let mut locked = self.board.lock_piece(falling.piece);;
         if locked.garbage_sent > self.garbage_queue {
             locked.garbage_sent -= self.garbage_queue;
             self.garbage_queue = 0;
@@ -306,17 +304,19 @@ impl Game {
             self.garbage_queue -= locked.garbage_sent;
             locked.garbage_sent = 0;
         }
-        if low_y >= 20 {
-            self.state = GameState::GameOver;
-        } else if locked.cleared_lines.is_empty() {
+        if locked.cleared_lines.is_empty() {
             self.state = GameState::SpawnDelay(self.config.spawn_delay);
             self.deal_garbage(events);
         } else {
             self.state = GameState::LineClearDelay(self.config.line_clear_delay);
         }
+        if locked.locked_out {
+            self.state = GameState::GameOver;
+            events.push(Event::GameOver);
+        }
         events.push(Event::PiecePlaced {
+            piece: falling.piece,
             locked,
-            location: piece,
             hard_drop_distance: dist
         });
     }

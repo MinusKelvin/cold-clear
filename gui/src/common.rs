@@ -26,9 +26,9 @@ impl BoardDrawState {
     pub fn update(&mut self, events: &[Event]) {
         for event in events {
             match event {
-                Event::PiecePlaced { location, .. } => {
-                    for (x, y) in location.cells() {
-                        self.board[y as usize].set(x as usize, location.kind.0.color());
+                Event::PiecePlaced { piece, .. } => {
+                    for (x, y) in piece.cells() {
+                        self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
                 }
                 Event::PieceFalling(piece) => {

@@ -1,5 +1,6 @@
 use arrayvec::ArrayVec;
 use enumset::EnumSetType;
+use enum_map::Enum;
 
 use crate::{ Board, Row, Stats };
 
@@ -155,7 +156,7 @@ pub enum CellColor {
     Empty
 }
 
-#[derive(Debug, Hash, EnumSetType)]
+#[derive(Debug, Hash, EnumSetType, Enum)]
 pub enum Piece {
     I, O, T, L, J, S, Z
 }
