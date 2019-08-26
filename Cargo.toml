@@ -2,5 +2,6 @@
 
 members = [
     "bot",
-    "libtetris"
+    "libtetris",
+    "gui"
 ]

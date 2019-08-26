@@ -44,8 +44,10 @@ pub enum Event {
     PieceHeld,
     StackTouched,
     SoftDropped,
+    PieceFalling(FallingPiece),
     PiecePlaced {
         locked: LockResult,
+        location: FallingPiece,
         hard_drop_distance: Option<i32>
     },
     GarbageAdded(Vec<usize>),
@@ -77,6 +79,8 @@ impl Game {
         update_input(&mut self.used.soft_drop, self.prev.soft_drop, current.soft_drop);
         update_input(&mut self.used.hold, self.prev.hold, current.hold);
         self.used.hard_drop = !self.prev.hard_drop && current.hard_drop;
+        self.used.soft_drop = current.soft_drop;
+        self.prev = current;
 
         if current.left || current.right {
             if self.used.left || self.used.right {
@@ -113,7 +117,10 @@ impl Game {
                         lock_delay: 30,
                         soft_drop_delay: 0
                     });
-                    vec![Event::PieceSpawned { new_in_queue: new_piece }]
+                    vec![
+                        Event::PieceSpawned { new_in_queue: new_piece },
+                        Event::PieceFalling(spawned)
+                    ]
                 } else {
                     self.state = GameState::GameOver;
                     vec![Event::GameOver]
@@ -141,7 +148,7 @@ impl Game {
                 // Hold
                 if !self.did_hold && self.used.hold {
                     self.did_hold = true;
-                        events.push(Event::PieceHeld);
+                    events.push(Event::PieceHeld);
                     if let Some(piece) = self.board.hold(falling.piece.kind.0) {
                         if let Some(spawned) = FallingPiece::spawn(piece, &self.board) {
                             *falling = FallingState {
@@ -152,6 +159,7 @@ impl Game {
                                 lock_delay: 30,
                                 soft_drop_delay: 0
                             };
+                            events.push(Event::PieceFalling(spawned));
                         } else {
                             self.state = GameState::GameOver;
                             events.push(Event::GameOver);
@@ -258,7 +266,7 @@ impl Game {
 
                     if self.board.on_stack(&falling.piece) {
                         events.push(Event::StackTouched);
-                    } else if self.config.gravity < self.config.soft_drop_speed as i32 * 100 {
+                    } else if self.config.gravity > self.config.soft_drop_speed as i32 * 100 {
                         // Soft drop
                         if self.used.soft_drop {
                             if falling.soft_drop_delay == 0 {
@@ -279,14 +287,17 @@ impl Game {
                     }
                 }
 
+                events.push(Event::PieceFalling(falling.piece));
+
                 events
             }
         }
     }
 
     fn lock(&mut self, falling: FallingState, events: &mut Vec<Event>, dist: Option<i32>) {
-        let low_y = falling.piece.cells().into_iter().map(|(_,y)| y).min().unwrap();
-        let mut locked = self.board.lock_piece(falling.piece);
+        let piece = falling.piece;
+        let low_y = piece.cells().into_iter().map(|(_,y)| y).min().unwrap();
+        let mut locked = self.board.lock_piece(piece);
         self.did_hold = false;
         if locked.garbage_sent > self.garbage_queue {
             locked.garbage_sent -= self.garbage_queue;
@@ -304,7 +315,9 @@ impl Game {
             self.state = GameState::LineClearDelay(self.config.line_clear_delay);
         }
         events.push(Event::PiecePlaced {
-            locked, hard_drop_distance: dist
+            locked,
+            location: piece,
+            hard_drop_distance: dist
         });
     }
 

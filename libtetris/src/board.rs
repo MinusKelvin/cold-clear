@@ -16,18 +16,21 @@ pub struct Board<R=u16, S=()> {
     pub statistics: S
 }
 
-pub trait Row: Default + Copy + Clone {
+pub trait Row: Copy + Clone + 'static {
     fn set(&mut self, x: usize, color: CellColor);
     fn get(&self, x: usize) -> bool;
     fn is_full(&self) -> bool;
     fn cell_color(&self, x: usize) -> CellColor;
+
+    const EMPTY: &'static Self;
+    const SOLID: &'static Self;
 }
 
 impl<R: Row, S: Stats> Board<R, S> {
     /// Creates a blank board with an empty queue.
     pub fn new() -> Self {
         Board {
-            cells: [R::default(); 40].into(),
+            cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
             combo: 0,
             b2b_bonus: false,
@@ -84,7 +87,7 @@ impl<R: Row, S: Stats> Board<R, S> {
         });
 
         for _ in 0..cleared.len() {
-            self.cells.push(R::default());
+            self.cells.push(*R::EMPTY);
         }
         for x in 0..10 {
             self.column_heights[x] -= cleared.len() as i32;
@@ -98,6 +101,16 @@ impl<R: Row, S: Stats> Board<R, S> {
 
     pub fn occupied(&self, x: i32, y: i32) -> bool {
         x < 0 || y < 0 || x >= 10 || y >= 40 || (self.cells[y as usize].get(x as usize))
+    }
+
+    pub fn get_row(&self, y: i32) -> &R {
+        if y < 0 {
+            R::SOLID
+        } else if y >= 40 {
+            R::EMPTY
+        } else {
+            &self.cells[y as usize]
+        }
     }
 
     pub fn obstructed(&self, piece: &FallingPiece) -> bool {
@@ -158,9 +171,7 @@ impl<R: Row, S: Stats> Board<R, S> {
             self.combo = 0;
         }
 
-        // It's impossible to float a mino above an empty row, so we only need to check
-        // if the bottommost row is empty to determine if a perfect clear happened.
-        let perfect_clear = self.column_heights.iter().all(|&y| y == 0);
+        let perfect_clear = self.column_heights == [0; 10];
         if perfect_clear {
             garbage_sent = 10;
         }
@@ -208,10 +219,15 @@ impl<R: Row, S: Stats> Board<R, S> {
     }
 
     pub fn add_garbage(&mut self, col: usize) {
-        let mut row = R::default();
+        let mut row = *R::EMPTY;
         for x in 0..10 {
-            if x != col {
+            if x == col {
+                if self.column_heights[x] != 0 {
+                    self.column_heights[x] += 1;
+                }
+            } else {
                 row.set(x, CellColor::Garbage);
+                self.column_heights[x] += 1;
             }
         }
         self.cells.insert(0, row);
@@ -228,7 +244,7 @@ impl Row for u16 {
     }
 
     fn is_full(&self) -> bool {
-        *self == 0b11111_11111
+        self == Self::SOLID
     }
 
     fn cell_color(&self, x: usize) -> CellColor {
@@ -238,6 +254,9 @@ impl Row for u16 {
             CellColor::Empty
         }
     }
+
+    const SOLID: &'static u16 = &0b11111_11111;
+    const EMPTY: &'static u16 = &0;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -265,4 +284,7 @@ impl Row for ColoredRow {
     fn cell_color(&self, x: usize) -> CellColor {
         self.0[x]
     }
+
+    const SOLID: &'static Self = &ColoredRow([CellColor::Unclearable; 10]);
+    const EMPTY: &'static Self = &ColoredRow([CellColor::Empty; 10]);
 }
