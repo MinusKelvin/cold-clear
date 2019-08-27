@@ -8,8 +8,8 @@ pub fn draw_move<R: Row>(
     from_board: &Board<R>,
     to_board: &Board<R>,
     mv: &Move,
-    evaluation: Option<i32>,
-    depth: u32, garbage: u32, pieces: u32,
+    evaluation: i32,
+    depth: u32, nodes: usize, garbage: u32, pieces: u32,
     lock_result: &LockResult,
     hold: bool
 ) -> Drawing {
@@ -103,17 +103,13 @@ pub fn draw_move<R: Row>(
     }
 
     // Evaluation and depth
-    let evalstr = if let Some(evaluation) = evaluation {
-        evaluation.to_string()
-    } else {
-        "DEAD".to_owned()
-    };
-    let depthstr = format!("({})", depth);
+    let evalstr = format!("({}) {}", depth, evaluation);
+    let nodestr = format!("{}", nodes);
     drawing[26].push_str(&evalstr);
-    for _ in evalstr.len()..22-depthstr.len() {
+    for _ in evalstr.len()..22-nodestr.len() {
         drawing[26].push(' ');
     }
-    drawing[26].push_str(&depthstr);
+    drawing[26].push_str(&nodestr);
 
     // Garbage sent, piece count
     let garbstr = if lock_result.garbage_sent == 0 {

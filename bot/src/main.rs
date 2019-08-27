@@ -69,99 +69,43 @@ fn main() {
     let mut attack = 0;
 
     let mut start = std::time::Instant::now();
-    let mut times_failed_to_extend = 0;
 
     loop {
         const PIECE_TIME: std::time::Duration = std::time::Duration::from_millis(0_100);
-        if start.elapsed() >= PIECE_TIME || times_failed_to_extend > 20 {
-            if let Some((h, m, r, mut t)) = tree.take_best_move() {
-                let drawing = display::draw_move(
-                    &tree.board,
-                    &t.board,
-                    &m,
-                    t.evaluation,
-                    t.depth(), attack, pieces,
-                    &r,
-                    h
-                );
-                attack += r.garbage_sent;
-                pieces += 1;
-                display::write_drawings(&mut std::io::stdout(), &[drawing]).unwrap();
-                drawings.push(drawing);
-                while t.board.next_queue().count() < QUEUE_SIZE {
-                    t.add_next_piece(t.board.generate_next_piece());
+        if start.elapsed() >= PIECE_TIME {
+            let b = tree.board.clone();
+            match tree.into_best_child() {
+                Ok(mut child) => {
+                    let drawing = display::draw_move(
+                        &b,
+                        &child.tree.board,
+                        &child.mv,
+                        child.tree.evaluation,
+                        child.tree.depth as u32, child.tree.child_nodes, attack, pieces,
+                        &child.lock,
+                        child.hold
+                    );
+                    attack += child.lock.garbage_sent;
+                    pieces += 1;
+                    display::write_drawings(&mut std::io::stdout(), &[drawing]).unwrap();
+                    drawings.push(drawing);
+                    while child.tree.board.next_queue().count() < QUEUE_SIZE {
+                        child.tree.add_next_piece(child.tree.board.generate_next_piece());
+                    }
+                    tree = child.tree;
+                    if pieces >= 20000 {
+                        break
+                    }
                 }
-                tree = t;
-                if tree.evaluation == None || pieces >= 1500 {
-                    break
-                }
-            } else if tree.extensions(MOVEMENT_MODE).is_empty() {
-                println!("Dead");
-                break
+                Err(t) => tree = t,
             }
             start = std::time::Instant::now();
-            times_failed_to_extend = 0;
         }
 
-        let mut path = VecDeque::new();
-        let mut branch = &mut tree;
-
-        loop {
-            let mut branches = branch.branches();
-            if branches.is_empty() {
-                break
-            }
-
-            branches.sort_by_key(|&idx| -branch.branch(idx).2.evaluation.unwrap());
-            let min = branch.branch(*branches.last().unwrap()).2.evaluation.unwrap();
-            let weights = branches.iter().enumerate().map(|(i, &idx)| {
-                let e = (branch.branch(idx).2.evaluation.unwrap() - min) as i64;
-                e * e / (i + 1) as i64
-            });
-
-            let sampler = rand::distributions::weighted::WeightedIndex::new(weights).unwrap();
-            let idx = branches[thread_rng().sample(sampler)];
-            let (mv, _, t) = branch.branch_mut(idx);
-
-            if idx.0 {
-                path.push_back(None);
-            }
-            path.push_back(Some(mv.clone()));
-            branch = t;
+        if tree.extend(MOVEMENT_MODE, &transient_weights, &acc_weights) {
+            println!("Dead");
+            break
         }
-
-        let extensions = branch.extensions(MOVEMENT_MODE);
-        if extensions.is_empty() {
-            times_failed_to_extend += 1;
-        } else {
-            times_failed_to_extend = 0;
-
-            for (hold, mv) in extensions {
-                let mut result = branch.board.clone();
-                let p = if hold {
-                    let next = result.advance_queue().unwrap();
-                    match result.hold(next) {
-                        Some(p) => p,
-                        None => result.advance_queue().unwrap()
-                    }
-                } else {
-                    result.advance_queue().unwrap()
-                };
-                assert!(p == mv.location.kind.0);
-
-                let lock = result.lock_piece(mv.location);
-                let leaf = Tree::new(
-                    result,
-                    &lock,
-                    mv.soft_dropped,
-                    &transient_weights,
-                    &acc_weights
-                );
-                branch.extend(hold, mv, lock, leaf);
-            }
-        }
-
-        tree.repropagate(path);
     }
 
     unsafe {
@@ -178,20 +122,22 @@ fn main() {
             evaluation::TIME_TAKEN / evaluation::BOARDS_EVALUATED as u32);
     }
 
-    let mut plan  = vec![];
-    while let Some((h, mv, r, t)) = tree.take_best_move() {
+    let mut plan = vec![];
+    let mut b = tree.board.clone();
+    while let Ok(child) = tree.into_best_child() {
         plan.push(display::draw_move(
-            &tree.board,
-            &t.board,
-            &mv,
-            t.evaluation,
-            t.depth(), attack, pieces,
-            &r,
-            h
+            &b,
+            &child.tree.board,
+            &child.mv,
+            child.tree.evaluation,
+            child.tree.depth as u32, child.tree.child_nodes, attack, pieces,
+            &child.lock,
+            child.hold
         ));
         pieces += 1;
-        attack += r.garbage_sent;
-        tree = t;
+        attack += child.lock.garbage_sent;
+        tree = child.tree;
+        b = tree.board.clone();
     }
 
     println!("Plan:");

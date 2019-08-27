@@ -1,4 +1,6 @@
-use std::collections::VecDeque;
+use rand::prelude::*;
+use enum_map::EnumMap;
+use arrayvec::ArrayVec;
 
 use libtetris::{ Board, LockResult, Piece, FallingPiece };
 use crate::moves::Move;
@@ -6,24 +8,24 @@ use crate::moves::Move;
 pub struct Tree {
     pub board: Board,
     pub raw_eval: crate::evaluation::Evaluation,
-    pub evaluation: Option<i32>,
-    // TODO: newtype this vec type
-    children: Vec<(Move, LockResult, Tree)>,
-    // TODO: switch to Option<Vec<(Move, LockResult, Tree)>>
-    // After all, we don't use the board/evaluation/hold_case fields of this tree
-    hold_case: Option<Box<Tree>>
+    pub evaluation: i32,
+    pub depth: usize,
+    pub child_nodes: usize,
+    kind: Option<TreeKind>
 }
 
-enum Child<'a> {
-    None,
-    HoldCase(&'a Tree),
-    Move(usize, &'a Move, &'a LockResult, &'a Tree)
+enum TreeKind {
+    Known(Vec<Child>),
+    Unknown(Speculation)
 }
 
-enum ChildMut<'a> {
-    None,
-    HoldCase(&'a mut Tree),
-    Move(usize, &'a mut Move, &'a mut LockResult, &'a mut Tree)
+type Speculation = EnumMap<Piece, Option<Vec<Child>>>;
+
+pub struct Child {
+    pub hold: bool,
+    pub mv: Move,
+    pub lock: LockResult,
+    pub tree: Tree
 }
 
 impl Tree {
@@ -38,213 +40,306 @@ impl Tree {
         let raw_eval = evaluate(lock, &board, transient_weights, acc_weights, soft_dropped);
         Tree {
             raw_eval, board,
-            evaluation: Some(raw_eval.accumulated + raw_eval.transient),
-            children: vec![],
-            hold_case: None
+            evaluation: raw_eval.accumulated + raw_eval.transient,
+            depth: 0,
+            child_nodes: 0,
+            kind: None
         }
     }
 
-    pub fn repropagate(&mut self, mut path: VecDeque<Option<Move>>) {
-        match path.pop_front() {
-            None => match self.best_child() {
-                Child::HoldCase(t) => self.evaluation = t.evaluation,
-                Child::Move(_, _, _, t) =>
-                    self.evaluation = Some(t.evaluation.unwrap() + self.raw_eval.accumulated),
-                Child::None => {}
-            }
-            Some(None) => {
-                let hold = self.hold_case.as_mut().unwrap();
-                hold.repropagate(path);
-                match self.best_child() {
-                    Child::HoldCase(t) => self.evaluation = t.evaluation,
-                    Child::Move(_, _, _, t) =>
-                        self.evaluation = Some(t.evaluation.unwrap() + self.raw_eval.accumulated),
-                    Child::None => self.evaluation = None
-                }
-            }
-            Some(Some(m)) => {
-                for (mv, _, t) in &mut self.children {
-                    if *mv == m {
-                        t.repropagate(path);
-                        break
+    pub fn into_best_child(mut self) -> Result<Child, Tree> {
+        match self.kind {
+            None => Err(self),
+            Some(tk) => {
+                match tk.into_best_child() {
+                    Ok(c) => Ok(c),
+                    Err(tk) => {
+                        self.kind = Some(tk);
+                        Err(self)
                     }
                 }
-                match self.best_child() {
-                    Child::HoldCase(t) => self.evaluation = t.evaluation,
-                    Child::Move(_, _, _, t) =>
-                        self.evaluation = Some(t.evaluation.unwrap() + self.raw_eval.accumulated),
-                    Child::None => self.evaluation = None
-                }
             }
-        }
-    }
-
-    fn best_child(&self) -> Child {
-        let mut best = if let Some(hold) = &self.hold_case {
-            if hold.evaluation.is_some() {
-                Child::HoldCase(hold)
-            } else {
-                Child::None
-            }
-        } else {
-            Child::None
-        };
-        for (i, (mv, r, t)) in self.children.iter().enumerate() {
-            if t.evaluation.is_none() {
-                continue
-            }
-            match best {
-                Child::None => best = Child::Move(i, mv, r, t),
-                Child::HoldCase(b) => if t.evaluation > b.evaluation {
-                    best = Child::Move(i, mv, r, t);
-                }
-                Child::Move(_, _, _, bt) => if t.evaluation > bt.evaluation {
-                    best = Child::Move(i, mv, r, t);
-                }
-            }
-        }
-        best
-    }
-
-    fn best_child_mut(&mut self) -> ChildMut {
-        let mut best = if let Some(hold) = &mut self.hold_case {
-            if hold.evaluation.is_some() {
-                ChildMut::HoldCase(hold)
-            } else {
-                ChildMut::None
-            }
-        } else {
-            ChildMut::None
-        };
-        for (i, (mv, r, t)) in self.children.iter_mut().enumerate() {
-            if t.evaluation.is_none() {
-                continue
-            }
-            match best {
-                ChildMut::None => best = ChildMut::Move(i, mv, r, t),
-                ChildMut::HoldCase(b) => if t.evaluation > b.evaluation {
-                    best = ChildMut::Move(i, mv, r, t);
-                } else {
-                    best = ChildMut::HoldCase(b);
-                }
-                ChildMut::Move(bi, bmv, br, bt) => if t.evaluation > bt.evaluation {
-                    best = ChildMut::Move(i, mv, r, t);
-                } else {
-                    best = ChildMut::Move(bi, bmv, br, bt);
-                }
-            }
-        }
-        best
-    }
-
-    pub fn take_best_move(&mut self) -> Option<(bool, Move, LockResult, Tree)> {
-        match self.best_child_mut() {
-            ChildMut::HoldCase(_) => self.hold_case.as_mut()
-                .and_then(|t| t.take_best_move())
-                .map(|(_, mv, r, t)| (true, mv, r, t)),
-            ChildMut::Move(i, _, _, _) => {
-                let (mv, r, t) = self.children.remove(i);
-                Some((false, mv, r, t))
-            }
-            ChildMut::None => None
         }
     }
 
     pub fn add_next_piece(&mut self, piece: Piece) {
         self.board.add_next_piece(piece);
-        if let Some(hold) = &mut self.hold_case {
-            hold.add_next_piece(piece);
-        }
-        for (_, _, t) in &mut self.children {
-            t.add_next_piece(piece);
+        if let Some(ref mut k) = self.kind {
+            k.add_next_piece(piece);
         }
     }
 
-    pub fn depth(&self) -> u32 {
-        match self.best_child() {
-            Child::HoldCase(t) => t.depth(),
-            Child::Move(_, _, _, t) => 1 + t.depth(),
-            Child::None => 0
-        }
+    pub fn extend(
+        &mut self,
+        mode: crate::moves::MovementMode,
+        transient_weights: &crate::evaluation::BoardWeights,
+        acc_weights: &crate::evaluation::PlacementWeights
+    ) -> bool {
+        self.expand(mode, transient_weights, acc_weights).is_death
     }
 
-    pub fn branches(&self) -> Vec<(bool, usize)> {
-        let mut branches = self.hold_case.as_ref().map_or(vec![], |hold_case| {
-            let mut v = hold_case.branches();
-            for (held, _) in &mut v {
-                *held = true
+    fn expand(
+        &mut self,
+        mode: crate::moves::MovementMode,
+        transient_weights: &crate::evaluation::BoardWeights,
+        acc_weights: &crate::evaluation::PlacementWeights
+    ) -> ExpandResult {
+        match self.kind {
+            Some(ref mut tk) => {
+                let er = tk.expand(mode, transient_weights, acc_weights);
+                if !er.is_death {
+                    self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
+                    self.depth = self.depth.max(er.depth);
+                    self.child_nodes += er.new_nodes;
+                }
+                er
             }
-            v
-        });
-        for (i, (_, _, t)) in self.children.iter().enumerate() {
-            if t.evaluation.is_some() {
-                branches.push((false, i));
-            }
-        }
-        branches
-    }
-
-    pub fn branch(&self, (hold, i): (bool, usize)) -> &(Move, LockResult, Tree) {
-        &if hold {
-            &**self.hold_case.as_ref().unwrap()
-        } else {
-            self
-        }.children[i]
-    }
-
-    pub fn branch_mut(&mut self, (hold, i): (bool, usize)) -> &mut (Move, LockResult, Tree) {
-        &mut if hold {
-            &mut **self.hold_case.as_mut().unwrap()
-        } else {
-            self
-        }.children[i]
-    }
-
-    pub fn extensions(&self, mode: crate::moves::MovementMode) -> Vec<(bool, Move)> {
-        let mut extensions = vec![];
-        match self.board.get_next_piece() {
-            Ok(piece) => match FallingPiece::spawn(piece, &self.board) {
-                Some(spawned) => {
-                    for mv in crate::moves::find_moves(&self.board, spawned, mode) {
-                        extensions.push((false, mv));
-                    }
-                    let hold = self.board.hold_piece()
-                        .or(self.board.get_next_next_piece())
-                        .and_then(|p|
-                            if p == piece {
-                                None
-                            } else {
-                                FallingPiece::spawn(p, &self.board)
-                            }
+            None => {
+                if self.board.get_next_piece().is_ok() {
+                    if self.board.hold_piece().is_none() &&
+                            self.board.get_next_next_piece().is_none() {
+                        // Speculate - next piece is known, but hold piece isn't
+                        self.speculate(
+                            mode, transient_weights, acc_weights
+                        )
+                    } else {
+                        // Both next piece and hold piece are known
+                        let children = new_children(
+                            self.board.clone(), mode, transient_weights, acc_weights
                         );
-                    if let Some(spawned) = hold {
-                        for mv in crate::moves::find_moves(&self.board, spawned, mode) {
-                            extensions.push((true, mv));
+
+                        if children.is_empty() {
+                            ExpandResult {
+                                is_death: true,
+                                depth: 0,
+                                new_nodes: 0
+                            }
+                        } else {
+                            self.depth = 1;
+                            self.child_nodes = children.len();
+                            let tk = TreeKind::Known(children);
+                            self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
+                            self.kind = Some(tk);
+                            ExpandResult {
+                                is_death: false,
+                                depth: 1,
+                                new_nodes: self.child_nodes
+                            }
+                        }
+                    }
+                } else {
+                    // Speculate - hold is known, but next piece isn't
+                    assert!(self.board.hold_piece().is_some());
+                    self.speculate(mode, transient_weights, acc_weights)
+                }
+            }
+        }
+    }
+
+    fn speculate(
+        &mut self,
+        mode: crate::moves::MovementMode,
+        transient_weights: &crate::evaluation::BoardWeights,
+        acc_weights: &crate::evaluation::PlacementWeights
+    ) -> ExpandResult {
+        let possibilities = match self.board.get_next_piece() {
+            Ok(_) => {
+                let mut b = self.board.clone();
+                b.advance_queue();
+                b.get_next_piece().unwrap_err()
+            }
+            Err(possibilities) => possibilities
+        };
+        let mut speculation = EnumMap::new();
+        for piece in possibilities.iter() {
+            let mut board = self.board.clone();
+            board.add_next_piece(piece);
+            let children = new_children(
+                board, mode, transient_weights, acc_weights
+            );
+            self.child_nodes += children.len();
+            speculation[piece] = Some(children);
+        }
+
+        if self.child_nodes == 0 {
+            ExpandResult {
+                is_death: true,
+                depth: 0,
+                new_nodes: 0
+            }
+        } else {
+            let tk = TreeKind::Unknown(speculation);
+            self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
+            self.kind = Some(tk);
+            self.depth = 1;
+            ExpandResult {
+                is_death: false,
+                depth: 1,
+                new_nodes: self.child_nodes
+            }
+        }
+    }
+}
+
+/// Expect: If there is no hold piece, there are at least 2 pieces in the queue.
+/// Otherwise there is at least 1 piece in the queue.
+fn new_children(
+    mut board: Board,
+    mode: crate::moves::MovementMode,
+    transient_weights: &crate::evaluation::BoardWeights,
+    acc_weights: &crate::evaluation::PlacementWeights
+) -> Vec<Child> {
+    let mut children = vec![];
+    let next = board.advance_queue().unwrap();
+    let spawned = match FallingPiece::spawn(next, &board) {
+        Some(s) => s,
+        None => return children
+    };
+
+    // Placements for next piece
+    for mv in crate::moves::find_moves(&board, spawned, mode) {
+        let mut board = board.clone();
+        let lock = board.lock_piece(mv.location);
+        if !lock.locked_out {
+            children.push(Child {
+                tree: Tree::new(board, &lock, mv.soft_dropped, transient_weights, acc_weights),
+                hold: false,
+                mv, lock
+            })
+        }
+    }
+
+    let mut board = board.clone();
+    let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
+    if let Some(spawned) = FallingPiece::spawn(hold, &board) {
+        // Placements for hold piece
+        for mv in crate::moves::find_moves(&board, spawned, mode) {
+            let mut board = board.clone();
+            let lock = board.lock_piece(mv.location);
+            if !lock.locked_out {
+                children.push(Child {
+                    tree: Tree::new(board, &lock, mv.soft_dropped, transient_weights, acc_weights),
+                    hold: true,
+                    mv, lock
+                })
+            }
+        }
+    }
+
+    children.sort_by_key(|child| -child.tree.evaluation);
+    children
+}
+
+struct ExpandResult {
+    depth: usize,
+    new_nodes: usize,
+    is_death: bool
+}
+
+impl TreeKind {
+    fn into_best_child(self) -> Result<Child, TreeKind> {
+        match self {
+            TreeKind::Known(children) => if children.is_empty() {
+                Err(TreeKind::Known(children))
+            } else {
+                Ok(children.into_iter().next().unwrap())
+            },
+            TreeKind::Unknown(_) => Err(self),
+        }
+    }
+
+    fn evaluation(&self) -> i32 {
+        match self {
+            TreeKind::Known(children) => children.first().unwrap().tree.evaluation,
+            TreeKind::Unknown(speculation) => {
+                let mut sum = 0;
+                let mut n = 0;
+                for children in speculation.iter().filter_map(|(_, c)| c.as_ref()) {
+                    n += 1;
+                    sum += children.first().map(|c| c.tree.evaluation).unwrap_or(-100);
+                }
+                sum / n
+            }
+        }
+    }
+
+    fn add_next_piece(&mut self, piece: Piece) {
+        match self {
+            TreeKind::Known(children) => {
+                for child in children {
+                    child.tree.add_next_piece(piece);
+                }
+            }
+            TreeKind::Unknown(speculation) => {
+                let mut now_known = vec![];
+                std::mem::swap(speculation[piece].as_mut().unwrap(), &mut now_known);
+                *self = TreeKind::Known(now_known);
+            }
+        }
+    }
+
+    fn expand(
+        &mut self,
+        mode: crate::moves::MovementMode,
+        transient_weights: &crate::evaluation::BoardWeights,
+        acc_weights: &crate::evaluation::PlacementWeights
+    ) -> ExpandResult {
+        let to_expand = match self {
+            TreeKind::Known(children) => children,
+            TreeKind::Unknown(speculation) => {
+                let mut pieces = ArrayVec::<[Piece; 7]>::new();
+                for (piece, children) in speculation.iter() {
+                    if let Some(children) = children {
+                        if !children.is_empty() {
+                            pieces.push(piece);
                         }
                     }
                 }
-                None => {}
+                speculation[*pieces.choose(&mut thread_rng()).unwrap()].as_mut().unwrap()
             }
-            Err(possiblilities) => {
-                // TODO: Speculation is not yet implemented
-            }
-        }
-        extensions
-    }
+        };
 
-    pub fn extend(&mut self, hold: bool, mv: Move, result: LockResult, subtree: Tree) {
-        if hold {
-            let b = &self.board;
-            let raw_eval = self.raw_eval;
-            self.hold_case.get_or_insert_with(|| Box::new(Tree {
-                board: b.clone(),
-                evaluation: None,
-                raw_eval,
-                hold_case: None,
-                children: vec![]
-            })).children.push((mv, result, subtree));
+        let min = to_expand.last().unwrap().tree.evaluation;
+        let weights = to_expand.iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let e = (c.tree.evaluation - min) as i64;
+                e * e / (i + 1) as i64 + 1
+            });
+        let sampler = rand::distributions::WeightedIndex::new(weights).unwrap();
+        let index = thread_rng().sample(sampler);
+
+        let result = to_expand[index].tree.expand(mode, transient_weights, acc_weights);
+        if result.is_death {
+            to_expand.remove(index);
+            match self {
+                TreeKind::Known(children) => if children.is_empty() {
+                    return ExpandResult {
+                        is_death: true,
+                        depth: result.depth + 1,
+                        ..result
+                    }
+                }
+                TreeKind::Unknown(speculation) => if speculation.iter()
+                        .all(|(_, c)| c.as_ref().map(Vec::is_empty).unwrap_or(true)) {
+                    return ExpandResult {
+                        is_death: true,
+                        depth: result.depth + 1,
+                        ..result
+                    }
+                }
+            }
+            ExpandResult {
+                is_death: false,
+                depth: result.depth + 1,
+                ..result
+            }
         } else {
-            self.children.push((mv, result, subtree));
+            to_expand.sort_by_key(|c| -c.tree.evaluation);
+            ExpandResult {
+                depth: result.depth + 1,
+                ..result
+            }
         }
     }
 }
