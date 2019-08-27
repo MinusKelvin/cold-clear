@@ -24,6 +24,9 @@ impl BoardDrawState {
     }
 
     pub fn update(&mut self, events: &[Event]) {
+        if let State::LineClearAnimation(_, ref mut frames) = self.state {
+            *frames += 1;
+        }
         for event in events {
             match event {
                 Event::PiecePlaced { piece, locked, .. } => {
@@ -65,18 +68,31 @@ impl BoardDrawState {
         match self.state {
             State::Falling(piece, ghost) => {
                 for (x,y) in ghost.cells() {
-                    graphics::draw(ctx, img, DrawParam::new()
-                        .dest([x as f32, (20-y) as f32 - 0.75])
-                        .src(tile(0, 1))
-                        .color(cell_color_to_color(piece.kind.0.color()))
-                        .scale([SPRITE_SCALE, SPRITE_SCALE]))?;
+                    graphics::draw(ctx, img, draw_tile(
+                        x, y, 2, 0, cell_color_to_color(piece.kind.0.color())
+                    ))?;
                 }
                 for (x,y) in piece.cells() {
-                    graphics::draw(ctx, img, DrawParam::new()
-                        .dest([x as f32, (20-y) as f32 - 0.75])
-                        .src(tile(1, 0))
-                        .color(cell_color_to_color(piece.kind.0.color()))
-                        .scale([SPRITE_SCALE, SPRITE_SCALE]))?;
+                    graphics::draw(ctx, img, draw_tile(
+                        x, y, 1, 0, cell_color_to_color(piece.kind.0.color())
+                    ))?;
+                }
+            }
+            State::LineClearAnimation(ref lines, frame) => {
+                let frame_x = frame.min(35) / 12;
+                let frame_y = frame.min(35) % 12;
+                for &y in lines {
+                    graphics::draw(ctx, img, draw_tile(
+                        0, y, frame_x*3+3, frame_y, graphics::WHITE
+                    ))?;
+                    graphics::draw(ctx, img, draw_tile(
+                        9, y, frame_x*3+5, frame_y, graphics::WHITE
+                    ))?;
+                    for x in 1..9 {
+                        graphics::draw(ctx, img, draw_tile(
+                            x, y, frame_x*3+4, frame_y, graphics::WHITE
+                        ))?;
+                    }
                 }
             }
             _ => {}
@@ -107,6 +123,14 @@ fn tile(x: i32, y: i32) -> Rect {
         h: 83.0/1024.0,
         w: 83.0/1024.0
     }
+}
+
+fn draw_tile(x: i32, y: i32, tx: i32, ty: i32, color: Color) -> DrawParam {
+    DrawParam::new()
+        .dest([x as f32, (20-y) as f32 - 0.75])
+        .src(tile(tx, ty))
+        .color(color)
+        .scale([SPRITE_SCALE, SPRITE_SCALE])
 }
 
 const SPRITE_SCALE: f32 = 1.0/83.0;
