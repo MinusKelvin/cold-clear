@@ -1,12 +1,25 @@
 use ggez::{ Context, GameResult };
-use ggez::graphics::{ self, Color, DrawParam, Rect, Image };
+use ggez::graphics::{ self, Color, DrawParam, Rect, Image, Text, Scale, TextFragment, Align };
+use std::collections::VecDeque;
 use libtetris::*;
 use arrayvec::ArrayVec;
+
+pub struct GraphicsUpdate {
+    pub statistics: Statistics,
+    pub events: Vec<Event>,
+    pub garbage_queue: u32,
+    pub game_time: u32
+}
 
 pub struct BoardDrawState {
     board: ArrayVec<[ColoredRow; 40]>,
     state: State,
-    pub statistics: Statistics
+    statistics: Statistics,
+    garbage_queue: u32,
+    dead: bool,
+    hold_piece: Option<Piece>,
+    next_queue: VecDeque<Piece>,
+    game_time: u32
 }
 
 enum State {
@@ -16,19 +29,27 @@ enum State {
 }
 
 impl BoardDrawState {
-    pub fn new() -> Self {
+    pub fn new(queue: VecDeque<Piece>) -> Self {
         BoardDrawState {
             board: ArrayVec::from([*ColoredRow::EMPTY; 40]),
             state: State::Delay,
-            statistics: Statistics::default()
+            statistics: Statistics::default(),
+            garbage_queue: 0,
+            dead: false,
+            hold_piece: None,
+            next_queue: queue,
+            game_time: 0
         }
     }
 
-    pub fn update(&mut self, events: &[Event]) {
+    pub fn update(&mut self, update: GraphicsUpdate) {
+        self.statistics = update.statistics;
+        self.garbage_queue = update.garbage_queue;
+        self.game_time = update.game_time;
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
             *frames += 1;
         }
-        for event in events {
+        for event in update.events {
             match event {
                 Event::PiecePlaced { piece, locked, .. } => {
                     for (x, y) in piece.cells() {
@@ -40,8 +61,16 @@ impl BoardDrawState {
                         self.state = State::LineClearAnimation(locked.cleared_lines.clone(), 0);
                     }
                 }
+                Event::PieceHeld(piece) => {
+                    self.hold_piece = Some(piece);
+                    self.state = State::Delay;
+                }
+                Event::PieceSpawned { new_in_queue } => {
+                    self.next_queue.pop_front();
+                    self.next_queue.push_back(new_in_queue);
+                }
                 Event::PieceFalling(piece, ghost) => {
-                    self.state = State::Falling(*piece, *ghost);
+                    self.state = State::Falling(piece, ghost);
                 }
                 Event::EndOfLineClearDelay => {
                     self.state = State::Delay;
@@ -52,7 +81,7 @@ impl BoardDrawState {
                 }
                 Event::GarbageAdded(columns) => {
                     self.board.truncate(40 - columns.len());
-                    for &col in columns {
+                    for col in columns {
                         let mut row = *ColoredRow::EMPTY;
                         for x in 0..10 {
                             if x != col {
@@ -62,32 +91,39 @@ impl BoardDrawState {
                         self.board.insert(0, row);
                     }
                 }
+                Event::GameOver => self.dead = true,
                 _ => {}
             }
         }
     }
 
-    pub fn draw(&self, ctx: &mut Context, img: &Image) -> GameResult {
+    pub fn draw(&self, ctx: &mut Context, img: &Image, text_x: f32, scale: f32) -> GameResult {
         for y in 0..21 {
             for x in 0..10 {
-                graphics::draw(ctx, img, DrawParam::new()
-                    .dest([x as f32, (20-y) as f32 - 0.75])
-                    .src(if self.board[y].cell_color(x) == CellColor::Empty
-                        { tile(0, 0) } else { tile(1, 0) })
-                    .color(cell_color_to_color(self.board[y].cell_color(x)))
-                    .scale([SPRITE_SCALE, SPRITE_SCALE]))?;
+                graphics::draw(ctx, img, draw_tile(
+                    x as i32+3, y as i32, if self.board[y].cell_color(x) == CellColor::Empty
+                        { 0 } else { 1 },
+                    0, cell_color_to_color({
+                        let color = self.board[y].cell_color(x);
+                        if self.dead && color != CellColor::Empty {
+                            CellColor::Unclearable
+                        } else {
+                            color
+                        }
+                    })
+                ))?;
             }
         }
         match self.state {
             State::Falling(piece, ghost) => {
                 for (x,y) in ghost.cells() {
                     graphics::draw(ctx, img, draw_tile(
-                        x, y, 2, 0, cell_color_to_color(piece.kind.0.color())
+                        x+3, y, 2, 0, cell_color_to_color(piece.kind.0.color())
                     ))?;
                 }
                 for (x,y) in piece.cells() {
                     graphics::draw(ctx, img, draw_tile(
-                        x, y, 1, 0, cell_color_to_color(piece.kind.0.color())
+                        x+3, y, 1, 0, cell_color_to_color(piece.kind.0.color())
                     ))?;
                 }
             }
@@ -96,19 +132,65 @@ impl BoardDrawState {
                 let frame_y = frame.min(35) % 12;
                 for &y in lines {
                     graphics::draw(ctx, img, draw_tile(
-                        0, y, frame_x*3+3, frame_y, graphics::WHITE
+                        3, y, frame_x*3+3, frame_y, graphics::WHITE
                     ))?;
                     graphics::draw(ctx, img, draw_tile(
-                        9, y, frame_x*3+5, frame_y, graphics::WHITE
+                        12, y, frame_x*3+5, frame_y, graphics::WHITE
                     ))?;
                     for x in 1..9 {
                         graphics::draw(ctx, img, draw_tile(
-                            x, y, frame_x*3+4, frame_y, graphics::WHITE
+                            x+3, y, frame_x*3+4, frame_y, graphics::WHITE
                         ))?;
                     }
                 }
             }
             _ => {}
+        }
+        if let Some(piece) = self.hold_piece {
+            draw_piece_preview(ctx, img, 0, 18, piece)?;
+        }
+        for (i, &piece) in self.next_queue.iter().enumerate() {
+            draw_piece_preview(ctx, img, 13, 18 - (i*2) as i32, piece)?;
+        }
+        graphics::queue_text(
+            ctx, &text("Hold", scale, 3.0*scale), [text_x, scale*0.25], None
+        );
+        graphics::queue_text(
+            ctx, &text("Next", scale, 3.0*scale), [text_x+13.0*scale, scale*0.25], None
+        );
+        graphics::queue_text(
+            ctx, &text("Statistics", scale*0.75, 3.0*scale), [text_x, scale*3.0], None
+        );
+        let seconds = self.game_time as f32 / 60.0;
+        let lines = vec![
+            ("#", format!("{}", self.statistics.pieces)),
+            ("PPS", format!("{:.1}", self.statistics.pieces as f32 / seconds)),
+            ("Lines", format!("{}", self.statistics.lines)),
+            ("ATK", format!("{}", self.statistics.attack)),
+            ("APM", format!("{:.1}", self.statistics.attack as f32 / seconds * 60.0)),
+            ("MxCb", format!("{}", self.statistics.max_combo)),
+            ("S", format!("{}", self.statistics.singles)),
+            ("D", format!("{}", self.statistics.doubles)),
+            ("T", format!("{}", self.statistics.triples)),
+            ("Q", format!("{}", self.statistics.tetrises)),
+            ("tsz", format!("{}", self.statistics.mini_tspin_zeros)),
+            ("tss", format!("{}", self.statistics.mini_tspin_singles)),
+            ("tsd", format!("{}", self.statistics.mini_tspin_doubles)),
+            ("TSZ", format!("{}", self.statistics.tspin_zeros)),
+            ("TSS", format!("{}", self.statistics.tspin_singles)),
+            ("TSD", format!("{}", self.statistics.tspin_doubles)),
+            ("TST", format!("{}", self.statistics.tspin_triples)),
+            ("PC", format!("{}", self.statistics.perfect_clears))
+        ];
+        let mut y = 3.75*scale;
+        for (label, stat) in lines {
+            graphics::queue_text(
+                ctx, &text(label, scale*0.66, 0.0), [text_x+0.25*scale, y], None
+            );
+            graphics::queue_text(
+                ctx, &text(stat, scale*0.66, -2.5*scale), [text_x+0.25*scale, y], None
+            );
+            y += scale * 0.66;
         }
         Ok(())
     }
@@ -136,6 +218,36 @@ fn tile(x: i32, y: i32) -> Rect {
         h: 83.0/1024.0,
         w: 83.0/1024.0
     }
+}
+
+fn text(s: impl Into<TextFragment>, ts: f32, width: f32) -> Text {
+    let mut text = Text::new(s);
+    text.set_font(Default::default(), Scale::uniform(ts*0.75));
+    if width != 0.0 {
+        if width < 0.0 {
+            text.set_bounds([-width, 1230.0], Align::Right);
+        } else {
+            text.set_bounds([width, 1230.0], Align::Center);
+        }
+    }
+    text
+}
+
+fn draw_piece_preview(ctx: &mut Context, img: &Image, x: i32, y: i32, piece: Piece) -> GameResult {
+    let ty = match piece {
+        Piece::I => 1,
+        Piece::O => 2,
+        Piece::T => 3,
+        Piece::L => 4,
+        Piece::J => 5,
+        Piece::S => 6,
+        Piece::Z => 7
+    };
+    let color = cell_color_to_color(piece.color());
+    for dx in 0..3 {
+        graphics::draw(ctx, img, draw_tile(x+dx, y, dx, ty, color))?;
+    }
+    Ok(())
 }
 
 fn draw_tile(x: i32, y: i32, tx: i32, ty: i32, color: Color) -> DrawParam {

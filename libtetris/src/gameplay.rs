@@ -15,12 +15,13 @@ pub struct Controller {
 pub struct Game {
     pub board: Board<ColoredRow, Statistics>,
     pub state: GameState,
-    pub garbage_queue: u32,
     config: GameConfig,
     did_hold: bool,
     prev: Controller,
     used: Controller,
-    das_delay: u32
+    das_delay: u32,
+    pub garbage_queue: u32,
+    attacking: u32
 }
 
 /// Units are in ticks
@@ -34,6 +35,8 @@ pub struct GameConfig {
     /// Measured in 1/100 of a tick
     pub gravity: i32,
     pub next_queue_size: u32,
+    pub margin_time: Option<u32>,
+    pub max_garbage_add: u32
 }
 
 pub enum Event {
@@ -41,7 +44,7 @@ pub enum Event {
     PieceMoved,
     PieceRotated,
     PieceTSpined,
-    PieceHeld,
+    PieceHeld(Piece),
     StackTouched,
     SoftDropped,
     PieceFalling(FallingPiece, FallingPiece),
@@ -51,6 +54,7 @@ pub enum Event {
         locked: LockResult,
         hard_drop_distance: Option<i32>
     },
+    GarbageSent(u32),
     GarbageAdded(Vec<usize>),
     GameOver
 }
@@ -68,7 +72,8 @@ impl Game {
             did_hold: false,
             das_delay: config.delayed_auto_shift,
             state: GameState::SpawnDelay(config.next_queue_size),
-            garbage_queue: 0
+            garbage_queue: 0,
+            attacking: 0
         }
     }
 
@@ -137,16 +142,7 @@ impl Game {
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
                 let mut events = vec![Event::EndOfLineClearDelay];
-                match self.deal_garbage() {
-                    None => {},
-                    Some((cols, true)) => {
-                        events.push(Event::GarbageAdded(cols));
-                        events.push(Event::GameOver);
-                    }
-                    Some((cols, false)) => {
-                        events.push(Event::GarbageAdded(cols));
-                    }
-                }
+                self.deal_garbage(&mut events);
                 events
             }
             GameState::LineClearDelay(ref mut delay) => {
@@ -161,7 +157,7 @@ impl Game {
                 // Hold
                 if !self.did_hold && self.used.hold {
                     self.did_hold = true;
-                    events.push(Event::PieceHeld);
+                    events.push(Event::PieceHeld(falling.piece.kind.0));
                     if let Some(piece) = self.board.hold(falling.piece.kind.0) {
                         if let Some(spawned) = FallingPiece::spawn(piece, &self.board) {
                             *falling = FallingState {
@@ -313,61 +309,54 @@ impl Game {
 
     fn lock(&mut self, falling: FallingState, events: &mut Vec<Event>, dist: Option<i32>) {
         self.did_hold = false;
-        let mut locked = self.board.lock_piece(falling.piece);;
-        if locked.garbage_sent > self.garbage_queue {
-            locked.garbage_sent -= self.garbage_queue;
-            self.garbage_queue = 0;
-        } else {
-            self.garbage_queue -= locked.garbage_sent;
-            locked.garbage_sent = 0;
-        }
-        let mut garbage_event = None;
-        if locked.cleared_lines.is_empty() {
-            self.state = GameState::SpawnDelay(self.config.spawn_delay);
-            garbage_event = self.deal_garbage();
-        } else {
-            self.state = GameState::LineClearDelay(self.config.line_clear_delay);
-        }
+        let locked = self.board.lock_piece(falling.piece);;
+
+        events.push(Event::PiecePlaced {
+            piece: falling.piece,
+            locked: locked.clone(),
+            hard_drop_distance: dist
+        });
+
         if locked.locked_out {
             self.state = GameState::GameOver;
             events.push(Event::GameOver);
-        }
-        events.push(Event::PiecePlaced {
-            piece: falling.piece,
-            locked,
-            hard_drop_distance: dist
-        });
-        match garbage_event {
-            None => {},
-            Some((cols, true)) => {
-                events.push(Event::GarbageAdded(cols));
-                events.push(Event::GameOver);
-            }
-            Some((cols, false)) => {
-                events.push(Event::GarbageAdded(cols));
-            }
+        } else if locked.cleared_lines.is_empty() {
+            self.state = GameState::SpawnDelay(self.config.spawn_delay);
+            self.deal_garbage(events);
+        } else {
+            self.attacking += locked.garbage_sent;
+            self.state = GameState::LineClearDelay(self.config.line_clear_delay);
         }
     }
 
-    fn deal_garbage(&mut self) -> Option<(Vec<usize>, bool)> {
+    fn deal_garbage(&mut self, events: &mut Vec<Event>) {
+        if self.attacking > self.garbage_queue {
+            self.attacking -= self.garbage_queue;
+            self.garbage_queue = 0;
+        } else {
+            self.garbage_queue -= self.attacking;
+            self.attacking = 0;
+        }
         if self.garbage_queue > 0 {
+            let mut dead = false;
             let mut col = thread_rng().gen_range(0, 10);
             let mut garbage_columns = vec![];
-            for _ in 0..self.garbage_queue {
+            for _ in 0..self.garbage_queue.min(self.config.max_garbage_add) {
                 if thread_rng().gen_bool(1.0/3.0) {
                     col = thread_rng().gen_range(0, 10);
                 }
                 garbage_columns.push(col);
-                if self.board.add_garbage(col) {
-                    self.state = GameState::GameOver;
-                    self.garbage_queue -= garbage_columns.len() as u32;
-                    return Some((garbage_columns, true))
-                }
+                dead |= self.board.add_garbage(col);
             }
-            self.garbage_queue = 0;
-            Some((garbage_columns, false))
-        } else {
-            None
+            self.garbage_queue -= self.garbage_queue.min(self.config.max_garbage_add);
+            events.push(Event::GarbageAdded(garbage_columns));
+            if dead {
+                events.push(Event::GameOver);
+                self.state = GameState::GameOver;
+            }
+        } else if self.attacking > 0 {
+            events.push(Event::GarbageSent(self.attacking));
+            self.attacking = 0;
         }
     }
 }
@@ -377,6 +366,51 @@ fn update_input(used: &mut bool, prev: bool, current: bool) {
         *used = false
     } else if !prev {
         *used = true;
+    }
+}
+
+pub struct Battle {
+    pub player_1: Game,
+    pub player_2: Game,
+    pub time: u32,
+    margin_time: Option<u32>,
+    multiplier: f32
+}
+
+impl Battle {
+    pub fn new(config: GameConfig) -> Self {
+        Battle {
+            player_1: Game::new(config),
+            player_2: Game::new(config),
+            time: 0,
+            margin_time: config.margin_time,
+            multiplier: 1.0
+        }
+    }
+
+    pub fn update(&mut self, p1: Controller, p2: Controller) -> (Vec<Event>, Vec<Event>) {
+        self.time += 1;
+        if let Some(margin_time) = self.margin_time {
+            if self.time > margin_time {
+                self.multiplier += 1.0 / 1800.0;
+            }
+        }
+
+        let p1_events = self.player_1.update(p1);
+        let p2_events = self.player_2.update(p2);
+
+        for event in &p1_events {
+            if let &Event::GarbageSent(amt) = event {
+                self.player_2.garbage_queue += (amt as f32 * self.multiplier) as u32;
+            }
+        }
+        for event in &p2_events {
+            if let &Event::GarbageSent(amt) = event {
+                self.player_1.garbage_queue += (amt as f32 * self.multiplier) as u32;
+            }
+        }
+
+        (p1_events, p2_events)
     }
 }
 
@@ -407,7 +441,9 @@ impl Default for GameConfig {
             auto_repeat_rate: 1,
             soft_drop_speed: 1,
             next_queue_size: 5,
-            gravity: 4500
+            gravity: 4500,
+            margin_time: Some(7200),
+            max_garbage_add: 10
         }
     }
 }
