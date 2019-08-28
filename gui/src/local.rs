@@ -11,8 +11,10 @@ use crate::common::BoardDrawState;
 pub struct LocalGame {
     player_1: Player,
     player_1_graphics: BoardDrawState,
+    player_1_attack: Option<u32>,
     player_2: Player,
     player_2_graphics: BoardDrawState,
+    player_2_attack: Option<u32>,
     image: Image,
     gamepad_p2: Option<GamepadId>
 }
@@ -23,8 +25,10 @@ impl LocalGame {
         LocalGame {
             player_1: Player::new(),
             player_1_graphics: BoardDrawState::new(),
+            player_1_attack: None,
             player_2: Player::new(),
             player_2_graphics: BoardDrawState::new(),
+            player_2_attack: None,
             image,
             gamepad_p2: None
         }
@@ -72,7 +76,10 @@ impl EventHandler for LocalGame {
                 match event {
                     GameOver => ggez::event::quit(ctx),
                     PiecePlaced { locked, .. } => {
-                        self.player_2.game.garbage_queue += locked.garbage_sent;
+                        self.player_1_attack = Some(locked.garbage_sent);
+                    }
+                    EndOfLineClearDelay => if let Some(attack) = self.player_1_attack {
+                        self.player_2.game.garbage_queue += attack;
                     }
                     _ => {}
                 }
@@ -82,7 +89,10 @@ impl EventHandler for LocalGame {
                 match event {
                     GameOver => ggez::event::quit(ctx),
                     PiecePlaced { locked, .. } => {
-                        self.player_1.game.garbage_queue += locked.garbage_sent;
+                        self.player_2_attack = Some(locked.garbage_sent);
+                    }
+                    EndOfLineClearDelay => if let Some(attack) = self.player_2_attack {
+                        self.player_1.game.garbage_queue += attack;
                     }
                     _ => {}
                 }
