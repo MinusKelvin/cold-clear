@@ -137,7 +137,16 @@ impl Game {
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
                 let mut events = vec![Event::EndOfLineClearDelay];
-                self.deal_garbage(&mut events);
+                match self.deal_garbage() {
+                    None => {},
+                    Some((cols, true)) => {
+                        events.push(Event::GarbageAdded(cols));
+                        events.push(Event::GameOver);
+                    }
+                    Some((cols, false)) => {
+                        events.push(Event::GarbageAdded(cols));
+                    }
+                }
                 events
             }
             GameState::LineClearDelay(ref mut delay) => {
@@ -312,9 +321,10 @@ impl Game {
             self.garbage_queue -= locked.garbage_sent;
             locked.garbage_sent = 0;
         }
+        let mut garbage_event = None;
         if locked.cleared_lines.is_empty() {
             self.state = GameState::SpawnDelay(self.config.spawn_delay);
-            self.deal_garbage(events);
+            garbage_event = self.deal_garbage();
         } else {
             self.state = GameState::LineClearDelay(self.config.line_clear_delay);
         }
@@ -327,9 +337,19 @@ impl Game {
             locked,
             hard_drop_distance: dist
         });
+        match garbage_event {
+            None => {},
+            Some((cols, true)) => {
+                events.push(Event::GarbageAdded(cols));
+                events.push(Event::GameOver);
+            }
+            Some((cols, false)) => {
+                events.push(Event::GarbageAdded(cols));
+            }
+        }
     }
 
-    fn deal_garbage(&mut self, events: &mut Vec<Event>) {
+    fn deal_garbage(&mut self) -> Option<(Vec<usize>, bool)> {
         if self.garbage_queue > 0 {
             let mut col = thread_rng().gen_range(0, 10);
             let mut garbage_columns = vec![];
@@ -337,11 +357,17 @@ impl Game {
                 if thread_rng().gen_bool(1.0/3.0) {
                     col = thread_rng().gen_range(0, 10);
                 }
-                self.board.add_garbage(col);
                 garbage_columns.push(col);
+                if self.board.add_garbage(col) {
+                    self.state = GameState::GameOver;
+                    self.garbage_queue -= garbage_columns.len() as u32;
+                    return Some((garbage_columns, true))
+                }
             }
             self.garbage_queue = 0;
-            events.push(Event::GarbageAdded(garbage_columns));
+            Some((garbage_columns, false))
+        } else {
+            None
         }
     }
 }

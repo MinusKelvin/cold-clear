@@ -6,7 +6,7 @@ use arrayvec::ArrayVec;
 pub struct BoardDrawState {
     board: ArrayVec<[ColoredRow; 40]>,
     state: State,
-
+    pub statistics: Statistics
 }
 
 enum State {
@@ -19,7 +19,8 @@ impl BoardDrawState {
     pub fn new() -> Self {
         BoardDrawState {
             board: ArrayVec::from([*ColoredRow::EMPTY; 40]),
-            state: State::Delay
+            state: State::Delay,
+            statistics: Statistics::default()
         }
     }
 
@@ -47,6 +48,18 @@ impl BoardDrawState {
                     self.board.retain(|row| !row.is_full());
                     while !self.board.is_full() {
                         self.board.push(*ColoredRow::EMPTY);
+                    }
+                }
+                Event::GarbageAdded(columns) => {
+                    self.board.truncate(40 - columns.len());
+                    for &col in columns {
+                        let mut row = *ColoredRow::EMPTY;
+                        for x in 0..10 {
+                            if x != col {
+                                row.set(x, CellColor::Garbage);
+                            }
+                        }
+                        self.board.insert(0, row);
                     }
                 }
                 _ => {}

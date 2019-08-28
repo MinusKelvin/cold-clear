@@ -20,6 +20,7 @@ pub trait Row: Copy + Clone + 'static {
     fn set(&mut self, x: usize, color: CellColor);
     fn get(&self, x: usize) -> bool;
     fn is_full(&self) -> bool;
+    fn is_empty(&self) -> bool;
     fn cell_color(&self, x: usize) -> CellColor;
 
     const EMPTY: &'static Self;
@@ -222,7 +223,7 @@ impl<R: Row, S: Stats> Board<R, S> {
         self.b2b_bonus
     }
 
-    pub fn add_garbage(&mut self, col: usize) {
+    pub fn add_garbage(&mut self, col: usize) -> bool {
         let mut row = *R::EMPTY;
         for x in 0..10 {
             if x == col {
@@ -234,7 +235,9 @@ impl<R: Row, S: Stats> Board<R, S> {
                 self.column_heights[x] += 1;
             }
         }
+        let dead = self.cells.pop().map_or(false, |r| !r.is_empty());
         self.cells.insert(0, row);
+        dead
     }
 }
 
@@ -249,6 +252,10 @@ impl Row for u16 {
 
     fn is_full(&self) -> bool {
         self == Self::SOLID
+    }
+
+    fn is_empty(&self) -> bool {
+        self == Self::EMPTY
     }
 
     fn cell_color(&self, x: usize) -> CellColor {
@@ -287,6 +294,10 @@ impl Row for ColoredRow {
 
     fn cell_color(&self, x: usize) -> CellColor {
         self.0[x]
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.iter().all(|&c| c == CellColor::Empty)
     }
 
     const SOLID: &'static Self = &ColoredRow([CellColor::Unclearable; 10]);
