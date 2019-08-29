@@ -239,11 +239,34 @@ impl<R: Row, S: Stats> Board<R, S> {
         self.cells.insert(0, row);
         dead
     }
+
+    pub fn to_compressed(&self) -> Board {
+        Board {
+            cells: self.cells.iter().map(|r| {
+                let mut row = 0;
+                for x in 0..10 {
+                    row.set(x, r.cell_color(x));
+                }
+                row
+            }).collect(),
+            b2b_bonus: self.b2b_bonus,
+            combo: self.combo,
+            column_heights: self.column_heights,
+            next_pieces: self.next_pieces.clone(),
+            hold_piece: self.hold_piece,
+            statistics: (),
+            bag: self.bag
+        }
+    }
 }
 
 impl Row for u16 {
-    fn set(&mut self, x: usize, _: CellColor) {
-        *self |= 1 << x;
+    fn set(&mut self, x: usize, color: CellColor) {
+        if color == CellColor::Empty {
+            *self &= !(1 << x);
+        } else {
+            *self |= 1 << x;
+        }
     }
 
     fn get(&self, x: usize) -> bool {

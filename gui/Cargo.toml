@@ -10,3 +10,4 @@ edition = "2018"
 arrayvec = "0.4.11"
 ggez = "0.5.1"
 libtetris = { path = "../libtetris" }
+bot = { path = "../bot" }

@@ -298,6 +298,13 @@ impl TreeKind {
                 speculation[*pieces.choose(&mut thread_rng()).unwrap()].as_mut().unwrap()
             }
         };
+        if to_expand.is_empty() {
+            return ExpandResult {
+                depth: 0,
+                new_nodes: 0,
+                is_death: true
+            }
+        }
 
         let min = to_expand.last().unwrap().tree.evaluation;
         let weights = to_expand.iter()

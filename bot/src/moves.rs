@@ -13,7 +13,7 @@ pub enum Input {
     DasRight
 }
 
-type InputList = ArrayVec<[Input; 32]>;
+pub type InputList = ArrayVec<[Input; 32]>;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Move {
@@ -29,18 +29,11 @@ pub enum MovementMode {
     TwentyG,
 }
 
-pub static mut TIME_TAKEN_INIT: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut TIME_TAKEN_ON_STACK: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut MOVES_FOUND: usize = 0;
-pub static mut CALLS: usize = 0;
-
 pub fn find_moves(
     board: &Board,
     mut spawned: FallingPiece,
     mode: MovementMode
 ) -> Vec<Move> {
-    let t = std::time::Instant::now();
-
     let mut locks = HashMap::with_capacity(1024);
     let mut checked = HashSet::with_capacity(1024);
     let mut check_queue = VecDeque::new();
@@ -72,8 +65,6 @@ pub fn find_moves(
         checked.insert(spawned);
         check_queue.push_back((inputs, spawned));
     }
-
-    let h = std::time::Instant::now();
 
     while let Some((moves, position)) = check_queue.pop_front() {
         if !moves.is_full() {
@@ -133,16 +124,7 @@ pub fn find_moves(
         lock_check(change, &mut locks, moves);
     }
 
-    let n = std::time::Instant::now();
-
-    let v: Vec<_> = locks.into_iter().map(|(_, v)| v).collect();
-    unsafe {
-        MOVES_FOUND += v.len();
-        TIME_TAKEN_INIT += h - t;
-        TIME_TAKEN_ON_STACK += n - h;
-        CALLS += 1;
-    }
-    v
+    locks.into_iter().map(|(_, v)| v).collect()
 }
 
 fn lock_check(
