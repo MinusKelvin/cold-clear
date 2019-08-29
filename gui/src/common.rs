@@ -220,7 +220,7 @@ fn tile(x: i32, y: i32) -> Rect {
     }
 }
 
-fn text(s: impl Into<TextFragment>, ts: f32, width: f32) -> Text {
+pub fn text(s: impl Into<TextFragment>, ts: f32, width: f32) -> Text {
     let mut text = Text::new(s);
     text.set_font(Default::default(), Scale::uniform(ts*0.75));
     if width != 0.0 {

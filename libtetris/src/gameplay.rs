@@ -373,8 +373,8 @@ pub struct Battle {
     pub player_1: Game,
     pub player_2: Game,
     pub time: u32,
+    pub multiplier: f32,
     margin_time: Option<u32>,
-    multiplier: f32
 }
 
 impl Battle {

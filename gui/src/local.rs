@@ -1,22 +1,29 @@
 use ggez::event::{ self, EventHandler };
 use ggez::{ Context, GameResult };
-use ggez::graphics::{ self, Image, DrawParam, Rect, FilterMode };
+use ggez::graphics::{ self, Image, DrawParam, Rect, FilterMode, Color };
 use ggez::timer;
 use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::{ gamepad, GamepadId };
 use ggez::event::{ Button, Axis };
-use crate::common::{ GraphicsUpdate, BoardDrawState };
+use crate::common::{ GraphicsUpdate, BoardDrawState, text };
 
 pub struct LocalGame {
     battle: libtetris::Battle,
     player_1_graphics: BoardDrawState,
     player_2_graphics: BoardDrawState,
+    p1_bot: bot::BotController,
+    p2_bot: bot::BotController,
+    p1_wins: u32,
+    p2_wins: u32,
     image: Image,
-    // gamepad_p2: Option<GamepadId>
-    bot: bot::BotController,
-    bot2: bot::BotController,
-    start: bool
+    state: State
+}
+
+enum State {
+    Playing,
+    GameOver(u32),
+    Starting(u32)
 }
 
 impl LocalGame {
@@ -26,68 +33,97 @@ impl LocalGame {
         LocalGame {
             player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue().collect()),
             player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue().collect()),
-            bot: bot::BotController::new(battle.player_2.board.next_queue()),
-            bot2: bot::BotController::new(battle.player_1.board.next_queue()),
+            p1_bot: bot::BotController::new(battle.player_1.board.next_queue()),
+            p2_bot: bot::BotController::new(battle.player_2.board.next_queue()),
+            p1_wins: 0,
+            p2_wins: 0,
             battle,
             image,
-            start: false,
-            // gamepad_p2: None
+            state: State::Starting(180)
         }
     }
 }
 
 impl EventHandler for LocalGame {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        if !self.start { return Ok(()) }
         while timer::check_update_time(ctx, 60) {
-            // let p1_controller = libtetris::Controller {
-            //     left: is_key_pressed(ctx, KeyCode::Left),
-            //     right: is_key_pressed(ctx, KeyCode::Right),
-            //     rotate_left: is_key_pressed(ctx, KeyCode::Z),
-            //     rotate_right: is_key_pressed(ctx, KeyCode::X),
-            //     soft_drop: is_key_pressed(ctx, KeyCode::Down),
-            //     hard_drop: is_key_pressed(ctx, KeyCode::Space),
-            //     hold: is_key_pressed(ctx, KeyCode::C),
-            // };
-            let p1_controller = self.bot2.controller();
+            let do_update = match self.state {
+                State::GameOver(0) => {
+                    self.battle = libtetris::Battle::new(libtetris::GameConfig {
+                        margin_time: Some(60),
+                        ..Default::default()
+                    });
+                    self.player_1_graphics = BoardDrawState::new(
+                        self.battle.player_1.board.next_queue().collect()
+                    );
+                    self.p1_bot = bot::BotController::new(self.battle.player_1.board.next_queue());
+                    self.player_2_graphics = BoardDrawState::new(
+                        self.battle.player_2.board.next_queue().collect()
+                    );
+                    self.p2_bot = bot::BotController::new(self.battle.player_2.board.next_queue());
+                    self.state = State::Starting(180);
+                    false
+                }
+                State::GameOver(ref mut delay) => {
+                    *delay -= 1;
+                    true
+                }
+                State::Starting(0) => {
+                    self.state = State::Playing;
+                    true
+                }
+                State::Starting(ref mut delay) => {
+                    *delay -= 1;
+                    false
+                }
+                State::Playing => true
+            };
 
-            let p2_controller = self.bot.controller();
-            // let p2_controller = match self.gamepad_p2 {
-            //     None => Default::default(),
-            //     Some(id) => {
-            //         let gp = gamepad(ctx, id);
-            //         libtetris::Controller {
-            //             left: gp.is_pressed(Button::DPadLeft) || gp.value(Axis::LeftStickX) < -0.5,
-            //             right: gp.is_pressed(Button::DPadRight) || gp.value(Axis::LeftStickX) > 0.5,
-            //             rotate_left: gp.is_pressed(Button::South),
-            //             rotate_right: gp.is_pressed(Button::East),
-            //             soft_drop: gp.is_pressed(Button::DPadDown) ||
-            //                     gp.value(Axis::LeftStickY) < -0.5,
-            //             hard_drop: gp.is_pressed(Button::DPadUp) ||
-            //                     gp.value(Axis::LeftStickY) > 0.5,
-            //             hold: gp.is_pressed(Button::LeftTrigger) ||
-            //                     gp.is_pressed(Button::RightTrigger)
-            //         }
-            //     }
-            // };
+            if do_update {
+                let p1_controller = self.p1_bot.controller();
+                let p2_controller = self.p2_bot.controller();
 
-            let (events_p1, events_p2) = self.battle.update(p1_controller, p2_controller);
+                let (events_p1, events_p2) = self.battle.update(p1_controller, p2_controller);
 
-            self.bot2.update(&events_p1, &self.battle.player_1.board);
-            self.bot.update(&events_p2, &self.battle.player_2.board);
+                self.p1_bot.update(&events_p1, &self.battle.player_1.board);
+                self.p2_bot.update(&events_p2, &self.battle.player_2.board);
 
-            self.player_1_graphics.update(GraphicsUpdate {
-                events: events_p1,
-                garbage_queue: self.battle.player_1.garbage_queue,
-                statistics: self.battle.player_1.board.statistics,
-                game_time: self.battle.time
-            });
-            self.player_2_graphics.update(GraphicsUpdate {
-                events: events_p2,
-                garbage_queue: self.battle.player_2.garbage_queue,
-                statistics: self.battle.player_2.board.statistics,
-                game_time: self.battle.time
-            });
+                if let State::Playing = self.state {
+                    for event in &events_p1 {
+                        use libtetris::Event::*;
+                        match event {
+                            GameOver => {
+                                self.p2_wins += 1;
+                                self.state = State::GameOver(300);
+                            }
+                            _ => {}
+                        }
+                    }
+                    for event in &events_p2 {
+                        use libtetris::Event::*;
+                        match event {
+                            GameOver => {
+                                self.p1_wins += 1;
+                                self.state = State::GameOver(300);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                self.player_1_graphics.update(GraphicsUpdate {
+                    events: events_p1,
+                    garbage_queue: self.battle.player_1.garbage_queue,
+                    statistics: self.battle.player_1.board.statistics,
+                    game_time: self.battle.time
+                });
+                self.player_2_graphics.update(GraphicsUpdate {
+                    events: events_p2,
+                    garbage_queue: self.battle.player_2.garbage_queue,
+                    statistics: self.battle.player_2.board.statistics,
+                    game_time: self.battle.time
+                });
+            }
         }
 
         Ok(())
@@ -118,6 +154,36 @@ impl EventHandler for LocalGame {
         self.player_2_graphics.draw(ctx, &self.image, center, scale)?;
         graphics::pop_transform(ctx);
 
+        graphics::queue_text(
+            ctx,
+            &text(format!("{} - {}", self.p1_wins, self.p2_wins), scale*1.5, 6.0*scale),
+            [center-3.0*scale, 20.5*scale],
+            None
+        );
+        graphics::queue_text(
+            ctx,
+            &text(
+                format!("{}:{:02}", self.battle.time / 60 / 60, self.battle.time / 60 % 60),
+                scale*1.0, 6.0*scale
+            ),
+            [center-3.0*scale, 22.0*scale],
+            None
+        );
+        if self.battle.multiplier != 1.0 {
+            graphics::queue_text(
+                ctx,
+                &text("Margin Time", scale*1.0, 6.0*scale),
+                [center-3.0*scale, 23.0*scale],
+                None
+            );
+            graphics::queue_text(
+                ctx,
+                &text(format!("Attack x{:.1}", self.battle.multiplier), scale*1.0, 6.0*scale),
+                [center-3.0*scale, 23.8*scale],
+                Some(Color::from_rgb(255, 64, 32))
+            );
+        }
+
         graphics::apply_transformations(ctx)?;
         graphics::draw_queued_text(
             ctx, DrawParam::new(), None, FilterMode::Linear
@@ -125,10 +191,9 @@ impl EventHandler for LocalGame {
         graphics::present(ctx)
     }
 
-    fn gamepad_button_down_event(&mut self, _: &mut Context, _: Button, id: GamepadId) {
-        // if self.gamepad_p2.is_none() {
-        //     self.gamepad_p2 = Some(id);
-        // }
-        self.start = true;
-    }
+    // fn gamepad_button_down_event(&mut self, _: &mut Context, _: Button, id: GamepadId) {
+    //     if self.gamepad_p2.is_none() {
+    //         self.gamepad_p2 = Some(id);
+    //     }
+    // }
 }
