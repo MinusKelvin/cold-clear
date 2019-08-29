@@ -46,7 +46,9 @@ impl PlacementKind {
     pub fn is_hard(self) -> bool {
         use PlacementKind::*;
         match self {
-            Clear4 | MiniTspin1 | MiniTspin2 | Tspin1 | Tspin2 | Tspin3 => true,
+            Clear4 |
+            MiniTspin | MiniTspin1 | MiniTspin2 |
+            Tspin | Tspin1 | Tspin2 | Tspin3 => true,
             _ => false
         }
     }

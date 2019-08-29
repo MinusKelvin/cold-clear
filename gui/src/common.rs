@@ -1,5 +1,5 @@
 use ggez::{ Context, GameResult };
-use ggez::graphics::{ self, Color, DrawParam, Rect, Image, Text, Scale, TextFragment, Align };
+use ggez::graphics::*;
 use std::collections::VecDeque;
 use libtetris::*;
 use arrayvec::ArrayVec;
@@ -19,7 +19,10 @@ pub struct BoardDrawState {
     dead: bool,
     hold_piece: Option<Piece>,
     next_queue: VecDeque<Piece>,
-    game_time: u32
+    game_time: u32,
+    combo_splash: Option<(u32, u32)>,
+    back_to_back_splash: Option<u32>,
+    clear_splash: Option<(&'static str, u32)>
 }
 
 enum State {
@@ -38,7 +41,10 @@ impl BoardDrawState {
             dead: false,
             hold_piece: None,
             next_queue: queue,
-            game_time: 0
+            game_time: 0,
+            combo_splash: None,
+            back_to_back_splash: None,
+            clear_splash: None
         }
     }
 
@@ -48,6 +54,27 @@ impl BoardDrawState {
         self.game_time = update.game_time;
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
             *frames += 1;
+        }
+        if let Some((_, timer)) = &mut self.combo_splash {
+            if *timer == 0 {
+                self.combo_splash = None;
+            } else {
+                *timer -= 1;
+            }
+        }
+        if let Some(timer) = &mut self.back_to_back_splash {
+            if *timer == 0 {
+                self.back_to_back_splash = None;
+            } else {
+                *timer -= 1;
+            }
+        }
+        if let Some((_, timer)) = &mut self.clear_splash {
+            if *timer == 0 {
+                self.clear_splash = None;
+            } else {
+                *timer -= 1;
+            }
         }
         for event in update.events {
             match event {
@@ -59,6 +86,19 @@ impl BoardDrawState {
                         self.state = State::Delay;
                     } else {
                         self.state = State::LineClearAnimation(locked.cleared_lines.clone(), 0);
+                    }
+                    if locked.b2b {
+                        self.back_to_back_splash = Some(75);
+                    }
+                    let combo = locked.combo.unwrap_or(0);
+                    if combo > 0 {
+                        self.combo_splash = Some((combo, 75));
+                    }
+                    if locked.perfect_clear {
+                        self.clear_splash = Some(("Perfect Clear", 135));
+                        self.back_to_back_splash = None;
+                    } else if locked.placement_kind.is_hard() {
+                        self.clear_splash = Some((locked.placement_kind.name(), 75));
                     }
                 }
                 Event::PieceHeld(piece) => {
@@ -100,7 +140,7 @@ impl BoardDrawState {
     pub fn draw(&self, ctx: &mut Context, img: &Image, text_x: f32, scale: f32) -> GameResult {
         for y in 0..21 {
             for x in 0..10 {
-                graphics::draw(ctx, img, draw_tile(
+                draw(ctx, img, draw_tile(
                     x as i32+3, y as i32, if self.board[y].cell_color(x) == CellColor::Empty
                         { 0 } else { 1 },
                     0, cell_color_to_color({
@@ -117,12 +157,12 @@ impl BoardDrawState {
         match self.state {
             State::Falling(piece, ghost) => {
                 for (x,y) in ghost.cells() {
-                    graphics::draw(ctx, img, draw_tile(
+                    draw(ctx, img, draw_tile(
                         x+3, y, 2, 0, cell_color_to_color(piece.kind.0.color())
                     ))?;
                 }
                 for (x,y) in piece.cells() {
-                    graphics::draw(ctx, img, draw_tile(
+                    draw(ctx, img, draw_tile(
                         x+3, y, 1, 0, cell_color_to_color(piece.kind.0.color())
                     ))?;
                 }
@@ -131,15 +171,15 @@ impl BoardDrawState {
                 let frame_x = frame.min(35) / 12;
                 let frame_y = frame.min(35) % 12;
                 for &y in lines {
-                    graphics::draw(ctx, img, draw_tile(
-                        3, y, frame_x*3+3, frame_y, graphics::WHITE
+                    draw(ctx, img, draw_tile(
+                        3, y, frame_x*3+3, frame_y, WHITE
                     ))?;
-                    graphics::draw(ctx, img, draw_tile(
-                        12, y, frame_x*3+5, frame_y, graphics::WHITE
+                    draw(ctx, img, draw_tile(
+                        12, y, frame_x*3+5, frame_y, WHITE
                     ))?;
                     for x in 1..9 {
-                        graphics::draw(ctx, img, draw_tile(
-                            x+3, y, frame_x*3+4, frame_y, graphics::WHITE
+                        draw(ctx, img, draw_tile(
+                            x+3, y, frame_x*3+4, frame_y, WHITE
                         ))?;
                     }
                 }
@@ -152,13 +192,27 @@ impl BoardDrawState {
         for (i, &piece) in self.next_queue.iter().enumerate() {
             draw_piece_preview(ctx, img, 13, 18 - (i*2) as i32, piece)?;
         }
-        graphics::queue_text(
+        if self.garbage_queue > 0 {
+            let mesh = Mesh::new_rectangle(
+                ctx,
+                DrawMode::Fill(FillOptions::tolerance(0.1 / scale)),
+                Rect {
+                    x: 13.0,
+                    w: 0.25,
+                    y: 20.25 - self.garbage_queue as f32,
+                    h: self.garbage_queue as f32
+                },
+                Color::from_rgb(255, 32, 32)
+            )?;
+            draw(ctx, &mesh, DrawParam::default())?;
+        }
+        queue_text(
             ctx, &text("Hold", scale, 3.0*scale), [text_x, scale*0.25], None
         );
-        graphics::queue_text(
+        queue_text(
             ctx, &text("Next", scale, 3.0*scale), [text_x+13.0*scale, scale*0.25], None
         );
-        graphics::queue_text(
+        queue_text(
             ctx, &text("Statistics", scale*0.75, 3.0*scale), [text_x, scale*3.0], None
         );
         let seconds = self.game_time as f32 / 60.0;
@@ -172,7 +226,7 @@ impl BoardDrawState {
             ("S", format!("{}", self.statistics.singles)),
             ("D", format!("{}", self.statistics.doubles)),
             ("T", format!("{}", self.statistics.triples)),
-            ("Q", format!("{}", self.statistics.tetrises)),
+            ("TET", format!("{}", self.statistics.tetrises)),
             ("tsz", format!("{}", self.statistics.mini_tspin_zeros)),
             ("tss", format!("{}", self.statistics.mini_tspin_singles)),
             ("tsd", format!("{}", self.statistics.mini_tspin_doubles)),
@@ -184,13 +238,37 @@ impl BoardDrawState {
         ];
         let mut y = 3.75*scale;
         for (label, stat) in lines {
-            graphics::queue_text(
+            queue_text(
                 ctx, &text(label, scale*0.66, 0.0), [text_x+0.25*scale, y], None
             );
-            graphics::queue_text(
+            queue_text(
                 ctx, &text(stat, scale*0.66, -2.5*scale), [text_x+0.25*scale, y], None
             );
             y += scale * 0.66;
+        }
+        if let Some(timer) = self.back_to_back_splash {
+            queue_text(
+                ctx,
+                &text("Back-To-Back", scale, 0.0),
+                [text_x+3.5*scale, 20.7*scale],
+                Some(Color::new(1.0, 1.0, 1.0, timer.min(15) as f32 / 15.0))
+            );
+        }
+        if let Some((combo, timer)) = self.combo_splash {
+            queue_text(
+                ctx,
+                &text(format!("{} Combo", combo), scale, -9.0*scale),
+                [text_x+3.5*scale, 20.7*scale],
+                Some(Color::new(1.0, 1.0, 1.0, timer.min(15) as f32 / 15.0))
+            );
+        }
+        if let Some((txt, timer)) = self.clear_splash {
+            queue_text(
+                ctx,
+                &text(txt, scale, 9.0*scale),
+                [text_x+3.5*scale, 21.6*scale],
+                Some(Color::new(1.0, 1.0, 1.0, timer.min(15) as f32 / 15.0))
+            );
         }
         Ok(())
     }
@@ -198,7 +276,7 @@ impl BoardDrawState {
 
 fn cell_color_to_color(cell_color: CellColor) -> Color {
     match cell_color {
-        CellColor::Empty => graphics::WHITE,
+        CellColor::Empty => WHITE,
         CellColor::Garbage => Color::from_rgb(160, 160, 160),
         CellColor::Unclearable => Color::from_rgb(64, 64, 64),
         CellColor::Z => Color::from_rgb(255, 32, 32),
@@ -245,7 +323,7 @@ fn draw_piece_preview(ctx: &mut Context, img: &Image, x: i32, y: i32, piece: Pie
     };
     let color = cell_color_to_color(piece.color());
     for dx in 0..3 {
-        graphics::draw(ctx, img, draw_tile(x+dx, y, dx, ty, color))?;
+        draw(ctx, img, draw_tile(x+dx, y, dx, ty, color))?;
     }
     Ok(())
 }

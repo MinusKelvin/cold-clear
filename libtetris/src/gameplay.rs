@@ -391,8 +391,8 @@ impl Battle {
     pub fn update(&mut self, p1: Controller, p2: Controller) -> (Vec<Event>, Vec<Event>) {
         self.time += 1;
         if let Some(margin_time) = self.margin_time {
-            if self.time > margin_time {
-                self.multiplier += 1.0 / 1800.0;
+            if self.time >= margin_time && (self.time - margin_time) % 1800 == 0 {
+                self.multiplier += 0.5;
             }
         }
 

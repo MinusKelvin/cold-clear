@@ -272,12 +272,6 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 
 /// Evaluates the existence of a reachable T slot on the board.
 fn tslot(board: &Board) -> bool {
-    if board.next_queue().take(6).all(|p| p != libtetris::Piece::T) {
-        if board.hold_piece().map_or(true, |p| p != libtetris::Piece::T) {
-            return false
-        }
-    }
-
     let mut left_t = libtetris::FallingPiece {
         kind: libtetris::PieceState(libtetris::Piece::T, libtetris::RotationState::West),
         tspin: libtetris::TspinStatus::None,

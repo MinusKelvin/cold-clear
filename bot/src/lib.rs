@@ -214,7 +214,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
     };
 
     let acc_weights = evaluation::PlacementWeights {
-        soft_drop: 0,
+        soft_drop: -10,
         b2b_clear: 100,
         clear1: -150,
         clear2: -100,

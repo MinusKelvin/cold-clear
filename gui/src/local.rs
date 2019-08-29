@@ -49,10 +49,7 @@ impl EventHandler for LocalGame {
         while timer::check_update_time(ctx, 60) {
             let do_update = match self.state {
                 State::GameOver(0) => {
-                    self.battle = libtetris::Battle::new(libtetris::GameConfig {
-                        margin_time: Some(60),
-                        ..Default::default()
-                    });
+                    self.battle = libtetris::Battle::new(Default::default());
                     self.player_1_graphics = BoardDrawState::new(
                         self.battle.player_1.board.next_queue().collect()
                     );
@@ -133,55 +130,61 @@ impl EventHandler for LocalGame {
         graphics::clear(ctx, graphics::BLACK);
         let size = graphics::drawable_size(ctx);
         let center = size.0 / 2.0;
-        let scale = size.1 / 25.0;
+        let scale = size.1 / 23.0;
         graphics::set_screen_coordinates(ctx, Rect {
             x: 0.0, y: 0.0, w: size.0, h: size.1
         })?;
 
         graphics::push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
-            .dest([center - 16.0 * scale, 0.0])
+            .dest([center - 17.0 * scale, 0.0])
             .to_matrix()));
         graphics::apply_transformations(ctx)?;
-        self.player_1_graphics.draw(ctx, &self.image, center - 16.0*scale, scale)?;
+        self.player_1_graphics.draw(ctx, &self.image, center - 17.0*scale, scale)?;
         graphics::pop_transform(ctx);
 
         graphics::push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
-            .dest([center, 0.0])
+            .dest([center + scale, 0.0])
             .to_matrix()));
         graphics::apply_transformations(ctx)?;
-        self.player_2_graphics.draw(ctx, &self.image, center, scale)?;
+        self.player_2_graphics.draw(ctx, &self.image, center+scale, scale)?;
         graphics::pop_transform(ctx);
 
         graphics::queue_text(
             ctx,
-            &text(format!("{} - {}", self.p1_wins, self.p2_wins), scale*1.5, 6.0*scale),
-            [center-3.0*scale, 20.5*scale],
+            &text(format!("{} - {}", self.p1_wins, self.p2_wins), scale*2.0, 6.0*scale),
+            [center-3.0*scale, 17.0*scale],
             None
         );
         graphics::queue_text(
             ctx,
             &text(
                 format!("{}:{:02}", self.battle.time / 60 / 60, self.battle.time / 60 % 60),
-                scale*1.0, 6.0*scale
+                scale*1.5, 6.0*scale
             ),
-            [center-3.0*scale, 22.0*scale],
+            [center-3.0*scale, 18.5*scale],
             None
         );
         if self.battle.multiplier != 1.0 {
             graphics::queue_text(
                 ctx,
                 &text("Margin Time", scale*1.0, 6.0*scale),
-                [center-3.0*scale, 23.0*scale],
+                [center-3.0*scale, 20.1*scale],
                 None
             );
             graphics::queue_text(
                 ctx,
                 &text(format!("Attack x{:.1}", self.battle.multiplier), scale*1.0, 6.0*scale),
-                [center-3.0*scale, 23.8*scale],
-                Some(Color::from_rgb(255, 64, 32))
+                [center-3.0*scale, 21.0*scale],
+                None
             );
+        }
+
+        if let State::Starting(t) = self.state {
+            let txt = text(format!("{}", t / 60 + 1), scale * 4.0, 10.0*scale);
+            graphics::queue_text(ctx, &txt, [center-14.0*scale, 9.0*scale], None);
+            graphics::queue_text(ctx, &txt, [center+4.0*scale, 9.0*scale], None);
         }
 
         graphics::apply_transformations(ctx)?;

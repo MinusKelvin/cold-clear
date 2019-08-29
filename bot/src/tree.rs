@@ -128,9 +128,14 @@ impl Tree {
                         }
                     }
                 } else {
-                    // Speculate - hold is known, but next piece isn't
-                    assert!(self.board.hold_piece().is_some());
-                    self.speculate(mode, transient_weights, acc_weights)
+                    // Speculate - hold should be known, but next piece isn't
+                    if self.board.hold_piece().is_some() {
+                        self.speculate(mode, transient_weights, acc_weights)
+                    } else {
+                        ExpandResult {
+                            is_death: false, depth: 0, new_nodes: 0
+                        }
+                    }
                 }
             }
         }
