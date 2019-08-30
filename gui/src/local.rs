@@ -6,7 +6,7 @@ use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::{ gamepad, GamepadId };
 use ggez::event::{ Button, Axis };
-use crate::common::{ GraphicsUpdate, BoardDrawState, text };
+use crate::common::{ BoardDrawState, text };
 
 pub struct LocalGame {
     battle: libtetris::Battle,
@@ -16,6 +16,8 @@ pub struct LocalGame {
     p2_bot: bot::BotController,
     p1_wins: u32,
     p2_wins: u32,
+    time: u32,
+    multiplier: f32,
     image: Image,
     state: State
 }
@@ -37,6 +39,8 @@ impl LocalGame {
             p2_bot: bot::BotController::new(battle.player_2.board.next_queue(), true),
             p1_wins: 0,
             p2_wins: 0,
+            time: 0,
+            multiplier: 1.0,
             battle,
             image,
             state: State::Starting(180)
@@ -59,6 +63,8 @@ impl EventHandler for LocalGame {
                     );
                     self.p2_bot = bot::BotController::new(self.battle.player_2.board.next_queue(), true);
                     self.state = State::Starting(180);
+                    self.time = 0;
+                    self.multiplier = 1.0;
                     false
                 }
                 State::GameOver(ref mut delay) => {
@@ -80,13 +86,13 @@ impl EventHandler for LocalGame {
                 let p1_controller = self.p1_bot.controller();
                 let p2_controller = self.p2_bot.controller();
 
-                let (events_p1, events_p2) = self.battle.update(p1_controller, p2_controller);
+                let update = self.battle.update(p1_controller, p2_controller);
 
-                self.p1_bot.update(&events_p1, &self.battle.player_1.board);
-                self.p2_bot.update(&events_p2, &self.battle.player_2.board);
+                self.p1_bot.update(&update.player_1.events, &self.battle.player_1.board);
+                self.p2_bot.update(&update.player_2.events, &self.battle.player_2.board);
 
                 if let State::Playing = self.state {
-                    for event in &events_p1 {
+                    for event in &update.player_1.events {
                         use libtetris::Event::*;
                         match event {
                             GameOver => {
@@ -96,7 +102,7 @@ impl EventHandler for LocalGame {
                             _ => {}
                         }
                     }
-                    for event in &events_p2 {
+                    for event in &update.player_2.events {
                         use libtetris::Event::*;
                         match event {
                             GameOver => {
@@ -108,18 +114,10 @@ impl EventHandler for LocalGame {
                     }
                 }
 
-                self.player_1_graphics.update(GraphicsUpdate {
-                    events: events_p1,
-                    garbage_queue: self.battle.player_1.garbage_queue,
-                    statistics: self.battle.player_1.board.statistics,
-                    game_time: self.battle.time
-                });
-                self.player_2_graphics.update(GraphicsUpdate {
-                    events: events_p2,
-                    garbage_queue: self.battle.player_2.garbage_queue,
-                    statistics: self.battle.player_2.board.statistics,
-                    game_time: self.battle.time
-                });
+                self.player_1_graphics.update(update.player_1, update.time);
+                self.player_2_graphics.update(update.player_2, update.time);
+                self.time = update.time;
+                self.multiplier = update.attack_multiplier;
             }
         }
 
@@ -160,13 +158,13 @@ impl EventHandler for LocalGame {
         graphics::queue_text(
             ctx,
             &text(
-                format!("{}:{:02}", self.battle.time / 60 / 60, self.battle.time / 60 % 60),
+                format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
                 scale*1.5, 6.0*scale
             ),
             [center-3.0*scale, 18.5*scale],
             None
         );
-        if self.battle.multiplier != 1.0 {
+        if self.multiplier != 1.0 {
             graphics::queue_text(
                 ctx,
                 &text("Margin Time", scale*1.0, 6.0*scale),
@@ -175,7 +173,7 @@ impl EventHandler for LocalGame {
             );
             graphics::queue_text(
                 ctx,
-                &text(format!("Attack x{:.1}", self.battle.multiplier), scale*1.0, 6.0*scale),
+                &text(format!("Attack x{:.1}", self.multiplier), scale*1.0, 6.0*scale),
                 [center-3.0*scale, 21.0*scale],
                 None
             );

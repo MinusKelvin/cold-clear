@@ -372,8 +372,8 @@ fn update_input(used: &mut bool, prev: bool, current: bool) {
 pub struct Battle {
     pub player_1: Game,
     pub player_2: Game,
-    pub time: u32,
-    pub multiplier: f32,
+    time: u32,
+    multiplier: f32,
     margin_time: Option<u32>,
 }
 
@@ -388,7 +388,7 @@ impl Battle {
         }
     }
 
-    pub fn update(&mut self, p1: Controller, p2: Controller) -> (Vec<Event>, Vec<Event>) {
+    pub fn update(&mut self, p1: Controller, p2: Controller) -> UpdateResult {
         self.time += 1;
         if let Some(margin_time) = self.margin_time {
             if self.time >= margin_time && (self.time - margin_time) % 1800 == 0 {
@@ -410,7 +410,20 @@ impl Battle {
             }
         }
 
-        (p1_events, p2_events)
+        UpdateResult {
+            player_1: GraphicsUpdate {
+                statistics: self.player_1.board.statistics,
+                events: p1_events,
+                garbage_queue: self.player_1.garbage_queue,
+            },
+            player_2: GraphicsUpdate {
+                statistics: self.player_2.board.statistics,
+                events: p2_events,
+                garbage_queue: self.player_2.garbage_queue,
+            },
+            time: self.time,
+            attack_multiplier: self.multiplier
+        }
     }
 }
 
@@ -446,4 +459,17 @@ impl Default for GameConfig {
             max_garbage_add: 10
         }
     }
+}
+
+pub struct UpdateResult {
+    pub player_1: GraphicsUpdate,
+    pub player_2: GraphicsUpdate,
+    pub time: u32,
+    pub attack_multiplier: f32
+}
+
+pub struct GraphicsUpdate {
+    pub statistics: Statistics,
+    pub events: Vec<Event>,
+    pub garbage_queue: u32
 }

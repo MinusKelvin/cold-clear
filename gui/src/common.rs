@@ -4,13 +4,6 @@ use std::collections::VecDeque;
 use libtetris::*;
 use arrayvec::ArrayVec;
 
-pub struct GraphicsUpdate {
-    pub statistics: Statistics,
-    pub events: Vec<Event>,
-    pub garbage_queue: u32,
-    pub game_time: u32
-}
-
 pub struct BoardDrawState {
     board: ArrayVec<[ColoredRow; 40]>,
     state: State,
@@ -48,10 +41,10 @@ impl BoardDrawState {
         }
     }
 
-    pub fn update(&mut self, update: GraphicsUpdate) {
+    pub fn update(&mut self, update: GraphicsUpdate, time: u32) {
         self.statistics = update.statistics;
         self.garbage_queue = update.garbage_queue;
-        self.game_time = update.game_time;
+        self.game_time = time;
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
             *frames += 1;
         }
