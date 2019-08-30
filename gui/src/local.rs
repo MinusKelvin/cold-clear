@@ -33,8 +33,8 @@ impl LocalGame {
         LocalGame {
             player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue().collect()),
             player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue().collect()),
-            p1_bot: bot::BotController::new(battle.player_1.board.next_queue()),
-            p2_bot: bot::BotController::new(battle.player_2.board.next_queue()),
+            p1_bot: bot::BotController::new(battle.player_1.board.next_queue(), false),
+            p2_bot: bot::BotController::new(battle.player_2.board.next_queue(), true),
             p1_wins: 0,
             p2_wins: 0,
             battle,
@@ -53,11 +53,11 @@ impl EventHandler for LocalGame {
                     self.player_1_graphics = BoardDrawState::new(
                         self.battle.player_1.board.next_queue().collect()
                     );
-                    self.p1_bot = bot::BotController::new(self.battle.player_1.board.next_queue());
+                    self.p1_bot = bot::BotController::new(self.battle.player_1.board.next_queue(), false);
                     self.player_2_graphics = BoardDrawState::new(
                         self.battle.player_2.board.next_queue().collect()
                     );
-                    self.p2_bot = bot::BotController::new(self.battle.player_2.board.next_queue());
+                    self.p2_bot = bot::BotController::new(self.battle.player_2.board.next_queue(), true);
                     self.state = State::Starting(180);
                     false
                 }

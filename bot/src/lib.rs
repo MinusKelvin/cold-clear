@@ -6,6 +6,7 @@ use arrayvec::ArrayVec;
 mod display;
 mod evaluation;
 mod moves;
+mod misa;
 mod tree;
 
 use libtetris::*;
@@ -21,11 +22,15 @@ pub struct BotController {
 }
 
 impl BotController {
-    pub fn new(queue: impl IntoIterator<Item=Piece>) -> Self {
+    pub fn new(queue: impl IntoIterator<Item=Piece>, use_misa: bool) -> Self {
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
         std::thread::spawn(move || {
-            run(bot_recv, bot_send);
+            if use_misa {
+                misa::glue(bot_recv, bot_send);
+            } else {
+                run(bot_recv, bot_send);
+            }
         });
 
         for piece in queue {
