@@ -41,6 +41,7 @@ pub struct GameConfig {
 
 pub enum Event {
     PieceSpawned { new_in_queue: Piece },
+    SpawnDelayStart,
     PieceMoved,
     PieceRotated,
     PieceTSpined,
@@ -71,7 +72,7 @@ impl Game {
             used: Default::default(),
             did_hold: false,
             das_delay: config.delayed_auto_shift,
-            state: GameState::SpawnDelay(config.next_queue_size),
+            state: GameState::SpawnDelay(config.spawn_delay),
             garbage_queue: 0,
             attacking: 0
         }
@@ -137,7 +138,11 @@ impl Game {
             }
             GameState::SpawnDelay(ref mut delay) => {
                 *delay -= 1;
-                vec![]
+                if *delay + 1 == self.config.spawn_delay {
+                    vec![Event::SpawnDelayStart]
+                } else {
+                    vec![]
+                }
             }
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
@@ -455,7 +460,7 @@ impl Default for GameConfig {
             soft_drop_speed: 1,
             next_queue_size: 5,
             gravity: 4500,
-            margin_time: Some(7200),
+            margin_time: Some(18000), // 5 minutes
             max_garbage_add: 10
         }
     }

@@ -65,6 +65,9 @@ impl BotController {
                         self.dead = self.send.send(BotMsg::NextMove).is_err();
                     }
                 }
+                Event::SpawnDelayStart => if self.executing.is_none() {
+                    self.dead = self.send.send(BotMsg::PrepareNextMove).is_err();
+                }
                 Event::PieceHeld(_) => if let Some(ref mut exec) = self.executing {
                     exec.0 = false;
                 }
@@ -167,6 +170,7 @@ impl BotController {
                     if let Some(ref exec) = self.executing {
                         if exec.2 != *piece {
                             reset_bot = true;
+                            println!("Misdrop!");
                         }
                     } else {
                         reset_bot = true;
@@ -187,7 +191,8 @@ impl BotController {
 enum BotMsg {
     Reset(Board),
     NewPiece(Piece),
-    NextMove
+    NextMove,
+    PrepareNextMove
 }
 
 #[derive(Debug)]
@@ -206,7 +211,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         bumpiness_sq: -5,
         height: -40,
         top_half: -150,
-        top_quarter: -1000,
+        top_quarter: -500,
         cavity_cells: -150,
         cavity_cells_sq: -10,
         overhang_cells: -50,
@@ -238,7 +243,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
             .unwrap()
     };
 
-    const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroGFinesse;
+    const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroG;
 
     let mut tree = Tree::new(
         Board::new(),
@@ -264,6 +269,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                 );
             }
             Ok(BotMsg::NextMove) => do_move = true,
+            Ok(BotMsg::PrepareNextMove) => {}
         }
 
         if do_move {

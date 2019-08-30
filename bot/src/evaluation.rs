@@ -105,7 +105,7 @@ pub fn evaluate(
         acc_eval += placement_weights.soft_drop;
     }
 
-    if board.has_back_to_back_active() {
+    if board.b2b_bonus {
         transient_eval += board_weights.back_to_back;
     }
 

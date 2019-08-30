@@ -43,7 +43,7 @@ impl LocalGame {
             multiplier: 1.0,
             battle,
             image,
-            state: State::Starting(180)
+            state: State::Starting(500)
         }
     }
 }

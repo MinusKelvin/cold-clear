@@ -25,7 +25,7 @@ pub struct Move {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum MovementMode {
     ZeroG,
-    ZeroGFinesse,
+    ZeroGComplete,
     TwentyG,
 }
 
@@ -43,9 +43,9 @@ pub fn find_moves(
         let starts = match mode {
             MovementMode::TwentyG => vec![(spawned, [Input::SonicDrop].iter().copied().collect())],
             MovementMode::ZeroG => zero_g_starts(spawned.kind.0),
-            MovementMode::ZeroGFinesse => zero_g_finesse_starts(spawned.kind.0)
+            MovementMode::ZeroGComplete => zero_g_starts(spawned.kind.0)
         };
-        fast_mode = mode != MovementMode::TwentyG;
+        fast_mode = mode == MovementMode::ZeroG;
         for (mut place, mut inputs) in starts {
             place.sonic_drop(board);
             if !fast_mode {
@@ -97,7 +97,7 @@ pub fn find_moves(
                 );
             }
 
-            if mode == MovementMode::ZeroGFinesse {
+            if mode == MovementMode::ZeroG {
                 attempt(
                     board, &moves, position,
                     &mut checked, &mut check_queue,

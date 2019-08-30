@@ -2,3 +2,4 @@
 **/*.rs.bk
 playout*
 Cargo.lock
+/tetris_ai*

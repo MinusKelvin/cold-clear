@@ -8,8 +8,8 @@ use crate::*;
 pub struct Board<R=u16, S=()> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
-    combo: u32,
-    b2b_bonus: bool,
+    pub combo: u32,
+    pub b2b_bonus: bool,
     hold_piece: Option<Piece>,
     next_pieces: VecDeque<Piece>,
     bag: EnumSet<Piece>,
@@ -217,10 +217,6 @@ impl<R: Row, S: Stats> Board<R, S> {
 
     pub fn column_heights(&self) -> &[i32; 10] {
         &self.column_heights
-    }
-
-    pub fn has_back_to_back_active(&self) -> bool {
-        self.b2b_bonus
     }
 
     pub fn add_garbage(&mut self, col: usize) -> bool {
