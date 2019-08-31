@@ -262,8 +262,15 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
     );
 
     let mut do_move = false;
+    const THINK_OUTSIDE_SPAWN_DELAY: bool = false;
+    let mut think = THINK_OUTSIDE_SPAWN_DELAY;
     loop {
-        match recv.try_recv() {
+        let result = if think {
+            recv.try_recv()
+        } else {
+            recv.recv().map_err(|_| TryRecvError::Disconnected)
+        };
+        match result {
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => return,
             Ok(BotMsg::NewPiece(piece)) => tree.add_next_piece(piece),
@@ -277,7 +284,9 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                 );
             }
             Ok(BotMsg::NextMove) => do_move = true,
-            Ok(BotMsg::PrepareNextMove) => {}
+            Ok(BotMsg::PrepareNextMove) => {
+                think = true;
+            }
         }
 
         if do_move {
@@ -285,6 +294,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
             match tree.into_best_child() {
                 Ok(child) => {
                     do_move = false;
+                    think = THINK_OUTSIDE_SPAWN_DELAY;
                     if send.send(BotResult::Move {
                         hold: child.hold,
                         inputs: child.mv.inputs,
@@ -309,7 +319,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
             }
         }
 
-        if tree.extend(MOVEMENT_MODE, &transient_weights, &acc_weights) {
+        if think && tree.extend(MOVEMENT_MODE, &transient_weights, &acc_weights) {
             break
         }
     }
