@@ -1,6 +1,7 @@
 use ggez::event::{ self, EventHandler };
 use ggez::{ Context, GameResult };
 use ggez::graphics::{ self, Image, DrawParam, Rect, FilterMode, Color };
+use ggez::audio::{ self, SoundSource };
 use ggez::timer;
 use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
@@ -19,7 +20,13 @@ pub struct LocalGame {
     time: u32,
     multiplier: f32,
     image: Image,
-    state: State
+    state: State,
+    move_sound: audio::Source,
+    move_sound_play: u32,
+    // stack_touched: audio::Source,
+    hard_drop: audio::Source,
+    // tspin: audio::Source,
+    line_clear: audio::Source
 }
 
 enum State {
@@ -43,7 +50,13 @@ impl LocalGame {
             multiplier: 1.0,
             battle,
             image,
-            state: State::Starting(500)
+            state: State::Starting(500),
+            move_sound: audio::Source::new(ctx, "/click-noise.ogg").unwrap(),
+            move_sound_play: 2,
+            // stack_touched: audio::Source::new(ctx, "/stack-touched.ogg").unwrap(),
+            hard_drop: audio::Source::new(ctx, "/hard-drop.ogg").unwrap(),
+            // tspin: audio::Source::new(ctx, "/tspin.ogg").unwrap(),
+            line_clear: audio::Source::new(ctx, "/line-clear.ogg").unwrap()
         }
     }
 }
@@ -94,6 +107,30 @@ impl EventHandler for LocalGame {
                 update.player_2.info = self.p2_bot.update(
                     &update.player_2.events, &self.battle.player_2.board
                 );
+
+                for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
+                    use libtetris::Event::*;
+                    match event {
+                        PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
+                            self.move_sound.play_detached()?;
+                            self.move_sound_play = 2;
+                       }
+                        // StackTouched => self.stack_touched.play_detached()?,
+                        // PieceTSpined => self.tspin.play_detached()?,
+                        PiecePlaced { hard_drop_distance, locked, .. } => {
+                            if hard_drop_distance.is_some() {
+                                self.hard_drop.play_detached()?;
+                            }
+                            if locked.placement_kind.is_clear() {
+                                self.line_clear.play_detached()?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if self.move_sound_play != 0 {
+                    self.move_sound_play -= 1;
+                }
 
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {

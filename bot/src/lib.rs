@@ -219,7 +219,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         bumpiness_sq: -5,
         height: -40,
         top_half: -150,
-        top_quarter: -500,
+        top_quarter: -200,
         cavity_cells: -150,
         cavity_cells_sq: -10,
         overhang_cells: -50,
