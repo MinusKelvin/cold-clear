@@ -15,7 +15,8 @@ pub struct BoardDrawState {
     game_time: u32,
     combo_splash: Option<(u32, u32)>,
     back_to_back_splash: Option<u32>,
-    clear_splash: Option<(&'static str, u32)>
+    clear_splash: Option<(&'static str, u32)>,
+    info_lines: Vec<(String, Option<String>)>
 }
 
 enum State {
@@ -37,7 +38,8 @@ impl BoardDrawState {
             game_time: 0,
             combo_splash: None,
             back_to_back_splash: None,
-            clear_splash: None
+            clear_splash: None,
+            info_lines: vec![]
         }
     }
 
@@ -45,6 +47,9 @@ impl BoardDrawState {
         self.statistics = update.statistics;
         self.garbage_queue = update.garbage_queue;
         self.game_time = time;
+        if let Some(info) = update.info {
+            self.info_lines = info;
+        }
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
             *frames += 1;
         }
@@ -219,7 +224,7 @@ impl BoardDrawState {
             ("S", format!("{}", self.statistics.singles)),
             ("D", format!("{}", self.statistics.doubles)),
             ("T", format!("{}", self.statistics.triples)),
-            ("TET", format!("{}", self.statistics.tetrises)),
+            ("Tet", format!("{}", self.statistics.tetrises)),
             ("tsz", format!("{}", self.statistics.mini_tspin_zeros)),
             ("tss", format!("{}", self.statistics.mini_tspin_singles)),
             ("tsd", format!("{}", self.statistics.mini_tspin_doubles)),
@@ -238,6 +243,23 @@ impl BoardDrawState {
                 ctx, &text(stat, scale*0.66, -2.5*scale), [text_x+0.25*scale, y], None
             );
             y += scale * 0.66;
+        }
+        let mut y = (self.next_queue.len() as f32 * 2.0 + 1.0) * scale;
+        for (txt1, txt2) in &self.info_lines {
+            match txt2 {
+                None => queue_text(
+                    ctx, &text(&**txt1, scale*0.66, 2.5*scale), [text_x+13.25*scale, y], None
+                ),
+                Some(txt2) => {
+                    queue_text(
+                        ctx, &text(&**txt1, scale*0.66, 0.0), [text_x+13.25*scale, y], None
+                    );
+                    queue_text(
+                        ctx, &text(&**txt2, scale*0.66, -2.5*scale), [text_x+13.25*scale, y], None
+                    )
+                }
+            }
+            y += scale * 0.66
         }
         if let Some(timer) = self.back_to_back_splash {
             queue_text(

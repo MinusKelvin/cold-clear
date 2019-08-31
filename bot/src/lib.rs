@@ -49,12 +49,18 @@ impl BotController {
         self.controller
     }
 
-    pub fn update(&mut self, events: &[Event], board: &Board<ColoredRow, Statistics>) {
+    pub fn update(
+        &mut self, events: &[Event], board: &Board<ColoredRow, Statistics>
+    ) -> Option<Vec<(String, Option<String>)>> {
         if self.dead {
             self.controller.hard_drop ^= true;
         }
-        if let Ok(BotResult::Move { inputs, expected_location, hold }) = self.recv.try_recv() {
-            self.executing = Some((hold, inputs.into_iter().collect(), expected_location));
+        let mut update_info = None;
+        match self.recv.try_recv() {
+            Ok(BotResult::Move { inputs, expected_location, hold }) =>
+                self.executing = Some((hold, inputs.into_iter().collect(), expected_location)),
+            Ok(BotResult::BotInfo(lines)) => update_info = Some(lines),
+            _ => {}
         }
         let mut reset_bot = false;
         for event in events {
@@ -184,6 +190,7 @@ impl BotController {
         if reset_bot {
             self.dead = self.send.send(BotMsg::Reset(board.to_compressed())).is_err();
         }
+        update_info
     }
 }
 
@@ -201,7 +208,8 @@ enum BotResult {
         inputs: moves::InputList,
         expected_location: FallingPiece,
         hold: bool
-    }
+    },
+    BotInfo(Vec<(String, Option<String>)>)
 }
 
 fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
@@ -273,6 +281,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         }
 
         if do_move {
+            let moves_considered = tree.child_nodes;
             match tree.into_best_child() {
                 Ok(child) => {
                     do_move = false;
@@ -281,6 +290,17 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                         inputs: child.mv.inputs,
                         expected_location: child.mv.location
                     }).is_err() {
+                        return
+                    }
+                    if send.send(BotResult::BotInfo(vec![
+                        ("Cold Clear".to_owned(), None),
+                        ("'Naive'".to_owned(), None),
+                        ("Depth".to_owned(), Some(format!("{}", child.tree.depth))),
+                        ("Evaluation".to_owned(), Some("".to_owned())),
+                        ("".to_owned(), Some(format!("{}", child.tree.evaluation))),
+                        ("Nodes".to_owned(), Some("".to_owned())),
+                        ("".to_owned(), Some(format!("{}", moves_considered))),
+                    ])).is_err() {
                         return
                     }
                     tree = child.tree;

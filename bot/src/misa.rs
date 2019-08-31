@@ -17,6 +17,16 @@ impl<'a> Write for Mirror<'a> {
     }
 }
 
+fn mirror(piece: Piece) -> Piece {
+    match piece {
+        Piece::S => Piece::Z,
+        Piece::Z => Piece::S,
+        Piece::L => Piece::J,
+        Piece::J => Piece::L,
+        p => p,
+    }
+}
+
 pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
     let mut misa = Command::new("./tetris_ai")
         .stdin(Stdio::piped())
@@ -30,12 +40,16 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
 
     writeln!(misa_in, "settings style 1").unwrap();
     writeln!(misa_in, "settings level 10").unwrap();
-    println!("{}", {
-        let mut l = String::new();
-        misa_out.read_line(&mut l).unwrap();
-        misa_out.read_line(&mut l).unwrap();
-        l
-    });
+    let mut l = String::new();
+    misa_out.read_line(&mut l).unwrap();
+    l.clear();
+    misa_out.read_line(&mut l).unwrap();
+    let name = &l[9..l.len()-3];
+
+    send.send(BotResult::BotInfo(vec![
+        ("MisaMino".to_owned(), None),
+        (name.to_owned(), None)
+    ])).ok();
 
     let mut queue = VecDeque::new();
     let mut board = Board::new();
@@ -56,7 +70,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
 
                 let mut boardspec = String::new();
                 for y in (0..20).rev() {
-                    for x in 0..10 {
+                    for x in (0..10).rev() {
                         boardspec.push(if board.occupied(x, y) {
                             '2'
                         } else {
@@ -72,14 +86,14 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                 writeln!(
                     misa_in,
                     "update _ this_piece_type {}",
-                    next_piece.to_char()
+                    mirror(next_piece).to_char()
                 ).unwrap();
                 let mut next = String::new();
                 if let Some(hold) = board.hold_piece() {
-                    next.push(hold.to_char());
+                    next.push(mirror(hold).to_char());
                 }
-                for p in &queue {
-                    next.push(p.to_char());
+                for &p in &queue {
+                    next.push(mirror(p).to_char());
                     next.push(',');
                 }
 
@@ -87,24 +101,24 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
 
                 writeln!(misa_in, "action2 _ _").unwrap();
 
-                let no_hold_moves = crate::moves::find_moves(
-                    &board,
-                    FallingPiece::spawn(next_piece, &board).unwrap(),
-                    crate::moves::MovementMode::ZeroGComplete
-                );
+                let no_hold_moves = FallingPiece::spawn(next_piece, &board)
+                    .map(|p| crate::moves::find_moves(
+                            &board, p, crate::moves::MovementMode::ZeroGComplete
+                        )
+                    );
 
                 let hold_piece = board.hold_piece().unwrap_or(*queue.front().unwrap());
-                let hold_moves = crate::moves::find_moves(
-                    &board,
-                    FallingPiece::spawn(hold_piece, &board).unwrap(),
-                    crate::moves::MovementMode::ZeroGComplete
-                );
+                let hold_moves = FallingPiece::spawn(hold_piece, &board)
+                    .map(|p| crate::moves::find_moves(
+                            &board, p, crate::moves::MovementMode::ZeroGComplete
+                        )
+                    );
 
                 let mut line = String::new();
                 misa_out.read_line(&mut line).unwrap();
                 let mut target = [[false; 10]; 20];
                 let mut pipes = 2;
-                let mut x = 0;
+                let mut x = 9;
                 let mut y = 19;
                 let mut uses_spin = false;
                 let mut lines = 0;
@@ -118,7 +132,6 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                             }
                         } else if pipes == 2 {
                             if c == '-' {
-                                println!("I think it's dead");
                                 break 'botloop;
                             } else {
                                 lines = c as usize - '0' as usize;
@@ -127,61 +140,65 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                     } else {
                         match c {
                             '2' => target[y][x] = true,
-                            ',' => x += 1,
+                            ',' => x -= 1,
                             ';' => {
-                                x = 0;
+                                x = 9;
                                 y -= 1;
                             }
                             _ => {}
                         }
                     }
                 }
-                'mvloop: for mv in no_hold_moves {
-                    let mut b = board.clone();
-                    b.lock_piece(mv.location);
-                    for y in 0..20-lines {
-                        for x in 0..10 {
-                            if b.occupied(x as i32, y as i32) != target[y][x] {
-                                continue 'mvloop;
+                if let Some(no_hold_moves) = no_hold_moves {
+                    'mvloop: for mv in no_hold_moves {
+                        let mut b = board.clone();
+                        b.lock_piece(mv.location);
+                        for y in 0..20-lines {
+                            for x in 0..10 {
+                                if b.occupied(x as i32, y as i32) != target[y][x] {
+                                    continue 'mvloop;
+                                }
                             }
                         }
+                        if uses_spin && !mv.inputs.contains(&crate::moves::Input::SonicDrop) {
+                            continue
+                        }
+                        board = b;
+                        send.send(BotResult::Move {
+                            inputs: mv.inputs,
+                            expected_location: mv.location,
+                            hold: false
+                        }).ok();
+                        continue 'botloop;
                     }
-                    if uses_spin && !mv.inputs.contains(&crate::moves::Input::SonicDrop) {
-                        continue
-                    }
-                    board = b;
-                    send.send(BotResult::Move {
-                        inputs: mv.inputs,
-                        expected_location: mv.location,
-                        hold: false
-                    });
-                    continue 'botloop;
                 }
-                'mvloop: for mv in hold_moves {
-                    let mut b = board.clone();
-                    b.hold(next_piece);
-                    b.lock_piece(mv.location);
-                    for y in 0..20-lines {
-                        for x in 0..10 {
-                            if b.occupied(x as i32, y as i32) != target[y][x] {
-                                continue 'mvloop;
+                if let Some(hold_moves) = hold_moves {
+                    'mvloop: for mv in hold_moves {
+                        let mut b = board.clone();
+                        b.hold(next_piece);
+                        b.lock_piece(mv.location);
+                        for y in 0..20-lines {
+                            for x in 0..10 {
+                                if b.occupied(x as i32, y as i32) != target[y][x] {
+                                    continue 'mvloop;
+                                }
                             }
                         }
+                        if uses_spin && !mv.inputs.contains(&crate::moves::Input::SonicDrop) ||
+                                !uses_spin && mv.location.tspin != TspinStatus::None {
+                            continue
+                        }
+                        if board.hold_piece().is_none() {
+                            queue.pop_front();
+                        }
+                        board = b;
+                        send.send(BotResult::Move {
+                            inputs: mv.inputs,
+                            expected_location: mv.location,
+                            hold: true
+                        }).ok();
+                        continue 'botloop;
                     }
-                    if uses_spin && !mv.inputs.contains(&crate::moves::Input::SonicDrop) ||
-                            !uses_spin && mv.location.tspin != TspinStatus::None {
-                        continue
-                    }
-                    if board.hold_piece().is_none() {
-                        queue.pop_front();
-                    }
-                    board = b;
-                    send.send(BotResult::Move {
-                        inputs: mv.inputs,
-                        expected_location: mv.location,
-                        hold: true
-                    });
-                    continue 'botloop;
                 }
                 println!("Couldn't find the placement Misa picked:");
                 for y in (0..20).rev() {
@@ -199,6 +216,6 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         }
     }
 
-    misa.kill();
-    misa.wait();
+    misa.kill().ok();
+    misa.wait().ok();
 }

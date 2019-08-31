@@ -86,10 +86,14 @@ impl EventHandler for LocalGame {
                 let p1_controller = self.p1_bot.controller();
                 let p2_controller = self.p2_bot.controller();
 
-                let update = self.battle.update(p1_controller, p2_controller);
+                let mut update = self.battle.update(p1_controller, p2_controller);
 
-                self.p1_bot.update(&update.player_1.events, &self.battle.player_1.board);
-                self.p2_bot.update(&update.player_2.events, &self.battle.player_2.board);
+                update.player_1.info = self.p1_bot.update(
+                    &update.player_1.events, &self.battle.player_1.board
+                );
+                update.player_2.info = self.p2_bot.update(
+                    &update.player_2.events, &self.battle.player_2.board
+                );
 
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {

@@ -420,11 +420,13 @@ impl Battle {
                 statistics: self.player_1.board.statistics,
                 events: p1_events,
                 garbage_queue: self.player_1.garbage_queue,
+                info: None
             },
             player_2: GraphicsUpdate {
                 statistics: self.player_2.board.statistics,
                 events: p2_events,
                 garbage_queue: self.player_2.garbage_queue,
+                info: None
             },
             time: self.time,
             attack_multiplier: self.multiplier
@@ -476,5 +478,6 @@ pub struct UpdateResult {
 pub struct GraphicsUpdate {
     pub statistics: Statistics,
     pub events: Vec<Event>,
-    pub garbage_queue: u32
+    pub garbage_queue: u32,
+    pub info: Option<Vec<(String, Option<String>)>>
 }
