@@ -130,7 +130,9 @@ impl EventHandler for LocalGame {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, graphics::BLACK);
+        let dpi = graphics::window(ctx).get_hidpi_factor() as f32;
         let size = graphics::drawable_size(ctx);
+        let size = (size.0 * dpi, size.1 * dpi);
         let center = size.0 / 2.0;
         let scale = size.1 / 23.0;
         graphics::set_screen_coordinates(ctx, Rect {
