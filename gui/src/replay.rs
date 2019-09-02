@@ -25,7 +25,7 @@ impl<'a> ReplayGame<'a> {
             gui: Gui::new(&battle),
             battle,
             updates: replay.updates,
-            start_delay: 180,
+            start_delay: 500,
             resources
         }
     }

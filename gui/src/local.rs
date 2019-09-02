@@ -41,7 +41,7 @@ impl<'a> LocalGame<'a> {
             battle,
             p1_wins: 0,
             p2_wins: 0,
-            state: State::Starting(500),
+            state: State::Starting(180),
             resources
         }
     }
