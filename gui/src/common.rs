@@ -27,7 +27,7 @@ enum State {
 }
 
 impl BoardDrawState {
-    pub fn new(queue: VecDeque<Piece>) -> Self {
+    pub fn new(queue: impl IntoIterator<Item=Piece>) -> Self {
         BoardDrawState {
             board: ArrayVec::from([*ColoredRow::EMPTY; 40]),
             state: State::Delay,
@@ -35,7 +35,7 @@ impl BoardDrawState {
             garbage_queue: 0,
             dead: false,
             hold_piece: None,
-            next_queue: queue,
+            next_queue: queue.into_iter().collect(),
             game_time: 0,
             combo_splash: None,
             back_to_back_splash: None,

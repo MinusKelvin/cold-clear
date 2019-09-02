@@ -2,8 +2,9 @@ use crate::*;
 use rand::prelude::*;
 use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
+use rand_pcg::Pcg64Mcg;
 
-#[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Controller {
     pub left: bool,
     pub right: bool,
@@ -27,7 +28,7 @@ pub struct Game {
 }
 
 /// Units are in ticks
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GameConfig {
     pub spawn_delay: u32,
     pub line_clear_delay: u32,
@@ -64,10 +65,10 @@ pub enum Event {
 }
 
 impl Game {
-    pub fn new(config: GameConfig) -> Self {
+    pub fn new(config: GameConfig, rng: &mut impl Rng) -> Self {
         let mut board = Board::new();
         for _ in 0..config.next_queue_size {
-            board.add_next_piece(board.generate_next_piece());
+            board.add_next_piece(board.generate_next_piece(rng));
         }
         Game {
             board, config,
@@ -81,7 +82,7 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self, current: Controller) -> Vec<Event> {
+    pub fn update(&mut self, current: Controller, rng: &mut impl Rng) -> Vec<Event> {
         update_input(&mut self.used.left, self.prev.left, current.left);
         update_input(&mut self.used.right, self.prev.right, current.right);
         update_input(&mut self.used.rotate_right, self.prev.rotate_right, current.rotate_right);
@@ -117,7 +118,7 @@ impl Game {
         match self.state {
             GameState::SpawnDelay(0) => {
                 let next_piece = self.board.advance_queue().unwrap();
-                let new_piece = self.board.generate_next_piece();
+                let new_piece = self.board.generate_next_piece(rng);
                 self.board.add_next_piece(new_piece);
                 if let Some(spawned) = FallingPiece::spawn(next_piece, &self.board) {
                     self.state = GameState::Falling(FallingState {
@@ -150,7 +151,7 @@ impl Game {
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
                 let mut events = vec![Event::EndOfLineClearDelay];
-                self.deal_garbage(&mut events);
+                self.deal_garbage(&mut events, rng);
                 events
             }
             GameState::LineClearDelay(ref mut delay) => {
@@ -247,7 +248,7 @@ impl Game {
                     let low_y = p.cells().into_iter().map(|(_,y)| y).min().unwrap();
                     if low_y >= falling.lowest_y {
                         let f = *falling;
-                        self.lock(f, &mut events, None);
+                        self.lock(f, &mut events, rng, None);
                         return events;
                     }
                 }
@@ -258,7 +259,7 @@ impl Game {
                     falling.piece.sonic_drop(&self.board);
                     let distance = y - falling.piece.y;
                     let f = *falling;
-                    self.lock(f, &mut events, Some(distance));
+                    self.lock(f, &mut events, rng, Some(distance));
                     return events;
                 }
 
@@ -271,7 +272,7 @@ impl Game {
                     falling.gravity = self.config.gravity;
                     if falling.lock_delay == 0 {
                         let f = *falling;
-                        self.lock(f, &mut events, None);
+                        self.lock(f, &mut events, rng, None);
                         return events;
                     }
                 } else {
@@ -315,7 +316,13 @@ impl Game {
         }
     }
 
-    fn lock(&mut self, falling: FallingState, events: &mut Vec<Event>, dist: Option<i32>) {
+    fn lock(
+        &mut self,
+        falling: FallingState,
+        events: &mut Vec<Event>,
+        rng: &mut impl Rng,
+        dist: Option<i32>
+    ) {
         self.did_hold = false;
         let locked = self.board.lock_piece(falling.piece);;
 
@@ -330,14 +337,14 @@ impl Game {
             events.push(Event::GameOver);
         } else if locked.cleared_lines.is_empty() {
             self.state = GameState::SpawnDelay(self.config.spawn_delay);
-            self.deal_garbage(events);
+            self.deal_garbage(events, rng);
         } else {
             self.attacking += locked.garbage_sent;
             self.state = GameState::LineClearDelay(self.config.line_clear_delay);
         }
     }
 
-    fn deal_garbage(&mut self, events: &mut Vec<Event>) {
+    fn deal_garbage(&mut self, events: &mut Vec<Event>, rng: &mut impl Rng) {
         if self.attacking > self.garbage_queue {
             self.attacking -= self.garbage_queue;
             self.garbage_queue = 0;
@@ -347,11 +354,11 @@ impl Game {
         }
         if self.garbage_queue > 0 {
             let mut dead = false;
-            let mut col = thread_rng().gen_range(0, 10);
+            let mut col = rng.gen_range(0, 10);
             let mut garbage_columns = vec![];
             for _ in 0..self.garbage_queue.min(self.config.max_garbage_add) {
-                if thread_rng().gen_bool(1.0/3.0) {
-                    col = thread_rng().gen_range(0, 10);
+                if rng.gen_bool(1.0/3.0) {
+                    col = rng.gen_range(0, 10);
                 }
                 garbage_columns.push(col);
                 dead |= self.board.add_garbage(col);
@@ -380,6 +387,8 @@ fn update_input(used: &mut bool, prev: bool, current: bool) {
 pub struct Battle {
     pub player_1: Game,
     pub player_2: Game,
+    p1_rng: Pcg64Mcg,
+    p2_rng: Pcg64Mcg,
     time: u32,
     multiplier: f32,
     margin_time: Option<u32>,
@@ -387,15 +396,22 @@ pub struct Battle {
 }
 
 impl Battle {
-    pub fn new(config: GameConfig) -> Self {
-        let player_1 = Game::new(config);
-        let player_2 = Game::new(config);
+    pub fn new(
+        config: GameConfig,
+        p1_seed: <Pcg64Mcg as SeedableRng>::Seed,
+        p2_seed: <Pcg64Mcg as SeedableRng>::Seed
+    ) -> Self {
+        let mut p1_rng = Pcg64Mcg::from_seed(p1_seed);
+        let mut p2_rng = Pcg64Mcg::from_seed(p2_seed);
+        let player_1 = Game::new(config, &mut p1_rng);
+        let player_2 = Game::new(config, &mut p2_rng);
         Battle {
-            replay: Replay::new(
-                player_1.board.next_queue().collect(),
-                player_2.board.next_queue().collect()
-            ),
+            replay: Replay {
+                config, p1_seed, p2_seed,
+                updates: VecDeque::new()
+            },
             player_1, player_2,
+            p1_rng, p2_rng,
             time: 0,
             margin_time: config.margin_time,
             multiplier: 1.0,
@@ -410,8 +426,10 @@ impl Battle {
             }
         }
 
-        let p1_events = self.player_1.update(p1);
-        let p2_events = self.player_2.update(p2);
+        self.replay.updates.push_back((p1, None, p2, None));
+
+        let p1_events = self.player_1.update(p1, &mut self.p1_rng);
+        let p2_events = self.player_2.update(p2, &mut self.p2_rng);
 
         for event in &p1_events {
             if let &Event::GarbageSent(amt) = event {
@@ -424,7 +442,7 @@ impl Battle {
             }
         }
 
-        let update = UpdateResult {
+        UpdateResult {
             player_1: GraphicsUpdate {
                 events: p1_events,
                 garbage_queue: self.player_1.garbage_queue,
@@ -437,11 +455,7 @@ impl Battle {
             },
             time: self.time,
             attack_multiplier: self.multiplier
-        };
-
-        self.replay.updates.push_back(update.clone());
-
-        update
+        }
     }
 }
 
@@ -491,21 +505,15 @@ pub struct UpdateResult {
 pub struct GraphicsUpdate {
     pub events: Vec<Event>,
     pub garbage_queue: u32,
-    pub info: Option<Vec<(String, Option<String>)>>
+    pub info: Option<Info>
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Replay {
-    pub p1_initial_pieces: VecDeque<Piece>,
-    pub p2_initial_pieces: VecDeque<Piece>,
-    pub updates: VecDeque<UpdateResult>
+    pub p1_seed: <Pcg64Mcg as SeedableRng>::Seed,
+    pub p2_seed: <Pcg64Mcg as SeedableRng>::Seed,
+    pub config: GameConfig,
+    pub updates: VecDeque<(Controller, Option<Info>, Controller, Option<Info>)>
 }
 
-impl Replay {
-    pub fn new(p1_initial_pieces: VecDeque<Piece>, p2_initial_pieces: VecDeque<Piece>) -> Self {
-        Replay {
-            p1_initial_pieces, p2_initial_pieces,
-            updates: VecDeque::new()
-        }
-    }
-}
+pub type Info = Vec<(String, Option<String>)>;

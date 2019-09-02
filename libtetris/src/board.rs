@@ -44,10 +44,10 @@ impl<R: Row> Board<R> {
     /// 
     /// This function does not remove the generated piece from the bag.
     /// Use add_next_piece() to add it to the queue.
-    pub fn generate_next_piece(&self) -> Piece {
+    pub fn generate_next_piece(&self, rng: &mut impl rand::Rng) -> Piece {
         use rand::prelude::*;
         let choices: ArrayVec<[_; 7]> = self.bag.iter().collect();
-        *choices.choose(&mut thread_rng()).unwrap()
+        *choices.choose(rng).unwrap()
     }
 
     /// Retrieves the next piece in the queue.

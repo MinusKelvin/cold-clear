@@ -7,18 +7,22 @@ use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::{ gamepad, GamepadId };
 use ggez::event::{ Button, Axis };
+use libtetris::Battle;
 use crate::interface::{ Gui, text };
+use crate::Resources;
 use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
+use rand::prelude::*;
 
-pub struct LocalGame {
-    battle: libtetris::Battle,
+pub struct LocalGame<'a> {
+    gui: Gui,
+    battle: Battle,
     p1_bot: bot::BotController,
     p2_bot: bot::BotController,
     p1_wins: u32,
     p2_wins: u32,
-    gui: Gui,
     state: State,
+    resources: &'a mut Resources
 }
 
 enum State {
@@ -27,24 +31,23 @@ enum State {
     Starting(u32)
 }
 
-impl LocalGame {
-    pub fn new(ctx: &mut Context) -> Self {
-        let battle = libtetris::Battle::new(Default::default());
-        let p1_pieces: VecDeque<_> = battle.player_1.board.next_queue().collect();
-        let p2_pieces: VecDeque<_> = battle.player_2.board.next_queue().collect();
+impl<'a> LocalGame<'a> {
+    pub fn new(resources: &'a mut Resources) -> Self {
+        let battle = Battle::new(Default::default(), thread_rng().gen(), thread_rng().gen());
         LocalGame {
-            p1_bot: bot::BotController::new(p1_pieces.iter().copied(), false),
-            p2_bot: bot::BotController::new(p2_pieces.iter().copied(), true),
+            p1_bot: bot::BotController::new(battle.player_1.board.next_queue(), false),
+            p2_bot: bot::BotController::new(battle.player_2.board.next_queue(), true),
+            gui: Gui::new(&battle),
+            battle,
             p1_wins: 0,
             p2_wins: 0,
-            gui: Gui::new(ctx, p1_pieces, p2_pieces),
-            battle,
             state: State::Starting(500),
+            resources
         }
     }
 }
 
-impl EventHandler for LocalGame {
+impl EventHandler for LocalGame<'_> {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         while timer::check_update_time(ctx, 60) {
             let do_update = match self.state {
@@ -61,15 +64,17 @@ impl EventHandler for LocalGame {
                     // Don't catch up after pause due to replay saving
                     while timer::check_update_time(ctx, 60) {}
 
-                    self.battle = libtetris::Battle::new(Default::default());
+                    self.battle = Battle::new(
+                        Default::default(), thread_rng().gen(), thread_rng().gen()
+                    );
+                    self.gui = Gui::new(&self.battle);
 
-                    let p1_pieces: VecDeque<_> = self.battle.player_1.board.next_queue().collect();
-                    let p2_pieces: VecDeque<_> = self.battle.player_2.board.next_queue().collect();
-
-                    self.p1_bot = bot::BotController::new(p1_pieces.clone(), false);
-                    self.p2_bot = bot::BotController::new(p2_pieces.clone(), true);
-
-                    self.gui.reset(p1_pieces, p2_pieces);
+                    self.p1_bot = bot::BotController::new(
+                        self.battle.player_1.board.next_queue(), false
+                    );
+                    self.p2_bot = bot::BotController::new(
+                        self.battle.player_2.board.next_queue(), true
+                    );
 
                     self.state = State::Starting(180);
                     false
@@ -98,9 +103,12 @@ impl EventHandler for LocalGame {
                 update.player_1.info = self.p1_bot.update(
                     &update.player_1.events, &self.battle.player_1.board
                 );
+                self.battle.replay.updates.back_mut().unwrap().1 = update.player_1.info.clone();
+
                 update.player_2.info = self.p2_bot.update(
                     &update.player_2.events, &self.battle.player_2.board
                 );
+                self.battle.replay.updates.back_mut().unwrap().3 = update.player_2.info.clone();
 
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {
@@ -125,7 +133,7 @@ impl EventHandler for LocalGame {
                     }
                 }
 
-                self.gui.update(update)?;
+                self.gui.update(update, self.resources)?;
             }
         }
 
@@ -148,7 +156,7 @@ impl EventHandler for LocalGame {
             graphics::queue_text(ctx, &txt, [center+4.0*scale, 9.0*scale], None);
         }
 
-        self.gui.draw(ctx, scale, center)?;
+        self.gui.draw(ctx, self.resources, scale, center)?;
 
         graphics::present(ctx)
     }

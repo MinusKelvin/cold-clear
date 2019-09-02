@@ -1,72 +1,35 @@
 use crate::common::BoardDrawState;
+use crate::Resources;
 use ggez::{ Context, GameResult };
-use ggez::audio::{ self, SoundSource };
-use ggez::graphics::{ self, Image, Rect, DrawParam, FilterMode, Text, TextFragment, Align, Scale };
-use std::collections::VecDeque;
-use libtetris::{ Piece, UpdateResult };
+use ggez::audio::SoundSource;
+use ggez::graphics::{ self, Rect, DrawParam, FilterMode, Text, TextFragment, Align, Scale };
+use libtetris::{ UpdateResult, Battle };
 
 pub struct Gui {
     player_1_graphics: BoardDrawState,
     player_2_graphics: BoardDrawState,
     time: u32,
     multiplier: f32,
-
-    sprites: Image,
-
-    move_sound: Option<audio::Source>,
-    move_sound_play: u32,
-    stack_touched: Option<audio::Source>,
-    hard_drop: Option<audio::Source>,
-    tspin: Option<audio::Source>,
-    line_clear: Option<audio::Source>
+    move_sound_play: u32
 }
 
 impl Gui {
-    pub fn new(ctx: &mut Context, p1_queue: VecDeque<Piece>, p2_queue: VecDeque<Piece>) -> Self {
+    pub fn new(battle: &Battle) -> Self {
         Gui {
-            player_1_graphics: BoardDrawState::new(p1_queue),
-            player_2_graphics: BoardDrawState::new(p2_queue),
+            player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue()),
+            player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue()),
             time: 0,
             multiplier: 1.0,
-            
-            sprites: Image::new(ctx, "/sprites.png").unwrap(),
-            move_sound: audio::Source::new(ctx, "/move.ogg").or_else(|e| {
-                eprintln!("Error loading sound effect for movement: {}", e);
-                Err(e)
-            }).ok(),
-            move_sound_play: 2,
-            stack_touched: audio::Source::new(ctx, "/stack-touched.ogg").or_else(|e| {
-                eprintln!("Error loading sound effect for stack touched: {}", e);
-                Err(e)
-            }).ok(),
-            hard_drop: audio::Source::new(ctx, "/hard-drop.ogg").or_else(|e| {
-                eprintln!("Error loading sound effect for hard drop: {}", e);
-                Err(e)
-            }).ok(),
-            tspin: audio::Source::new(ctx, "/tspin.ogg").or_else(|e| {
-                eprintln!("Error loading sound effect for T-spin: {}", e);
-                Err(e)
-            }).ok(),
-            line_clear: audio::Source::new(ctx, "/line-clear.ogg").or_else(|e| {
-                eprintln!("Error loading sound effect for line clear: {}", e);
-                Err(e)
-            }).ok(),
+            move_sound_play: 0
         }
     }
 
-    pub fn reset(&mut self, p1_queue: VecDeque<Piece>, p2_queue: VecDeque<Piece>) {
-        self.player_1_graphics = BoardDrawState::new(p1_queue);
-        self.player_2_graphics = BoardDrawState::new(p2_queue);
-        self.time = 0;
-        self.multiplier = 1.0;
-    }
-
-    pub fn update(&mut self, update: UpdateResult) -> GameResult<()> {
+    pub fn update(&mut self, update: UpdateResult, res: &mut Resources) -> GameResult {
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
             use libtetris::Event::*;
             match event {
                 PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
-                    if let Some(move_sound) = &mut self.move_sound {
+                    if let Some(move_sound) = &mut res.move_sound {
                         move_sound.play_detached()?;
                     }
                     self.move_sound_play = 2;
@@ -75,12 +38,12 @@ impl Gui {
                 // PieceTSpined => self.tspin.play_detached()?,
                 PiecePlaced { hard_drop_distance, locked, .. } => {
                     if hard_drop_distance.is_some() {
-                        if let Some(hard_drop) = &mut self.hard_drop {
+                        if let Some(hard_drop) = &mut res.hard_drop {
                             hard_drop.play_detached()?;
                         }
                     }
                     if locked.placement_kind.is_clear() {
-                        if let Some(line_clear) = &mut self.line_clear {
+                        if let Some(line_clear) = &mut res.line_clear {
                             line_clear.play_detached()?;
                         }
                     }
@@ -100,13 +63,15 @@ impl Gui {
         Ok(())
     }
 
-    pub fn draw(&mut self, ctx: &mut Context, scale: f32, center: f32) -> GameResult<()> {
+    pub fn draw(
+        &mut self, ctx: &mut Context, res: &mut Resources, scale: f32, center: f32
+    ) -> GameResult<()> {
         graphics::push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
             .dest([center - 17.0 * scale, 0.0])
             .to_matrix()));
         graphics::apply_transformations(ctx)?;
-        self.player_1_graphics.draw(ctx, &self.sprites, center - 17.0*scale, scale)?;
+        self.player_1_graphics.draw(ctx, &res.sprites, center - 17.0*scale, scale)?;
         graphics::pop_transform(ctx);
 
         graphics::push_transform(ctx, Some(DrawParam::new()
@@ -114,7 +79,7 @@ impl Gui {
             .dest([center + scale, 0.0])
             .to_matrix()));
         graphics::apply_transformations(ctx)?;
-        self.player_2_graphics.draw(ctx, &self.sprites, center+scale, scale)?;
+        self.player_2_graphics.draw(ctx, &res.sprites, center+scale, scale)?;
         graphics::pop_transform(ctx);
 
         graphics::queue_text(

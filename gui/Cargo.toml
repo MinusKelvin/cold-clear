@@ -13,3 +13,5 @@ libtetris = { path = "../libtetris" }
 bot = { path = "../bot" }
 serde = "1"
 serde_json = "1"
+rand = "0.7.0"
+rand_pcg = "0.2.0"
