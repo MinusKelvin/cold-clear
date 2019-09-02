@@ -160,7 +160,9 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                                 }
                             }
                         }
-                        if uses_spin && !mv.inputs.contains(&crate::moves::Input::SonicDrop) {
+                        if mv.location.kind.0 == Piece::T && (
+                            (mv.location.tspin == TspinStatus::None) == uses_spin
+                        ) {
                             continue
                         }
                         board = b;
@@ -184,8 +186,9 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                                 }
                             }
                         }
-                        if uses_spin && !mv.inputs.contains(&crate::moves::Input::SonicDrop) ||
-                                !uses_spin && mv.location.tspin != TspinStatus::None {
+                        if mv.location.kind.0 == Piece::T && (
+                            (mv.location.tspin == TspinStatus::None) == uses_spin
+                        ) {
                             continue
                         }
                         if board.hold_piece().is_none() {
@@ -200,7 +203,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                         continue 'botloop;
                     }
                 }
-                println!("Couldn't find the placement Misa picked:");
+                println!("Couldn't find the placement Misa picked (spin: {}):", uses_spin);
                 for y in (0..20).rev() {
                     for x in 0..10 {
                         if target[y][x] {
