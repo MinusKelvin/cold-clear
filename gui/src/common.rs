@@ -1,5 +1,6 @@
 use ggez::{ Context, GameResult };
 use ggez::graphics::*;
+use ggez::graphics::spritebatch::SpriteBatch;
 use std::collections::VecDeque;
 use libtetris::*;
 use arrayvec::ArrayVec;
@@ -136,10 +137,12 @@ impl BoardDrawState {
         }
     }
 
-    pub fn draw(&self, ctx: &mut Context, img: &Image, text_x: f32, scale: f32) -> GameResult {
+    pub fn draw(
+        &self, ctx: &mut Context, sprites: &mut SpriteBatch, text_x: f32, scale: f32
+    ) -> GameResult {
         for y in 0..21 {
             for x in 0..10 {
-                draw(ctx, img, draw_tile(
+                sprites.add(draw_tile(
                     x as i32+3, y as i32, if self.board[y].cell_color(x) == CellColor::Empty
                         { 0 } else { 1 },
                     0, cell_color_to_color({
@@ -150,46 +153,46 @@ impl BoardDrawState {
                             color
                         }
                     })
-                ))?;
+                ));
             }
         }
         match self.state {
             State::Falling(piece, ghost) => {
                 for (x,y) in ghost.cells() {
-                    draw(ctx, img, draw_tile(
+                    sprites.add(draw_tile(
                         x+3, y, 2, 0, cell_color_to_color(piece.kind.0.color())
-                    ))?;
+                    ));
                 }
                 for (x,y) in piece.cells() {
-                    draw(ctx, img, draw_tile(
+                    sprites.add(draw_tile(
                         x+3, y, 1, 0, cell_color_to_color(piece.kind.0.color())
-                    ))?;
+                    ));
                 }
             }
             State::LineClearAnimation(ref lines, frame) => {
                 let frame_x = frame.min(35) / 12;
                 let frame_y = frame.min(35) % 12;
                 for &y in lines {
-                    draw(ctx, img, draw_tile(
+                    sprites.add(draw_tile(
                         3, y, frame_x*3+3, frame_y, WHITE
-                    ))?;
-                    draw(ctx, img, draw_tile(
+                    ));
+                    sprites.add(draw_tile(
                         12, y, frame_x*3+5, frame_y, WHITE
-                    ))?;
+                    ));
                     for x in 1..9 {
-                        draw(ctx, img, draw_tile(
+                        sprites.add(draw_tile(
                             x+3, y, frame_x*3+4, frame_y, WHITE
-                        ))?;
+                        ));
                     }
                 }
             }
             _ => {}
         }
         if let Some(piece) = self.hold_piece {
-            draw_piece_preview(ctx, img, 0, 18, piece)?;
+            draw_piece_preview(ctx, sprites, 0, 18, piece);
         }
         for (i, &piece) in self.next_queue.iter().enumerate() {
-            draw_piece_preview(ctx, img, 13, 18 - (i*2) as i32, piece)?;
+            draw_piece_preview(ctx, sprites, 13, 18 - (i*2) as i32, piece);
         }
         if self.garbage_queue > 0 {
             let mesh = Mesh::new_rectangle(
@@ -314,7 +317,7 @@ fn tile(x: i32, y: i32) -> Rect {
     }
 }
 
-fn draw_piece_preview(ctx: &mut Context, img: &Image, x: i32, y: i32, piece: Piece) -> GameResult {
+fn draw_piece_preview(ctx: &mut Context, sprites: &mut SpriteBatch, x: i32, y: i32, piece: Piece) {
     let ty = match piece {
         Piece::I => 1,
         Piece::O => 2,
@@ -326,9 +329,8 @@ fn draw_piece_preview(ctx: &mut Context, img: &Image, x: i32, y: i32, piece: Pie
     };
     let color = cell_color_to_color(piece.color());
     for dx in 0..3 {
-        draw(ctx, img, draw_tile(x+dx, y, dx, ty, color))?;
+        sprites.add(draw_tile(x+dx, y, dx, ty, color));
     }
-    Ok(())
 }
 
 fn draw_tile(x: i32, y: i32, tx: i32, ty: i32, color: Color) -> DrawParam {

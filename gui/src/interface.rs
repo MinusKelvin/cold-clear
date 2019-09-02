@@ -71,7 +71,9 @@ impl Gui {
             .dest([center - 17.0 * scale, 0.0])
             .to_matrix()));
         graphics::apply_transformations(ctx)?;
-        self.player_1_graphics.draw(ctx, &res.sprites, center - 17.0*scale, scale)?;
+        res.sprites.clear();
+        self.player_1_graphics.draw(ctx, &mut res.sprites, center - 17.0*scale, scale)?;
+        graphics::draw(ctx, &res.sprites, DrawParam::default())?;
         graphics::pop_transform(ctx);
 
         graphics::push_transform(ctx, Some(DrawParam::new()
@@ -79,7 +81,9 @@ impl Gui {
             .dest([center + scale, 0.0])
             .to_matrix()));
         graphics::apply_transformations(ctx)?;
-        self.player_2_graphics.draw(ctx, &res.sprites, center+scale, scale)?;
+        res.sprites.clear();
+        self.player_2_graphics.draw(ctx, &mut res.sprites, center+scale, scale)?;
+        graphics::draw(ctx, &res.sprites, DrawParam::default())?;
         graphics::pop_transform(ctx);
 
         graphics::queue_text(

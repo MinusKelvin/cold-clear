@@ -1,6 +1,7 @@
 use ggez::{ Context, ContextBuilder, GameResult };
 use ggez::event;
 use ggez::graphics::{ Image };
+use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::audio::{ self, SoundSource };
 use std::net::SocketAddr;
 
@@ -13,7 +14,7 @@ use local::LocalGame;
 use replay::ReplayGame;
 
 pub struct Resources {
-    sprites: Image,
+    sprites: SpriteBatch,
 
     move_sound: Option<audio::Source>,
     stack_touched: Option<audio::Source>,
@@ -85,7 +86,7 @@ fn main() {
         .build().unwrap();
 
     let mut resources = Resources {
-        sprites: Image::new(&mut ctx, "/sprites.png").unwrap(),
+        sprites: SpriteBatch::new(Image::new(&mut ctx, "/sprites.png").unwrap()),
         move_sound: audio::Source::new(&mut ctx, "/move.ogg").or_else(|e| {
             eprintln!("Error loading sound effect for movement: {}", e);
             Err(e)
