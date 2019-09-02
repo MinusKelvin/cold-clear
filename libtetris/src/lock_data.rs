@@ -1,8 +1,9 @@
 use arrayvec::ArrayVec;
+use serde::{ Serialize, Deserialize };
 
 use crate::piece::TspinStatus;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Default)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]
 pub struct LockResult {
     pub placement_kind: PlacementKind,
     pub locked_out: bool,
@@ -13,7 +14,7 @@ pub struct LockResult {
     pub cleared_lines: ArrayVec<[i32; 4]>
 }
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum PlacementKind {
     None,
     Clear1,
@@ -113,7 +114,7 @@ pub const COMBO_GARBAGE: [u32; 12] = [
     4, 5
 ];
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash, Serialize, Deserialize)]
 pub struct Statistics {
     pub pieces: u64,
     pub lines: u64,
@@ -134,18 +135,8 @@ pub struct Statistics {
     pub max_combo: u64
 }
 
-pub trait Stats: Default {
-    fn update(&mut self, lock_data: &LockResult);
-    fn as_statistics(&self) -> Statistics;
-}
-
-impl Stats for () {
-    fn update(&mut self, _: &LockResult) {}
-    fn as_statistics(&self) -> Statistics { Default::default() }
-}
-
-impl Stats for Statistics {
-    fn update(&mut self, l: &LockResult) {
+impl  Statistics {
+    pub fn update(&mut self, l: &LockResult) {
         self.attack += l.garbage_sent as u64;
         self.lines += l.cleared_lines.len() as u64;
         self.pieces += 1;
@@ -173,9 +164,5 @@ impl Stats for Statistics {
             PlacementKind::MiniTspin1 => self.mini_tspin_singles += 1,
             PlacementKind::MiniTspin2 => self.mini_tspin_doubles += 1
         }
-    }
-
-    fn as_statistics(&self) -> Statistics {
-        *self
     }
 }

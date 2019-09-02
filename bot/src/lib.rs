@@ -50,7 +50,7 @@ impl BotController {
     }
 
     pub fn update(
-        &mut self, events: &[Event], board: &Board<ColoredRow, Statistics>
+        &mut self, events: &[Event], board: &Board<ColoredRow>
     ) -> Option<Vec<(String, Option<String>)>> {
         if self.dead {
             self.controller.hard_drop ^= true;
@@ -219,7 +219,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         bumpiness_sq: -5,
         height: -40,
         top_half: -150,
-        top_quarter: -200,
+        top_quarter: -500,
         cavity_cells: -150,
         cavity_cells_sq: -10,
         overhang_cells: -50,
@@ -262,7 +262,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
     );
 
     let mut do_move = false;
-    const THINK_OUTSIDE_SPAWN_DELAY: bool = false;
+    const THINK_OUTSIDE_SPAWN_DELAY: bool = true;
     let mut think = THINK_OUTSIDE_SPAWN_DELAY;
     loop {
         let result = if think {

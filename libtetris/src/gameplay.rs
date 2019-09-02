@@ -1,5 +1,7 @@
 use crate::*;
 use rand::prelude::*;
+use serde::{ Serialize, Deserialize };
+use std::collections::VecDeque;
 
 #[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct Controller {
@@ -13,7 +15,7 @@ pub struct Controller {
 }
 
 pub struct Game {
-    pub board: Board<ColoredRow, Statistics>,
+    pub board: Board<ColoredRow>,
     pub state: GameState,
     config: GameConfig,
     did_hold: bool,
@@ -39,6 +41,7 @@ pub struct GameConfig {
     pub max_garbage_add: u32
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Event {
     PieceSpawned { new_in_queue: Piece },
     SpawnDelayStart,
@@ -380,16 +383,22 @@ pub struct Battle {
     time: u32,
     multiplier: f32,
     margin_time: Option<u32>,
+    pub replay: Replay
 }
 
 impl Battle {
     pub fn new(config: GameConfig) -> Self {
+        let player_1 = Game::new(config);
+        let player_2 = Game::new(config);
         Battle {
-            player_1: Game::new(config),
-            player_2: Game::new(config),
+            replay: Replay::new(
+                player_1.board.next_queue().collect(),
+                player_2.board.next_queue().collect()
+            ),
+            player_1, player_2,
             time: 0,
             margin_time: config.margin_time,
-            multiplier: 1.0
+            multiplier: 1.0,
         }
     }
 
@@ -415,22 +424,24 @@ impl Battle {
             }
         }
 
-        UpdateResult {
+        let update = UpdateResult {
             player_1: GraphicsUpdate {
-                statistics: self.player_1.board.statistics,
                 events: p1_events,
                 garbage_queue: self.player_1.garbage_queue,
                 info: None
             },
             player_2: GraphicsUpdate {
-                statistics: self.player_2.board.statistics,
                 events: p2_events,
                 garbage_queue: self.player_2.garbage_queue,
                 info: None
             },
             time: self.time,
             attack_multiplier: self.multiplier
-        }
+        };
+
+        self.replay.updates.push_back(update.clone());
+
+        update
     }
 }
 
@@ -468,6 +479,7 @@ impl Default for GameConfig {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateResult {
     pub player_1: GraphicsUpdate,
     pub player_2: GraphicsUpdate,
@@ -475,9 +487,25 @@ pub struct UpdateResult {
     pub attack_multiplier: f32
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GraphicsUpdate {
-    pub statistics: Statistics,
     pub events: Vec<Event>,
     pub garbage_queue: u32,
     pub info: Option<Vec<(String, Option<String>)>>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Replay {
+    pub p1_initial_pieces: VecDeque<Piece>,
+    pub p2_initial_pieces: VecDeque<Piece>,
+    pub updates: VecDeque<UpdateResult>
+}
+
+impl Replay {
+    pub fn new(p1_initial_pieces: VecDeque<Piece>, p2_initial_pieces: VecDeque<Piece>) -> Self {
+        Replay {
+            p1_initial_pieces, p2_initial_pieces,
+            updates: VecDeque::new()
+        }
+    }
 }

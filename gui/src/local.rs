@@ -7,26 +7,18 @@ use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::{ gamepad, GamepadId };
 use ggez::event::{ Button, Axis };
-use crate::common::{ BoardDrawState, text };
+use crate::interface::{ Gui, text };
+use serde::{ Serialize, Deserialize };
+use std::collections::VecDeque;
 
 pub struct LocalGame {
     battle: libtetris::Battle,
-    player_1_graphics: BoardDrawState,
-    player_2_graphics: BoardDrawState,
     p1_bot: bot::BotController,
     p2_bot: bot::BotController,
     p1_wins: u32,
     p2_wins: u32,
-    time: u32,
-    multiplier: f32,
-    image: Image,
+    gui: Gui,
     state: State,
-    move_sound: audio::Source,
-    move_sound_play: u32,
-    // stack_touched: audio::Source,
-    hard_drop: audio::Source,
-    // tspin: audio::Source,
-    line_clear: audio::Source
 }
 
 enum State {
@@ -37,26 +29,17 @@ enum State {
 
 impl LocalGame {
     pub fn new(ctx: &mut Context) -> Self {
-        let image = Image::new(ctx, "/sprites.png").unwrap();
         let battle = libtetris::Battle::new(Default::default());
+        let p1_pieces: VecDeque<_> = battle.player_1.board.next_queue().collect();
+        let p2_pieces: VecDeque<_> = battle.player_2.board.next_queue().collect();
         LocalGame {
-            player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue().collect()),
-            player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue().collect()),
-            p1_bot: bot::BotController::new(battle.player_1.board.next_queue(), false),
-            p2_bot: bot::BotController::new(battle.player_2.board.next_queue(), true),
+            p1_bot: bot::BotController::new(p1_pieces.iter().copied(), false),
+            p2_bot: bot::BotController::new(p2_pieces.iter().copied(), true),
             p1_wins: 0,
             p2_wins: 0,
-            time: 0,
-            multiplier: 1.0,
+            gui: Gui::new(ctx, p1_pieces, p2_pieces),
             battle,
-            image,
             state: State::Starting(500),
-            move_sound: audio::Source::new(ctx, "/click-noise.ogg").unwrap(),
-            move_sound_play: 2,
-            // stack_touched: audio::Source::new(ctx, "/stack-touched.ogg").unwrap(),
-            hard_drop: audio::Source::new(ctx, "/hard-drop.ogg").unwrap(),
-            // tspin: audio::Source::new(ctx, "/tspin.ogg").unwrap(),
-            line_clear: audio::Source::new(ctx, "/line-clear.ogg").unwrap()
         }
     }
 }
@@ -66,18 +49,29 @@ impl EventHandler for LocalGame {
         while timer::check_update_time(ctx, 60) {
             let do_update = match self.state {
                 State::GameOver(0) => {
+                    let t = std::time::Instant::now();
+                    serde_json::to_writer(
+                        std::io::BufWriter::new(
+                            std::fs::File::create("test-replay.json"
+                        ).unwrap()),
+                        &self.battle.replay
+                    ).unwrap();
+                    println!("Took {:?} to save replay", t.elapsed());
+
+                    // Don't catch up after pause due to replay saving
+                    while timer::check_update_time(ctx, 60) {}
+
                     self.battle = libtetris::Battle::new(Default::default());
-                    self.player_1_graphics = BoardDrawState::new(
-                        self.battle.player_1.board.next_queue().collect()
-                    );
-                    self.p1_bot = bot::BotController::new(self.battle.player_1.board.next_queue(), false);
-                    self.player_2_graphics = BoardDrawState::new(
-                        self.battle.player_2.board.next_queue().collect()
-                    );
-                    self.p2_bot = bot::BotController::new(self.battle.player_2.board.next_queue(), true);
+
+                    let p1_pieces: VecDeque<_> = self.battle.player_1.board.next_queue().collect();
+                    let p2_pieces: VecDeque<_> = self.battle.player_2.board.next_queue().collect();
+
+                    self.p1_bot = bot::BotController::new(p1_pieces.clone(), false);
+                    self.p2_bot = bot::BotController::new(p2_pieces.clone(), true);
+
+                    self.gui.reset(p1_pieces, p2_pieces);
+
                     self.state = State::Starting(180);
-                    self.time = 0;
-                    self.multiplier = 1.0;
                     false
                 }
                 State::GameOver(ref mut delay) => {
@@ -108,30 +102,6 @@ impl EventHandler for LocalGame {
                     &update.player_2.events, &self.battle.player_2.board
                 );
 
-                for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
-                    use libtetris::Event::*;
-                    match event {
-                        PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
-                            self.move_sound.play_detached()?;
-                            self.move_sound_play = 2;
-                       }
-                        // StackTouched => self.stack_touched.play_detached()?,
-                        // PieceTSpined => self.tspin.play_detached()?,
-                        PiecePlaced { hard_drop_distance, locked, .. } => {
-                            if hard_drop_distance.is_some() {
-                                self.hard_drop.play_detached()?;
-                            }
-                            if locked.placement_kind.is_clear() {
-                                self.line_clear.play_detached()?;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                if self.move_sound_play != 0 {
-                    self.move_sound_play -= 1;
-                }
-
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {
                         use libtetris::Event::*;
@@ -155,10 +125,7 @@ impl EventHandler for LocalGame {
                     }
                 }
 
-                self.player_1_graphics.update(update.player_1, update.time);
-                self.player_2_graphics.update(update.player_2, update.time);
-                self.time = update.time;
-                self.multiplier = update.attack_multiplier;
+                self.gui.update(update)?;
             }
         }
 
@@ -166,31 +133,7 @@ impl EventHandler for LocalGame {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        graphics::clear(ctx, graphics::BLACK);
-        let dpi = graphics::window(ctx).get_hidpi_factor() as f32;
-        let size = graphics::drawable_size(ctx);
-        let size = (size.0 * dpi, size.1 * dpi);
-        let center = size.0 / 2.0;
-        let scale = size.1 / 23.0;
-        graphics::set_screen_coordinates(ctx, Rect {
-            x: 0.0, y: 0.0, w: size.0, h: size.1
-        })?;
-
-        graphics::push_transform(ctx, Some(DrawParam::new()
-            .scale([scale, scale])
-            .dest([center - 17.0 * scale, 0.0])
-            .to_matrix()));
-        graphics::apply_transformations(ctx)?;
-        self.player_1_graphics.draw(ctx, &self.image, center - 17.0*scale, scale)?;
-        graphics::pop_transform(ctx);
-
-        graphics::push_transform(ctx, Some(DrawParam::new()
-            .scale([scale, scale])
-            .dest([center + scale, 0.0])
-            .to_matrix()));
-        graphics::apply_transformations(ctx)?;
-        self.player_2_graphics.draw(ctx, &self.image, center+scale, scale)?;
-        graphics::pop_transform(ctx);
+        let (scale, center) = crate::interface::setup_graphics(ctx)?;
 
         graphics::queue_text(
             ctx,
@@ -198,29 +141,6 @@ impl EventHandler for LocalGame {
             [center-3.0*scale, 17.0*scale],
             None
         );
-        graphics::queue_text(
-            ctx,
-            &text(
-                format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
-                scale*1.5, 6.0*scale
-            ),
-            [center-3.0*scale, 18.5*scale],
-            None
-        );
-        if self.multiplier != 1.0 {
-            graphics::queue_text(
-                ctx,
-                &text("Margin Time", scale*1.0, 6.0*scale),
-                [center-3.0*scale, 20.1*scale],
-                None
-            );
-            graphics::queue_text(
-                ctx,
-                &text(format!("Attack x{:.1}", self.multiplier), scale*1.0, 6.0*scale),
-                [center-3.0*scale, 21.0*scale],
-                None
-            );
-        }
 
         if let State::Starting(t) = self.state {
             let txt = text(format!("{}", t / 60 + 1), scale * 4.0, 10.0*scale);
@@ -228,10 +148,8 @@ impl EventHandler for LocalGame {
             graphics::queue_text(ctx, &txt, [center+4.0*scale, 9.0*scale], None);
         }
 
-        graphics::apply_transformations(ctx)?;
-        graphics::draw_queued_text(
-            ctx, DrawParam::new(), None, FilterMode::Linear
-        )?;
+        self.gui.draw(ctx, scale, center)?;
+
         graphics::present(ctx)
     }
 

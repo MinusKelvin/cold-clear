@@ -4,12 +4,17 @@ use std::net::SocketAddr;
 
 mod common;
 mod local;
+mod interface;
+mod replay;
 
 use local::LocalGame;
+use replay::ReplayGame;
 
 fn main() {
     let mut connect = false;
+    let mut replay = false;
     let mut address: Option<SocketAddr> = None;
+    let mut replay_file = None;
     for arg in std::env::args() {
         if connect {
             match arg.parse() {
@@ -21,17 +26,28 @@ fn main() {
             }
             break
         }
+        if replay {
+            replay_file = Some(arg);
+            break
+        }
         if arg == "--help" {
             println!("Cold Clear gameplay interface");
             println!("Options:");
-            println!("  --connect <address>    Spectate an arena game");
+            println!("  --connect <address>    Spectate an arena");
+            println!("  --play    <path>       View a replay");
             return
         } else if arg == "--connect" {
             connect = true;
+        } else if arg == "--play" {
+            replay = true;
         }
     }
     if connect && address.is_none() {
         eprintln!("--connect requires argument");
+        return
+    }
+    if replay && replay_file.is_none() {
+        eprintln!("--play requires argument");
         return
     }
 
@@ -57,12 +73,16 @@ fn main() {
         })
         .build().unwrap();
 
-    match address {
-        Some(addr) => {
+    match (address, replay_file) {
+        (Some(addr), _) => {
             // let mut net_game = NetGame::new(&mut ctx, addr);
             // event::run(&mut ctx, &mut events, &mut net_game).unwrap();
         }
-        None => {
+        (None, Some(file)) => {
+            let mut replay_game = ReplayGame::new(&mut ctx, file);
+            event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
+        }
+        (None, None) => {
             let mut local_game = LocalGame::new(&mut ctx);
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }

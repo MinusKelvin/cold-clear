@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use crate::*;
 
 #[derive(Clone, Debug)]
-pub struct Board<R=u16, S=()> {
+pub struct Board<R=u16> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
     pub combo: u32,
@@ -13,7 +13,6 @@ pub struct Board<R=u16, S=()> {
     hold_piece: Option<Piece>,
     next_pieces: VecDeque<Piece>,
     bag: EnumSet<Piece>,
-    pub statistics: S
 }
 
 pub trait Row: Copy + Clone + 'static {
@@ -27,7 +26,7 @@ pub trait Row: Copy + Clone + 'static {
     const SOLID: &'static Self;
 }
 
-impl<R: Row, S: Stats> Board<R, S> {
+impl<R: Row> Board<R> {
     /// Creates a blank board with an empty queue.
     pub fn new() -> Self {
         Board {
@@ -38,7 +37,6 @@ impl<R: Row, S: Stats> Board<R, S> {
             hold_piece: None,
             next_pieces: VecDeque::new(),
             bag: EnumSet::all(),
-            statistics: S::default()
         }
     }
 
@@ -188,8 +186,6 @@ impl<R: Row, S: Stats> Board<R, S> {
             cleared_lines: cleared
         };
 
-        self.statistics.update(&l);
-
         l
     }
 
@@ -250,7 +246,6 @@ impl<R: Row, S: Stats> Board<R, S> {
             column_heights: self.column_heights,
             next_pieces: self.next_pieces.clone(),
             hold_piece: self.hold_piece,
-            statistics: (),
             bag: self.bag
         }
     }

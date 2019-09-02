@@ -3,6 +3,7 @@ use ggez::graphics::*;
 use std::collections::VecDeque;
 use libtetris::*;
 use arrayvec::ArrayVec;
+use crate::interface::text;
 
 pub struct BoardDrawState {
     board: ArrayVec<[ColoredRow; 40]>,
@@ -44,7 +45,6 @@ impl BoardDrawState {
     }
 
     pub fn update(&mut self, update: GraphicsUpdate, time: u32) {
-        self.statistics = update.statistics;
         self.garbage_queue = update.garbage_queue;
         self.game_time = time;
         if let Some(info) = update.info {
@@ -74,9 +74,10 @@ impl BoardDrawState {
                 *timer -= 1;
             }
         }
-        for event in update.events {
+        for event in &update.events {
             match event {
                 Event::PiecePlaced { piece, locked, .. } => {
+                    self.statistics.update(&locked);
                     for (x, y) in piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
@@ -100,15 +101,15 @@ impl BoardDrawState {
                     }
                 }
                 Event::PieceHeld(piece) => {
-                    self.hold_piece = Some(piece);
+                    self.hold_piece = Some(*piece);
                     self.state = State::Delay;
                 }
                 Event::PieceSpawned { new_in_queue } => {
                     self.next_queue.pop_front();
-                    self.next_queue.push_back(new_in_queue);
+                    self.next_queue.push_back(*new_in_queue);
                 }
                 Event::PieceFalling(piece, ghost) => {
-                    self.state = State::Falling(piece, ghost);
+                    self.state = State::Falling(*piece, *ghost);
                 }
                 Event::EndOfLineClearDelay => {
                     self.state = State::Delay;
@@ -119,7 +120,7 @@ impl BoardDrawState {
                 }
                 Event::GarbageAdded(columns) => {
                     self.board.truncate(40 - columns.len());
-                    for col in columns {
+                    for &col in columns {
                         let mut row = *ColoredRow::EMPTY;
                         for x in 0..10 {
                             if x != col {
@@ -311,19 +312,6 @@ fn tile(x: i32, y: i32) -> Rect {
         h: 83.0/1024.0,
         w: 83.0/1024.0
     }
-}
-
-pub fn text(s: impl Into<TextFragment>, ts: f32, width: f32) -> Text {
-    let mut text = Text::new(s);
-    text.set_font(Default::default(), Scale::uniform(ts*0.75));
-    if width != 0.0 {
-        if width < 0.0 {
-            text.set_bounds([-width, 1230.0], Align::Right);
-        } else {
-            text.set_bounds([width, 1230.0], Align::Center);
-        }
-    }
-    text
 }
 
 fn draw_piece_preview(ctx: &mut Context, img: &Image, x: i32, y: i32, piece: Piece) -> GameResult {
