@@ -231,7 +231,7 @@ fn run<E: Evaluator>(
     );
 
     let mut do_move = false;
-    const THINK_OUTSIDE_SPAWN_DELAY: bool = true;
+    const THINK_OUTSIDE_SPAWN_DELAY: bool = false;
     let mut think = THINK_OUTSIDE_SPAWN_DELAY;
     loop {
         let result = if think {

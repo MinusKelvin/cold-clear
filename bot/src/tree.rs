@@ -258,11 +258,19 @@ impl TreeKind {
             TreeKind::Unknown(speculation) => {
                 let mut sum = 0;
                 let mut n = 0;
+                let mut deaths = 0;
                 for children in speculation.iter().filter_map(|(_, c)| c.as_ref()) {
-                    n += 1;
-                    sum += children.first().map(|c| c.tree.evaluation).unwrap_or(-100);
+                    match children.first() {
+                        Some(c) => {
+                            n += 1;
+                            sum += c.tree.evaluation;
+                        }
+                        None => deaths += 1,
+                    }
                 }
-                sum / n
+                let avg_value = sum / n;
+                sum += (avg_value - 1000) * deaths;
+                sum / (n + deaths)
             }
         }
     }
