@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 
 mod common;
 mod local;
+mod input;
 mod interface;
 mod replay;
 
@@ -119,7 +120,11 @@ fn main() {
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         (None, None) => {
-            let mut local_game = LocalGame::new(&mut resources);
+            let mut local_game = LocalGame::new(
+                &mut resources,
+                Box::new(|pieces| Box::new(input::Keyboard::default())),
+                Box::new(|pieces| Box::new(bot::BotController::new(pieces, false)))
+            );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }
     }

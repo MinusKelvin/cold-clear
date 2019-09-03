@@ -7,18 +7,23 @@ use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::{ gamepad, GamepadId };
 use ggez::event::{ Button, Axis };
-use libtetris::Battle;
+use libtetris::{ Battle, Piece };
 use crate::interface::{ Gui, text };
 use crate::Resources;
 use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
 use rand::prelude::*;
+use crate::input::InputSource;
+
+type InputFactory = dyn Fn(Vec<Piece>) -> Box<dyn InputSource>;
 
 pub struct LocalGame<'a> {
     gui: Gui,
     battle: Battle,
-    p1_bot: bot::BotController,
-    p2_bot: bot::BotController,
+    p1_input_factory: Box<InputFactory>,
+    p2_input_factory: Box<InputFactory>,
+    p1_input: Box<dyn InputSource>,
+    p2_input: Box<dyn InputSource>,
     p1_wins: u32,
     p2_wins: u32,
     state: State,
@@ -32,11 +37,13 @@ enum State {
 }
 
 impl<'a> LocalGame<'a> {
-    pub fn new(resources: &'a mut Resources) -> Self {
+    pub fn new(resources: &'a mut Resources, p1: Box<InputFactory>, p2: Box<InputFactory>) -> Self {
         let battle = Battle::new(Default::default(), thread_rng().gen(), thread_rng().gen());
         LocalGame {
-            p1_bot: bot::BotController::new(battle.player_1.board.next_queue(), false),
-            p2_bot: bot::BotController::new(battle.player_2.board.next_queue(), true),
+            p1_input: p1(battle.player_1.board.next_queue().collect()),
+            p2_input: p2(battle.player_2.board.next_queue().collect()),
+            p1_input_factory: p1,
+            p2_input_factory: p2,
             gui: Gui::new(&battle),
             battle,
             p1_wins: 0,
@@ -69,11 +76,11 @@ impl EventHandler for LocalGame<'_> {
                     );
                     self.gui = Gui::new(&self.battle);
 
-                    self.p1_bot = bot::BotController::new(
-                        self.battle.player_1.board.next_queue(), false
+                    self.p1_input = (self.p1_input_factory)(
+                        self.battle.player_1.board.next_queue().collect()
                     );
-                    self.p2_bot = bot::BotController::new(
-                        self.battle.player_2.board.next_queue(), true
+                    self.p2_input = (self.p2_input_factory)(
+                        self.battle.player_2.board.next_queue().collect()
                     );
 
                     self.state = State::Starting(180);
@@ -95,18 +102,18 @@ impl EventHandler for LocalGame<'_> {
             };
 
             if do_update {
-                let p1_controller = self.p1_bot.controller();
-                let p2_controller = self.p2_bot.controller();
+                let p1_controller = self.p1_input.controller(ctx);
+                let p2_controller = self.p2_input.controller(ctx);
 
                 let mut update = self.battle.update(p1_controller, p2_controller);
 
-                update.player_1.info = self.p1_bot.update(
-                    &update.player_1.events, &self.battle.player_1.board
+                update.player_1.info = self.p1_input.update(
+                    &self.battle.player_1.board, &update.player_1.events
                 );
                 self.battle.replay.updates.back_mut().unwrap().1 = update.player_1.info.clone();
 
-                update.player_2.info = self.p2_bot.update(
-                    &update.player_2.events, &self.battle.player_2.board
+                update.player_2.info = self.p2_input.update(
+                    &self.battle.player_2.board, &update.player_2.events
                 );
                 self.battle.replay.updates.back_mut().unwrap().3 = update.player_2.info.clone();
 
