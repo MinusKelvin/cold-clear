@@ -7,7 +7,7 @@ use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::{ gamepad, GamepadId };
 use ggez::event::{ Button, Axis };
-use libtetris::{ Battle, Piece };
+use libtetris::{ Battle, Board };
 use crate::interface::{ Gui, text };
 use crate::Resources;
 use serde::{ Serialize, Deserialize };
@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 use rand::prelude::*;
 use crate::input::InputSource;
 
-type InputFactory = dyn Fn(Vec<Piece>) -> Box<dyn InputSource>;
+type InputFactory = dyn Fn(Board) -> Box<dyn InputSource>;
 
 pub struct LocalGame<'a> {
     gui: Gui,
@@ -40,8 +40,8 @@ impl<'a> LocalGame<'a> {
     pub fn new(resources: &'a mut Resources, p1: Box<InputFactory>, p2: Box<InputFactory>) -> Self {
         let battle = Battle::new(Default::default(), thread_rng().gen(), thread_rng().gen());
         LocalGame {
-            p1_input: p1(battle.player_1.board.next_queue().collect()),
-            p2_input: p2(battle.player_2.board.next_queue().collect()),
+            p1_input: p1(battle.player_1.board.to_compressed()),
+            p2_input: p2(battle.player_2.board.to_compressed()),
             p1_input_factory: p1,
             p2_input_factory: p2,
             gui: Gui::new(&battle),
@@ -77,10 +77,10 @@ impl EventHandler for LocalGame<'_> {
                     self.gui = Gui::new(&self.battle);
 
                     self.p1_input = (self.p1_input_factory)(
-                        self.battle.player_1.board.next_queue().collect()
+                        self.battle.player_1.board.to_compressed()
                     );
                     self.p2_input = (self.p2_input_factory)(
-                        self.battle.player_2.board.next_queue().collect()
+                        self.battle.player_2.board.to_compressed()
                     );
 
                     self.state = State::Starting(180);

@@ -1,15 +1,10 @@
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
 use libtetris::{ Board, LockResult, PlacementKind };
+use super::*;
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-pub struct Evaluation {
-    pub accumulated: i32,
-    pub transient: i32
-}
-
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
-pub struct BoardWeights {
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct NaiveEvaluator {
     pub back_to_back: i32,
     pub bumpiness: i32,
     pub bumpiness_sq: i32,
@@ -24,11 +19,8 @@ pub struct BoardWeights {
     pub covered_cells_sq: i32,
     pub tslot_present: i32,
     pub well_depth: i32,
-    pub max_well_depth: i32
-}
+    pub max_well_depth: i32,
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Default)]
-pub struct PlacementWeights {
     pub b2b_clear: i32,
     pub clear1: i32,
     pub clear2: i32,
@@ -44,128 +36,156 @@ pub struct PlacementWeights {
     pub soft_drop: i32
 }
 
-pub static mut TIME_TAKEN: std::time::Duration = std::time::Duration::from_secs(0);
-pub static mut BOARDS_EVALUATED: usize = 0;
+impl Default for NaiveEvaluator {
+    fn default() -> Self {
+        NaiveEvaluator {
+            back_to_back: 50,
+            bumpiness: -10,
+            bumpiness_sq: -5,
+            height: -40,
+            top_half: -150,
+            top_quarter: -500,
+            cavity_cells: -150,
+            cavity_cells_sq: -10,
+            overhang_cells: -50,
+            overhang_cells_sq: -10,
+            covered_cells: -10,
+            covered_cells_sq: -10,
+            tslot_present: 150,
+            well_depth: 50,
+            max_well_depth: 8,
 
-pub fn evaluate(
-    lock: &LockResult,
-    board: &Board,
-    board_weights: &BoardWeights,
-    placement_weights: &PlacementWeights,
-    soft_dropped: bool
-) -> Evaluation {
-    let t = std::time::Instant::now();
-
-    let mut transient_eval = 0;
-    let mut acc_eval = 0;
-
-    if lock.perfect_clear {
-        acc_eval += placement_weights.perfect_clear;
-    } else {
-        if lock.b2b {
-            acc_eval += placement_weights.b2b_clear;
-        }
-        if let Some(combo) = lock.combo {
-            let combo = combo.min(11) as usize;
-            acc_eval += placement_weights.combo_table[combo];
-        }
-        match lock.placement_kind {
-            PlacementKind::Clear1 => {
-                acc_eval += placement_weights.clear1;
-            }
-            PlacementKind::Clear2 => {
-                acc_eval += placement_weights.clear2;
-            }
-            PlacementKind::Clear3 => {
-                acc_eval += placement_weights.clear3;
-            }
-            PlacementKind::Clear4 => {
-                acc_eval += placement_weights.clear4;
-            }
-            PlacementKind::Tspin1 => {
-                acc_eval += placement_weights.tspin1;
-            }
-            PlacementKind::Tspin2 => {
-                acc_eval += placement_weights.tspin2;
-            }
-            PlacementKind::Tspin3 => {
-                acc_eval += placement_weights.tspin3;
-            }
-            PlacementKind::MiniTspin1 => {
-                acc_eval += placement_weights.mini_tspin1;
-            }
-            PlacementKind::MiniTspin2 => {
-                acc_eval += placement_weights.mini_tspin2;
-            }
-            _ => {}
+            soft_drop: -10,
+            b2b_clear: 100,
+            clear1: -150,
+            clear2: -100,
+            clear3: -50,
+            clear4: 400,
+            tspin1: 130,
+            tspin2: 400,
+            tspin3: 600,
+            mini_tspin1: 0,
+            mini_tspin2: 100,
+            perfect_clear: 1000,
+            combo_table: libtetris::COMBO_GARBAGE.iter()
+                .map(|&v| v as i32 * 100)
+                .collect::<ArrayVec<[_; 12]>>()
+                .into_inner()
+                .unwrap()
         }
     }
+}
 
-    if soft_dropped {
-        acc_eval += placement_weights.soft_drop;
-    }
+impl Evaluator for NaiveEvaluator {
+    const NAME: &'static str = "Naive";
 
-    if board.b2b_bonus {
-        transient_eval += board_weights.back_to_back;
-    }
+    fn evaluate(&mut self, lock: &LockResult, board: &Board, soft_dropped: bool) -> Evaluation {
+        let mut transient_eval = 0;
+        let mut acc_eval = 0;
 
-    let highest_point = *board.column_heights().iter().max().unwrap() as i32;
-    transient_eval += board_weights.height * highest_point;
-    transient_eval += board_weights.top_half * (highest_point - 10).max(0);
-    transient_eval += board_weights.top_quarter * (highest_point - 15).max(0);
-
-    let mut well = 0;
-    for x in 1..10 {
-        if board.column_heights()[x] < board.column_heights()[well] {
-            well = x;
-        }
-    }
-
-    let mut depth = 0;
-    'yloop: for y in board.column_heights()[well] .. 20 {
-        for x in 0..10 {
-            if x as usize != well && !board.occupied(x, y) {
-                break 'yloop;
+        if lock.perfect_clear {
+            acc_eval += self.perfect_clear;
+        } else {
+            if lock.b2b {
+                acc_eval += self.b2b_clear;
             }
-            depth += 1;
+            if let Some(combo) = lock.combo {
+                let combo = combo.min(11) as usize;
+                acc_eval += self.combo_table[combo];
+            }
+            match lock.placement_kind {
+                PlacementKind::Clear1 => {
+                    acc_eval += self.clear1;
+                }
+                PlacementKind::Clear2 => {
+                    acc_eval += self.clear2;
+                }
+                PlacementKind::Clear3 => {
+                    acc_eval += self.clear3;
+                }
+                PlacementKind::Clear4 => {
+                    acc_eval += self.clear4;
+                }
+                PlacementKind::Tspin1 => {
+                    acc_eval += self.tspin1;
+                }
+                PlacementKind::Tspin2 => {
+                    acc_eval += self.tspin2;
+                }
+                PlacementKind::Tspin3 => {
+                    acc_eval += self.tspin3;
+                }
+                PlacementKind::MiniTspin1 => {
+                    acc_eval += self.mini_tspin1;
+                }
+                PlacementKind::MiniTspin2 => {
+                    acc_eval += self.mini_tspin2;
+                }
+                _ => {}
+            }
         }
-    }
-    let depth = depth.min(board_weights.max_well_depth);
-    transient_eval += board_weights.well_depth * depth;
 
-    if board_weights.bumpiness | board_weights.bumpiness_sq != 0 {
-        let (bump, bump_sq) = bumpiness(board, well);
-        transient_eval += bump * board_weights.bumpiness;
-        transient_eval += bump_sq * board_weights.bumpiness_sq;
-    }
+        if soft_dropped {
+            acc_eval += self.soft_drop;
+        }
 
-    if board_weights.cavity_cells | board_weights.cavity_cells_sq |
-            board_weights.overhang_cells | board_weights.overhang_cells_sq != 0 {
-        let (cavity_cells, overhang_cells) = cavities_and_overhangs(board);
-        transient_eval += board_weights.cavity_cells * cavity_cells;
-        transient_eval += board_weights.cavity_cells_sq * cavity_cells * cavity_cells;
-        transient_eval += board_weights.overhang_cells * overhang_cells;
-        transient_eval += board_weights.overhang_cells_sq * overhang_cells * overhang_cells;
-    }
+        if board.b2b_bonus {
+            transient_eval += self.back_to_back;
+        }
 
-    if board_weights.covered_cells | board_weights.covered_cells_sq != 0 {
-        let (covered_cells, covered_cells_sq) = covered_cells(board);
-        transient_eval += board_weights.covered_cells * covered_cells;
-        transient_eval += board_weights.covered_cells_sq * covered_cells_sq;
-    }
+        let highest_point = *board.column_heights().iter().max().unwrap() as i32;
+        transient_eval += self.height * highest_point;
+        transient_eval += self.top_half * (highest_point - 10).max(0);
+        transient_eval += self.top_quarter * (highest_point - 15).max(0);
 
-    if tslot(&board) {
-        transient_eval += board_weights.tslot_present;
-    }
+        let mut well = 0;
+        for x in 1..10 {
+            if board.column_heights()[x] < board.column_heights()[well] {
+                well = x;
+            }
+        }
 
-    unsafe {
-        TIME_TAKEN += t.elapsed();
-        BOARDS_EVALUATED += 1;
-    }
+        let mut depth = 0;
+        'yloop: for y in board.column_heights()[well] .. 20 {
+            for x in 0..10 {
+                if x as usize != well && !board.occupied(x, y) {
+                    break 'yloop;
+                }
+                depth += 1;
+            }
+        }
+        let depth = depth.min(self.max_well_depth);
+        transient_eval += self.well_depth * depth;
 
-    Evaluation {
-        accumulated: acc_eval,
-        transient: transient_eval
+        if self.bumpiness | self.bumpiness_sq != 0 {
+            let (bump, bump_sq) = bumpiness(board, well);
+            transient_eval += bump * self.bumpiness;
+            transient_eval += bump_sq * self.bumpiness_sq;
+        }
+
+        if self.cavity_cells | self.cavity_cells_sq |
+                self.overhang_cells | self.overhang_cells_sq != 0 {
+            let (cavity_cells, overhang_cells) = cavities_and_overhangs(board);
+            transient_eval += self.cavity_cells * cavity_cells;
+            transient_eval += self.cavity_cells_sq * cavity_cells * cavity_cells;
+            transient_eval += self.overhang_cells * overhang_cells;
+            transient_eval += self.overhang_cells_sq * overhang_cells * overhang_cells;
+        }
+
+        if self.covered_cells | self.covered_cells_sq != 0 {
+            let (covered_cells, covered_cells_sq) = covered_cells(board);
+            transient_eval += self.covered_cells * covered_cells;
+            transient_eval += self.covered_cells_sq * covered_cells_sq;
+        }
+
+        if tslot(&board) {
+            transient_eval += self.tslot_present;
+        }
+
+        Evaluation {
+            accumulated: acc_eval,
+            transient: transient_eval
+        }
     }
 }
 

@@ -27,7 +27,7 @@ fn mirror(piece: Piece) -> Piece {
     }
 }
 
-pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
+pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board: Board) {
     let mut misa = Command::new("./tetris_ai")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -51,14 +51,11 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         (name.to_owned(), None)
     ])).ok();
 
-    let mut queue = VecDeque::new();
-    let mut board = Board::new();
-
     'botloop: loop {
         match recv.recv() {
             Err(_) => break,
             Ok(BotMsg::NewPiece(piece)) => {
-                queue.push_back(piece);
+                board.add_next_piece(piece);
             }
             Ok(BotMsg::Reset(b)) => {
                 board = b;
@@ -82,7 +79,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
 
                 writeln!(misa_in, "update _ combo {}", board.combo).unwrap();
 
-                let next_piece = queue.pop_front().unwrap();
+                let next_piece = board.advance_queue().unwrap();
                 writeln!(
                     misa_in,
                     "update _ this_piece_type {}",
@@ -92,7 +89,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                 if let Some(hold) = board.hold_piece() {
                     next.push(mirror(hold).to_char());
                 }
-                for &p in &queue {
+                for p in board.next_queue() {
                     next.push(mirror(p).to_char());
                     next.push(',');
                 }
@@ -107,7 +104,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                         )
                     );
 
-                let hold_piece = board.hold_piece().unwrap_or(*queue.front().unwrap());
+                let hold_piece = board.hold_piece().unwrap_or(board.get_next_piece().unwrap());
                 let hold_moves = FallingPiece::spawn(hold_piece, &board)
                     .map(|p| crate::moves::find_moves(
                             &board, p, crate::moves::MovementMode::ZeroGComplete
@@ -192,7 +189,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                             continue
                         }
                         if board.hold_piece().is_none() {
-                            queue.pop_front();
+                            b.advance_queue();
                         }
                         board = b;
                         send.send(BotResult::Move {

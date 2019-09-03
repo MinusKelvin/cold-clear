@@ -12,6 +12,7 @@ mod tree;
 use libtetris::*;
 use crate::tree::Tree;
 use crate::moves::Input;
+use crate::evaluation::Evaluator;
 
 pub struct BotController {
     executing: Option<(bool, VecDeque<moves::Input>, FallingPiece)>,
@@ -22,20 +23,17 @@ pub struct BotController {
 }
 
 impl BotController {
-    pub fn new(queue: impl IntoIterator<Item=Piece>, use_misa: bool) -> Self {
+    pub fn new(initial_board: Board, use_misa: bool) -> Self {
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
         std::thread::spawn(move || {
             if use_misa {
-                misa::glue(bot_recv, bot_send);
+                misa::glue(bot_recv, bot_send, initial_board);
             } else {
-                run(bot_recv, bot_send);
+                use crate::evaluation::*;
+                run(bot_recv, bot_send, initial_board, NaiveEvaluator::default());
             }
         });
-
-        for piece in queue {
-            send.send(BotMsg::NewPiece(piece)).unwrap();
-        }
 
         BotController {
             executing: None,
@@ -212,57 +210,28 @@ enum BotResult {
     BotInfo(Info)
 }
 
-fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
-    let transient_weights = evaluation::BoardWeights {
-        back_to_back: 50,
-        bumpiness: -10,
-        bumpiness_sq: -5,
-        height: -40,
-        top_half: -150,
-        top_quarter: -500,
-        cavity_cells: -150,
-        cavity_cells_sq: -10,
-        overhang_cells: -50,
-        overhang_cells_sq: -10,
-        covered_cells: -10,
-        covered_cells_sq: -10,
-        tslot_present: 150,
-        well_depth: 50,
-        max_well_depth: 8
-    };
-
-    let acc_weights = evaluation::PlacementWeights {
-        soft_drop: -10,
-        b2b_clear: 100,
-        clear1: -150,
-        clear2: -100,
-        clear3: -50,
-        clear4: 400,
-        tspin1: 130,
-        tspin2: 400,
-        tspin3: 600,
-        mini_tspin1: 0,
-        mini_tspin2: 100,
-        perfect_clear: 1000,
-        combo_table: libtetris::COMBO_GARBAGE.iter()
-            .map(|&v| v as i32 * 100)
-            .collect::<ArrayVec<[_; 12]>>()
-            .into_inner()
-            .unwrap()
-    };
-
+fn run<E: Evaluator>(
+    recv: Receiver<BotMsg>,
+    send: Sender<BotResult>,
+    board: Board,
+    mut evaluator: E
+) {
     const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroG;
 
+    send.send(BotResult::BotInfo(vec![
+        ("Cold Clear".to_owned(), None),
+        (E::NAME.to_owned(), None)
+    ])).ok();
+
     let mut tree = Tree::new(
-        Board::new(),
+        board,
         &Default::default(),
         false,
-        &transient_weights,
-        &acc_weights
+        &mut evaluator
     );
 
     let mut do_move = false;
-    const THINK_OUTSIDE_SPAWN_DELAY: bool = false;
+    const THINK_OUTSIDE_SPAWN_DELAY: bool = true;
     let mut think = THINK_OUTSIDE_SPAWN_DELAY;
     loop {
         let result = if think {
@@ -273,14 +242,16 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
         match result {
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => return,
-            Ok(BotMsg::NewPiece(piece)) => tree.add_next_piece(piece),
+            Ok(BotMsg::NewPiece(piece)) => if tree.add_next_piece(piece) {
+                // Only death is possible
+                break
+            }
             Ok(BotMsg::Reset(board)) => {
                 tree = Tree::new(
                     board,
                     &Default::default(),
                     false,
-                    &transient_weights,
-                    &acc_weights
+                    &mut evaluator
                 );
             }
             Ok(BotMsg::NextMove) => do_move = true,
@@ -304,7 +275,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
                     }
                     if send.send(BotResult::BotInfo(vec![
                         ("Cold Clear".to_owned(), None),
-                        ("'Naive'".to_owned(), None),
+                        (E::NAME.to_owned(), None),
                         ("Depth".to_owned(), Some(format!("{}", child.tree.depth))),
                         ("Evaluation".to_owned(), Some("".to_owned())),
                         ("".to_owned(), Some(format!("{}", child.tree.evaluation))),
@@ -319,7 +290,7 @@ fn run(recv: Receiver<BotMsg>, send: Sender<BotResult>) {
             }
         }
 
-        if think && tree.extend(MOVEMENT_MODE, &transient_weights, &acc_weights) {
+        if think && tree.extend(MOVEMENT_MODE, &mut evaluator) {
             break
         }
     }

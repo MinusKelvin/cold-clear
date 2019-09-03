@@ -122,8 +122,8 @@ fn main() {
         (None, None) => {
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(|pieces| Box::new(input::Keyboard::default())),
-                Box::new(|pieces| Box::new(bot::BotController::new(pieces, false)))
+                Box::new(|board| Box::new(bot::BotController::new(board, false))),
+                Box::new(|board| Box::new(bot::BotController::new(board, false)))
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }
