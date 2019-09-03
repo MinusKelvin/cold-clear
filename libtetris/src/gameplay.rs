@@ -92,7 +92,10 @@ impl Game {
         self.used.hard_drop = !self.prev.hard_drop && current.hard_drop;
         self.used.soft_drop = current.soft_drop;
 
-        if current.left != current.right && self.prev.left == current.left {
+        let switched_left_right = (current.left != self.prev.left) &&
+            (current.right != self.prev.right);
+
+        if current.left != current.right && !switched_left_right {
             if self.used.left || self.used.right {
                 // While movement is buffered, don't let the time
                 // until the next shift fall below the auto-repeat rate.
@@ -111,6 +114,15 @@ impl Game {
         } else {
             // Reset delayed auto shift
             self.das_delay = self.config.delayed_auto_shift;
+            self.used.left = false;
+            self.used.right = false;
+
+            // Redo button presses
+            if current.left && !self.prev.left {
+                self.used.left = true;
+            } else if current.right && !self.prev.right {
+                self.used.right = true;
+            }
         }
 
         self.prev = current;
@@ -247,7 +259,8 @@ impl Game {
                     p.sonic_drop(&self.board);
                     let low_y = p.cells().into_iter().map(|(_,y)| y).min().unwrap();
                     if low_y >= falling.lowest_y {
-                        let f = *falling;
+                        let mut f = *falling;
+                        f.piece = p;
                         self.lock(f, &mut events, rng, None);
                         return events;
                     }
