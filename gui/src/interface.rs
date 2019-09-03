@@ -2,7 +2,7 @@ use crate::common::BoardDrawState;
 use crate::Resources;
 use ggez::{ Context, GameResult };
 use ggez::audio::SoundSource;
-use ggez::graphics::{ self, Rect, DrawParam, FilterMode, Text, TextFragment, Align, Scale };
+use ggez::graphics::*;
 use libtetris::{ UpdateResult, Battle };
 
 pub struct Gui {
@@ -66,27 +66,39 @@ impl Gui {
     pub fn draw(
         &mut self, ctx: &mut Context, res: &mut Resources, scale: f32, center: f32
     ) -> GameResult<()> {
-        graphics::push_transform(ctx, Some(DrawParam::new()
+        push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
             .dest([center - 17.0 * scale, 0.0])
             .to_matrix()));
-        graphics::apply_transformations(ctx)?;
-        res.sprites.clear();
-        self.player_1_graphics.draw(ctx, &mut res.sprites, center - 17.0*scale, scale)?;
-        graphics::draw(ctx, &res.sprites, DrawParam::default())?;
-        graphics::pop_transform(ctx);
+        apply_transformations(ctx)?;
 
-        graphics::push_transform(ctx, Some(DrawParam::new()
+        res.sprites.clear();
+        let mut mesh = MeshBuilder::new();
+        self.player_1_graphics.draw(ctx, &mut res.sprites, &mut mesh, center - 17.0*scale, scale)?;
+        draw(ctx, &res.sprites, DrawParam::default())?;
+        if let Ok(mesh) = mesh.build(ctx) {
+            draw(ctx, &mesh, DrawParam::default())?;
+        }
+
+        pop_transform(ctx);
+
+        push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
             .dest([center + scale, 0.0])
             .to_matrix()));
-        graphics::apply_transformations(ctx)?;
-        res.sprites.clear();
-        self.player_2_graphics.draw(ctx, &mut res.sprites, center+scale, scale)?;
-        graphics::draw(ctx, &res.sprites, DrawParam::default())?;
-        graphics::pop_transform(ctx);
+        apply_transformations(ctx)?;
 
-        graphics::queue_text(
+        let mut mesh = MeshBuilder::new();
+        res.sprites.clear();
+        self.player_2_graphics.draw(ctx, &mut res.sprites, &mut mesh, center+scale, scale)?;
+        draw(ctx, &res.sprites, DrawParam::default())?;
+        if let Ok(mesh) = mesh.build(ctx) {
+            draw(ctx, &mesh, DrawParam::default())?;
+        }
+
+        pop_transform(ctx);
+
+        queue_text(
             ctx,
             &text(
                 format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
@@ -96,13 +108,13 @@ impl Gui {
             None
         );
         if self.multiplier != 1.0 {
-            graphics::queue_text(
+            queue_text(
                 ctx,
                 &text("Margin Time", scale*1.0, 6.0*scale),
                 [center-3.0*scale, 20.1*scale],
                 None
             );
-            graphics::queue_text(
+            queue_text(
                 ctx,
                 &text(format!("Attack x{:.1}", self.multiplier), scale*1.0, 6.0*scale),
                 [center-3.0*scale, 21.0*scale],
@@ -110,8 +122,8 @@ impl Gui {
             );
         }
 
-        graphics::apply_transformations(ctx)?;
-        graphics::draw_queued_text(
+        apply_transformations(ctx)?;
+        draw_queued_text(
             ctx, DrawParam::new(), None, FilterMode::Linear
         )?;
 
@@ -121,13 +133,13 @@ impl Gui {
 
 /// Returns (scale, center)
 pub fn setup_graphics(ctx: &mut Context) -> GameResult<(f32, f32)> {
-    graphics::clear(ctx, graphics::BLACK);
-    let dpi = graphics::window(ctx).get_hidpi_factor() as f32;
-    let size = graphics::drawable_size(ctx);
+    clear(ctx, BLACK);
+    let dpi = window(ctx).get_hidpi_factor() as f32;
+    let size = drawable_size(ctx);
     let size = (size.0 * dpi, size.1 * dpi);
     let center = size.0 / 2.0;
     let scale = size.1 / 23.0;
-    graphics::set_screen_coordinates(ctx, Rect {
+    set_screen_coordinates(ctx, Rect {
         x: 0.0, y: 0.0, w: size.0, h: size.1
     })?;
 

@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use libtetris::*;
 use arrayvec::ArrayVec;
 use crate::interface::text;
+use rand::prelude::*;
 
 pub struct BoardDrawState {
     board: ArrayVec<[ColoredRow; 40]>,
@@ -18,7 +19,8 @@ pub struct BoardDrawState {
     combo_splash: Option<(u32, u32)>,
     back_to_back_splash: Option<u32>,
     clear_splash: Option<(&'static str, u32)>,
-    info_lines: Vec<(String, Option<String>)>
+    info_lines: Vec<(String, Option<String>)>,
+    hard_drop_particles: Option<(u32, Vec<(f32, f32, f32)>)>
 }
 
 enum State {
@@ -41,6 +43,7 @@ impl BoardDrawState {
             combo_splash: None,
             back_to_back_splash: None,
             clear_splash: None,
+            hard_drop_particles: None,
             info_lines: vec![]
         }
     }
@@ -75,10 +78,36 @@ impl BoardDrawState {
                 *timer -= 1;
             }
         }
+        if let Some((timer, particles)) = &mut self.hard_drop_particles {
+            if *timer == 0 {
+                self.hard_drop_particles = None;
+            } else {
+                *timer -= 1;
+                let t = *timer as f32 / 10.0;
+                for (x, y, factor) in particles {
+                    *x += *factor * t / 5.0;
+                    *y += t*t * (1.0 - factor.abs());
+                }
+            }
+        }
         for event in &update.events {
             match event {
-                Event::PiecePlaced { piece, locked, .. } => {
+                Event::PiecePlaced { piece, locked, hard_drop_distance } => {
                     self.statistics.update(&locked);
+                    if hard_drop_distance.is_some() {
+                        let mut particles = vec![];
+                        for (x, y) in piece.cells() {
+                            if y == 0 || self.board[y as usize - 1].get(x as usize) {
+                                for i in 0..5 {
+                                    let r: f32 = thread_rng().gen();
+                                    particles.push((x as f32+r, y as f32, r-0.5));
+                                    let r = i as f32 / 4.0;
+                                    particles.push((x as f32+r, y as f32, r-0.5));
+                                }
+                            }
+                        }
+                        self.hard_drop_particles = Some((5, particles));
+                    }
                     for (x, y) in piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
@@ -138,7 +167,12 @@ impl BoardDrawState {
     }
 
     pub fn draw(
-        &self, ctx: &mut Context, sprites: &mut SpriteBatch, text_x: f32, scale: f32
+        &self,
+        ctx: &mut Context,
+        sprites: &mut SpriteBatch,
+        particle_mesh: &mut MeshBuilder,
+        text_x: f32,
+        scale: f32
     ) -> GameResult {
         for y in 0..21 {
             for x in 0..10 {
@@ -154,6 +188,17 @@ impl BoardDrawState {
                         }
                     })
                 ));
+            }
+        }
+        if let Some((timer, particles)) = &self.hard_drop_particles {
+            for &(x, y, factor) in particles {
+                particle_mesh.circle(
+                    DrawMode::Fill(Default::default()),
+                    [x+3.0,20.25-y],
+                    (factor/20.0+0.05) * (*timer + 1) as f32 / 5.0,
+                    0.1/scale,
+                    WHITE
+                );
             }
         }
         match self.state {
@@ -189,10 +234,10 @@ impl BoardDrawState {
             _ => {}
         }
         if let Some(piece) = self.hold_piece {
-            draw_piece_preview(ctx, sprites, 0, 18, piece);
+            draw_piece_preview(sprites, 0, 18, piece);
         }
         for (i, &piece) in self.next_queue.iter().enumerate() {
-            draw_piece_preview(ctx, sprites, 13, 18 - (i*2) as i32, piece);
+            draw_piece_preview(sprites, 13, 18 - (i*2) as i32, piece);
         }
         if self.garbage_queue > 0 {
             let mesh = Mesh::new_rectangle(
@@ -317,7 +362,7 @@ fn tile(x: i32, y: i32) -> Rect {
     }
 }
 
-fn draw_piece_preview(ctx: &mut Context, sprites: &mut SpriteBatch, x: i32, y: i32, piece: Piece) {
+fn draw_piece_preview(sprites: &mut SpriteBatch, x: i32, y: i32, piece: Piece) {
     let ty = match piece {
         Piece::I => 1,
         Piece::O => 2,
