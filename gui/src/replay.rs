@@ -20,7 +20,9 @@ impl<'a> ReplayGame<'a> {
         let replay: Replay = serde_json::from_reader(
             std::io::BufReader::new(std::fs::File::open(file).unwrap())
         ).unwrap();
-        let battle = Battle::new(replay.config, replay.p1_seed, replay.p2_seed);
+        let battle = Battle::new(
+            replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
+        );
         ReplayGame {
             gui: Gui::new(&battle),
             battle,

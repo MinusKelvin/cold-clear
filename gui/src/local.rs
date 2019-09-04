@@ -1,17 +1,10 @@
 use ggez::event::{ self, EventHandler };
 use ggez::{ Context, GameResult };
-use ggez::graphics::{ self, Image, DrawParam, Rect, FilterMode, Color };
-use ggez::audio::{ self, SoundSource };
+use ggez::graphics;
 use ggez::timer;
-use ggez::graphics::spritebatch::SpriteBatch;
-use ggez::input::keyboard::{ KeyCode, is_key_pressed };
-use ggez::input::gamepad::{ gamepad, GamepadId };
-use ggez::event::{ Button, Axis };
 use libtetris::{ Battle, Board };
 use crate::interface::{ Gui, text };
 use crate::Resources;
-use serde::{ Serialize, Deserialize };
-use std::collections::VecDeque;
 use rand::prelude::*;
 use crate::input::InputSource;
 
@@ -38,7 +31,9 @@ enum State {
 
 impl<'a> LocalGame<'a> {
     pub fn new(resources: &'a mut Resources, p1: Box<InputFactory>, p2: Box<InputFactory>) -> Self {
-        let battle = Battle::new(Default::default(), thread_rng().gen(), thread_rng().gen());
+        let battle = Battle::new(
+            Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+        );
         LocalGame {
             p1_input: p1(battle.player_1.board.to_compressed()),
             p2_input: p2(battle.player_2.board.to_compressed()),
@@ -72,7 +67,8 @@ impl EventHandler for LocalGame<'_> {
                     while timer::check_update_time(ctx, 60) {}
 
                     self.battle = Battle::new(
-                        Default::default(), thread_rng().gen(), thread_rng().gen()
+                        Default::default(),
+                        thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
                     );
                     self.gui = Gui::new(&self.battle);
 
