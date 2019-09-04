@@ -77,7 +77,9 @@ impl Default for NaiveEvaluator {
 }
 
 impl Evaluator for NaiveEvaluator {
-    const NAME: &'static str = "Naive";
+    fn info(&self) -> Info {
+        vec![("Naive".to_string(), None)]
+    }
 
     fn evaluate(&mut self, lock: &LockResult, board: &Board, soft_dropped: bool) -> Evaluation {
         let mut transient_eval = 0;

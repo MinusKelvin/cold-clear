@@ -210,18 +210,19 @@ enum BotResult {
     BotInfo(Info)
 }
 
-fn run<E: Evaluator>(
+fn run(
     recv: Receiver<BotMsg>,
     send: Sender<BotResult>,
     board: Board,
-    mut evaluator: E
+    mut evaluator: impl Evaluator
 ) {
     const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroG;
 
-    send.send(BotResult::BotInfo(vec![
-        ("Cold Clear".to_owned(), None),
-        (E::NAME.to_owned(), None)
-    ])).ok();
+    send.send(BotResult::BotInfo({
+        let mut info = evaluator.info();
+        info.insert(0, ("Cold Clear".to_string(), None));
+        info
+    })).ok();
 
     let mut tree = Tree::new(
         board,
@@ -273,15 +274,16 @@ fn run<E: Evaluator>(
                     }).is_err() {
                         return
                     }
-                    if send.send(BotResult::BotInfo(vec![
-                        ("Cold Clear".to_owned(), None),
-                        (E::NAME.to_owned(), None),
-                        ("Depth".to_owned(), Some(format!("{}", child.tree.depth))),
-                        ("Evaluation".to_owned(), Some("".to_owned())),
-                        ("".to_owned(), Some(format!("{}", child.tree.evaluation))),
-                        ("Nodes".to_owned(), Some("".to_owned())),
-                        ("".to_owned(), Some(format!("{}", moves_considered))),
-                    ])).is_err() {
+                    if send.send(BotResult::BotInfo({
+                        let mut info = evaluator.info();
+                        info.insert(0, ("Cold Clear".to_owned(), None));
+                        info.push(("Depth".to_owned(), Some(format!("{}", child.tree.depth))));
+                        info.push(("Evaluation".to_owned(), Some("".to_owned())));
+                        info.push(("".to_owned(), Some(format!("{}", child.tree.evaluation))));
+                        info.push(("Nodes".to_owned(), Some("".to_owned())));
+                        info.push(("".to_owned(), Some(format!("{}", moves_considered))));
+                        info
+                    })).is_err() {
                         return
                     }
                     tree = child.tree;

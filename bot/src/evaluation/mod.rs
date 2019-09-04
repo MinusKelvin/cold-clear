@@ -1,4 +1,9 @@
-use libtetris::{ LockResult, Board };
+use libtetris::{ LockResult, Board, Info };
+
+mod misalike;
+pub use self::misalike::MisalikeEvaluator;
+mod naive;
+pub use self::naive::NaiveEvaluator;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Evaluation {
@@ -7,10 +12,6 @@ pub struct Evaluation {
 }
 
 pub trait Evaluator {
-    const NAME: &'static str;
-
+    fn info(&self) -> Info;
     fn evaluate(&mut self, lock: &LockResult, board: &Board, soft_dropped: bool) -> Evaluation;
 }
-
-mod naive;
-pub use self::naive::NaiveEvaluator;
