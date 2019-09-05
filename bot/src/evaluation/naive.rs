@@ -18,6 +18,7 @@ pub struct NaiveEvaluator {
     pub covered_cells: i32,
     pub covered_cells_sq: i32,
     pub tslot_present: i32,
+    pub tst_slot_present: i32,
     pub well_depth: i32,
     pub max_well_depth: i32,
 
@@ -52,6 +53,8 @@ impl Default for NaiveEvaluator {
             covered_cells: -10,
             covered_cells_sq: -10,
             tslot_present: 150,
+            // tst slots look *really* bad to other heuristics
+            tst_slot_present: 800,
             well_depth: 50,
             max_well_depth: 8,
 
@@ -180,8 +183,12 @@ impl Evaluator for NaiveEvaluator {
             transient_eval += self.covered_cells_sq * covered_cells_sq;
         }
 
-        if tslot(&board) {
+        if tslot(board) {
             transient_eval += self.tslot_present;
+        }
+
+        if tst_slot(board) {
+            transient_eval += self.tst_slot_present;
         }
 
         Evaluation {
@@ -330,4 +337,76 @@ fn tslot(board: &Board) -> bool {
         }
     }
     false
+}
+
+/// Evaluates the existence of a reachable TST slot on the board.
+fn tst_slot(board: &Board) -> bool {
+    for y in 0..20 {
+        for x in 0..10 {
+            // Require 4 vertical empty cells with one solid cell above
+            if board.occupied(x, y) || board.occupied(x, y+1) ||
+                    board.occupied(x, y+2) || board.occupied(x, y+3) ||
+                    !board.occupied(x, y+4){
+                continue
+            }
+
+            // Check for corners of T slot
+            let corners = board.occupied(x-1, y) as u32 +
+                    board.occupied(x+1, y) as u32 +
+                    board.occupied(x-1, y+2) as u32 +
+                    board.occupied(x+1, y+2) as u32;
+            if corners < 3 {
+                continue
+            }
+
+            // Check for left side TST
+            if !board.occupied(x-1, y+1) && board.occupied(x-1, y+2) && x >= 2 {
+                if board.column_heights()[x as usize - 1] > y+3 ||
+                        board.column_heights()[x as usize - 2] > y+3 {
+                    // TST slot not reachable
+                    continue
+                } else {
+                    return true
+                }
+            }
+
+            // Check for right side TST
+            if  !board.occupied(x+1, y+1) && board.occupied(x+1, y+2) && x < 8 {
+                if board.column_heights()[x as usize + 1] > y+3 ||
+                        board.column_heights()[x as usize + 2] > y+3 {
+                    // TST slot not reachable
+                    continue
+                } else {
+                    return true
+                }
+            }
+        }
+    }
+    false
+}
+
+#[test]
+fn tst_test() {
+    use libtetris::*;
+    let mut board = Board::new();
+    let locked = board.lock_piece(FallingPiece {
+        kind: PieceState(Piece::L, RotationState::East),
+        x: 0, y: 1, tspin: TspinStatus::None
+    });
+    board.lock_piece(FallingPiece {
+        kind: PieceState(Piece::J, RotationState::East),
+        x: 0, y: 4, tspin: TspinStatus::None
+    });
+    board.lock_piece(FallingPiece {
+        kind: PieceState(Piece::Z, RotationState::North),
+        x: 3, y: 0, tspin: TspinStatus::None
+    });
+    board.lock_piece(FallingPiece {
+        kind: PieceState(Piece::T, RotationState::South),
+        x: 3, y: 3, tspin: TspinStatus::None
+    });
+
+    println!("eval: {:?}", NaiveEvaluator::default().evaluate(&locked, &board, false));
+
+    assert!(tst_slot(&board));
 }
