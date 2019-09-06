@@ -17,8 +17,8 @@ pub struct NaiveEvaluator {
     pub overhang_cells_sq: i32,
     pub covered_cells: i32,
     pub covered_cells_sq: i32,
-    pub tslot_present: i32,
-    pub tst_slot_present: i32,
+    pub tslot: [i32; 3],
+    pub tst_slot: [i32; 4],
     pub well_depth: i32,
     pub max_well_depth: i32,
 
@@ -52,9 +52,9 @@ impl Default for NaiveEvaluator {
             overhang_cells_sq: -10,
             covered_cells: -10,
             covered_cells_sq: -10,
-            tslot_present: 150,
+            tslot: [50, 150, 200],
             // tst slots look *really* bad to other heuristics
-            tst_slot_present: 800,
+            tst_slot: [500, 600, 700, 900],
             well_depth: 50,
             max_well_depth: 8,
 
@@ -183,12 +183,12 @@ impl Evaluator for NaiveEvaluator {
             transient_eval += self.covered_cells_sq * covered_cells_sq;
         }
 
-        if tslot(board) {
-            transient_eval += self.tslot_present;
+        if let Some(filled) = tslot(board) {
+            transient_eval += self.tslot[filled];
         }
 
-        if tst_slot(board) {
-            transient_eval += self.tst_slot_present;
+        if let Some(filled) = tst_slot(board) {
+            transient_eval += self.tst_slot[filled];
         }
 
         Evaluation {
@@ -299,8 +299,8 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 }
 
 
-/// Evaluates the existence of a reachable T slot on the board.
-fn tslot(board: &Board) -> bool {
+/// Evaluates the existence and filledness of a reachable T slot on the board.
+fn tslot(board: &Board) -> Option<usize> {
     let mut left_t = libtetris::FallingPiece {
         kind: libtetris::PieceState(libtetris::Piece::T, libtetris::RotationState::West),
         tspin: libtetris::TspinStatus::None,
@@ -310,37 +310,46 @@ fn tslot(board: &Board) -> bool {
     let mut right_t = left_t;
     right_t.kind.1 = libtetris::RotationState::East;
 
-    for y in 1..20 {
+    let mut best = None;
+    for y in 0..20 {
         'l:
         for x in 1..9 {
             left_t.x = x;
-            left_t.y = y;
+            left_t.y = y+1;
             right_t.x = x;
-            right_t.y = y;
+            right_t.y = y+1;
             if board.obstructed(&left_t) || board.obstructed(&right_t) {
                 continue
             }
-            if !board.occupied(x-1, y-1) || !board.occupied(x+1, y-1) {
+            if !board.occupied(x-1, y) || !board.occupied(x+1, y) {
                 continue
             }
-            if board.above_stack(&left_t) && board.occupied(x+1, y+1) ||
-                    board.above_stack(&right_t) && board.occupied(x-1, y+1) {
-                // for rx in 0..10 {
-                //     if rx < x-1 || rx > x+1 {
-                //         if !board.occupied(rx, y) || !board.occupied(rx, y-1) {
-                //             continue 'l
-                //         }
-                //     }
-                // }
-                return true
+            if board.above_stack(&left_t) && board.occupied(x+1, y+2) ||
+                    board.above_stack(&right_t) && board.occupied(x-1, y+2) {
+                let mut filled = 2;
+                for cy in y..y+2 {
+                    for rx in 0..10 {
+                        if rx < x-1 || rx > x+1 {
+                            if !board.occupied(rx, cy) {
+                                filled -= 1;
+                                break
+                            }
+                        }
+                    }
+                }
+                best = match best {
+                    Some(fill) => Some(filled.max(fill)),
+                    None => Some(filled)
+                };
             }
         }
     }
-    false
+    best
 }
 
-/// Evaluates the existence of a reachable TST slot on the board.
-fn tst_slot(board: &Board) -> bool {
+/// Evaluates the existence and filledness of a reachable TST slot on the board.
+fn tst_slot(board: &Board) -> Option<usize> {
+    let mut best = None;
     for y in 0..20 {
         for x in 0..10 {
             // Require 4 vertical empty cells with one solid cell above
@@ -359,14 +368,30 @@ fn tst_slot(board: &Board) -> bool {
                 continue
             }
 
+            // Check filledness
+            let mut filled = 0;
+            'fillcheckloop:
+            for cy in y..y+3 {
+                for rx in 0..10 {
+                    if rx < x-1 || rx > x+1 {
+                        if !board.occupied(rx, cy) {
+                            break 'fillcheckloop
+                        }
+                    }
+                }
+                filled += 1;
+            }
+
             // Check for left side TST
             if !board.occupied(x-1, y+1) && board.occupied(x-1, y+2) && x >= 2 {
                 if board.column_heights()[x as usize - 1] > y+3 ||
                         board.column_heights()[x as usize - 2] > y+3 {
                     // TST slot not reachable
-                    continue
                 } else {
-                    return true
+                    best = match best {
+                        Some(fill) => Some(filled.max(fill)),
+                        None => Some(filled)
+                    };
                 }
             }
 
@@ -375,38 +400,14 @@ fn tst_slot(board: &Board) -> bool {
                 if board.column_heights()[x as usize + 1] > y+3 ||
                         board.column_heights()[x as usize + 2] > y+3 {
                     // TST slot not reachable
-                    continue
                 } else {
-                    return true
+                    best = match best {
+                        Some(fill) => Some(filled.max(fill)),
+                        None => Some(filled)
+                    };
                 }
             }
         }
     }
-    false
-}
-
-#[test]
-fn tst_test() {
-    use libtetris::*;
-    let mut board = Board::new();
-    let locked = board.lock_piece(FallingPiece {
-        kind: PieceState(Piece::L, RotationState::East),
-        x: 0, y: 1, tspin: TspinStatus::None
-    });
-    board.lock_piece(FallingPiece {
-        kind: PieceState(Piece::J, RotationState::East),
-        x: 0, y: 4, tspin: TspinStatus::None
-    });
-    board.lock_piece(FallingPiece {
-        kind: PieceState(Piece::Z, RotationState::North),
-        x: 3, y: 0, tspin: TspinStatus::None
-    });
-    board.lock_piece(FallingPiece {
-        kind: PieceState(Piece::T, RotationState::South),
-        x: 3, y: 3, tspin: TspinStatus::None
-    });
-
-    println!("eval: {:?}", NaiveEvaluator::default().evaluate(&locked, &board, false));
-
-    assert!(tst_slot(&board));
+    best
 }

@@ -7,7 +7,10 @@ pub struct MisalikeEvaluator {
     pub in_row_transitions: i32,
 
     pub t_piece_in_hold: i32,
-    pub i_piece_in_hold: i32
+    pub i_piece_in_hold: i32,
+
+    pub open_hole: i32,
+    pub closed_hole: i32,
 }
 
 impl Evaluator for MisalikeEvaluator {
@@ -22,6 +25,8 @@ impl Evaluator for MisalikeEvaluator {
         // Context: We're trying to translate this function from MisaMino:
         // https://github.com/misakamm/MisaMino/blob/master/tetris_ai/tetris_ai.cpp#L45
         // Note: the board is y-down; high y = low on the board, low y = high on the board
+        // I *think* y=0 is row 20 and y=19 is row 1. It's hard to tell. I don't know what value
+        // pool_h takes on. I really hope it's 20.
 
         let mut score = 0;
 
@@ -77,8 +82,9 @@ impl Evaluator for MisalikeEvaluator {
         score += self.in_row_transitions * in_row_transitions / 10;
 
         // Line 111
-        // This sets the height of column 11 (one off the screen) to the height of column 9. I
-        // don't know what this does yet and have not reproduced here.
+        // This sets the height of column 11 (one off the right of the screen) to the height
+        // of column 9. This is kinda important-ish for hole detection later. We use a different
+        // strategy there.
 
         // Line 114 to 119
         // This checks if a T piece or an I piece is in hold and changes score appropriately.
@@ -118,7 +124,7 @@ impl Evaluator for MisalikeEvaluator {
         }
 
         // Line 229 to 235
-        // Counts the number of empty cells exist below the top of each column (pool_total_cell).
+        // Counts the number of empty cells underneath solid cells (pool_total_cell).
         let mut empty_cells_below_stack = 0;
         for x in 0..10 {
             for y in 0..board.column_heights()[x] {
@@ -128,7 +134,99 @@ impl Evaluator for MisalikeEvaluator {
             }
         }
 
-        // TODO: Loop at line 236
+        // Line 236 to 288
+        // This loop determines some information about the holes on the board and calculates the
+        // hole score. A hole is defined as any empty cell that is either: a) below the topmost
+        // solid cell, or b) 6 cells below the topmost solid cell of the lower of the two adjacent
+        // columns. If soft dropping is allowed, a hole is "open" if (basically) it can be filled by
+        // a possibly-floating L or J tuck. Otherwise, it is "closed".
+        // In many cases, holes aren't counted if they're above the skyline. I will omit this here.
+
+        // Operates on columns
+        // first_hole_y[column] is set to below bottom of the board
+        // loops starts at either the top of the current column or 6 below the
+        // top of the shorter of the adjacent columns
+        // The code acceses min_y[-1]. This is undefined behaviour. I'll just remove that bit.
+        // Anyways, last is true if the above cell is empty. Nothing interesting happens
+        // if the current cell is filled.
+        // factor is 1.0 when y below the bottom of the board (?), and ranges from 1.0 to 3.0 as
+        // you go from the bottom of the playfield to the skyline
+        // column holes is incremented
+        // softdropEnable() is always true for our purposes
+        // (now, find "open holes")
+        // if this isn't one of the leftmost two columns:
+        //     if both the two leftmost columns are shorted than current y, then
+        //     hole_score is increased
+        //     if we're below the skyline, x_op_holes[y] is incremented
+        //     go to next loop iteration
+        // if this isn't onw of the rightmost two columns:
+        //     same thing as above, but on the other side
+        // So now we know that this isn't an "open hole".
+        // if below the skyline, increment the number of holes in that column
+        // if it's the highest hole in the column, record it
+        // if the above cell is empty, the score is hole/2. Otherwise it's hole*2.
+        // if the above cell is empty and we're below the skyline, renholes for that row is inc'd
+        // hole scrore is increased by the above amount * factor
+        let mut column_holes = [0; 10];
+        let mut row_open_holes = [0; 40];
+        let mut column_first_closed_hole = [-1; 10];
+        let mut row_ren_closed_holes = [0; 40];
+        let mut hole_score = 0.0;
+        let mut hole_count = 0;
+
+        for x in 0..10 {
+            let hole_candidate_height = (board.column_heights()[x] - 1).max(
+                match x {
+                    0 => board.column_heights()[x+1],
+                    9 => board.column_heights()[x-1],
+                    _ => board.column_heights()[x-1].min(board.column_heights()[x+1])
+                } - 6
+            );
+            let mut above_cell_empty = false;
+            for y in (0..hole_candidate_height).rev() {
+                if !board.occupied(x as i32, y) {
+                    let factor = y as f64 / 10.0 + 1.0;
+                    column_holes[x] += 1;
+
+                    // if softdrop (might implement hard drop-only later)
+                    if x > 1 {
+                        if board.column_heights()[x-1] <= y && board.column_heights()[x-2] <= y {
+                            // open hole
+                            hole_score += self.open_hole as f64 * factor;
+                            row_open_holes[y as usize] += 1;
+                            above_cell_empty = true;
+                            continue
+                        }
+                    }
+                    if x < 8 {
+                        if board.column_heights()[x+1] <= y && board.column_heights()[x+2] <= y {
+                            // open hole
+                            hole_score += self.open_hole as f64 * factor;
+                            row_open_holes[y as usize] += 1;
+                            above_cell_empty = true;
+                            continue
+                        }
+                    }
+                    // closed hole
+
+                    if column_first_closed_hole[x] == -1 {
+                        column_first_closed_hole[x] = y;
+                    }
+
+                    if above_cell_empty {
+                        hole_score += (self.closed_hole / 2) as f64 * factor;
+                        row_ren_closed_holes[y as usize] += 1;
+                    } else {
+                        hole_score += (self.closed_hole * 2) as f64 * factor;
+                    }
+
+                    hole_count += 1;
+                    above_cell_empty = true;
+                } else {
+                    above_cell_empty = false;
+                }
+            }
+        }
 
         unimplemented!()
     }
