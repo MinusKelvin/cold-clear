@@ -308,112 +308,118 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 
 
 /// Evaluates the existence and filledness of a reachable T slot on the board.
+/// That is, it looks for these with sky above:
+/// 
+/// ```
+/// []....    ....[]
+/// ......    ......
+/// []..[]    []..[]
+/// ```
 fn tslot(board: &Board) -> Option<usize> {
-    let mut left_t = libtetris::FallingPiece {
-        kind: libtetris::PieceState(libtetris::Piece::T, libtetris::RotationState::West),
-        tspin: libtetris::TspinStatus::None,
-        x: 0,
-        y: 0
-    };
-    let mut right_t = left_t;
-    right_t.kind.1 = libtetris::RotationState::East;
-
     let mut best = None;
-    for y in 0..20 {
-        'l:
-        for x in 1..9 {
-            left_t.x = x;
-            left_t.y = y+1;
-            right_t.x = x;
-            right_t.y = y+1;
-            if board.obstructed(&left_t) || board.obstructed(&right_t) {
-                continue
-            }
-            if !board.occupied(x-1, y) || !board.occupied(x+1, y) {
-                continue
-            }
-            if board.above_stack(&left_t) && board.occupied(x+1, y+2) ||
-                    board.above_stack(&right_t) && board.occupied(x-1, y+2) {
-                let mut filled = 2;
-                for cy in y..y+2 {
-                    for rx in 0..10 {
-                        if rx < x-1 || rx > x+1 {
-                            if !board.occupied(rx, cy) {
-                                filled -= 1;
-                                break
-                            }
+    for (x, hs) in board.column_heights().windows(2).enumerate() {
+        let x = x as i32;
+        let (left_h, right_h) = (hs[0], hs[1]);
+        let is_tslot = if left_h > right_h {
+            // Look for topleft-open T slot
+            // leftmost column is known to match, as is middle column; no need to check
+            board.occupied(x+2, left_h+1) &&
+                !board.occupied(x+2, left_h) &&
+                board.occupied(x+2, left_h-1)
+        } else if right_h > left_h {
+            // Look for topright-open T slot
+            // rightmost column is known to match, as is middle column; no need to check
+            board.occupied(x-1, right_h+1) &&
+                !board.occupied(x-1, right_h) &&
+                board.occupied(x-1, right_h-1)
+        } else {
+            false
+        };
+
+        if is_tslot {
+            let y = left_h.max(right_h) - 1;
+            let mut filled = 0;
+            for cy in y..y+2 {
+                for rx in 0..10 {
+                    if rx < x || rx > x+2 {
+                        if !board.occupied(rx, cy) {
+                            break
                         }
                     }
                 }
-                best = match best {
-                    Some(fill) => Some(filled.max(fill)),
-                    None => Some(filled)
-                };
+                filled += 1;
             }
+            best = Some(filled.max(best.unwrap_or(0)));
         }
     }
     best
 }
 
 /// Evaluates the existence and filledness of a reachable TST slot on the board.
+/// That is, if looks for these with sky above:
+/// 
+/// ```
+///   []....    ....[]
+///   ......    ......
+/// {}..[]        []..{}
+///   ....        ....
+/// {}..{}        {}..{}
+/// ```
+/// where at least two of the `{}` cells are filled
 fn tst_slot(board: &Board) -> Option<usize> {
-    let mut best = None;
-    for y in 0..20 {
-        for x in 0..10 {
-            // Require 4 vertical empty cells with one solid cell above
-            if board.occupied(x, y) || board.occupied(x, y+1) ||
-                    board.occupied(x, y+2) || board.occupied(x, y+3) ||
-                    !board.occupied(x, y+4){
-                continue
-            }
-
-            // Check for corners of T slot
-            let corners = board.occupied(x-1, y) as u32 +
-                    board.occupied(x+1, y) as u32 +
-                    board.occupied(x-1, y+2) as u32 +
-                    board.occupied(x+1, y+2) as u32;
-            if corners < 3 {
-                continue
-            }
-
-            // Check filledness
-            let mut filled = 0;
-            'fillcheckloop:
-            for cy in y..y+3 {
-                for rx in 0..10 {
-                    if rx < x-1 || rx > x+1 {
-                        if !board.occupied(rx, cy) {
-                            break 'fillcheckloop
-                        }
+    fn filled_check(board: &Board, x: i32, y: i32) -> usize {
+        let mut filled = 0;
+        'fillcheckloop:
+        for cy in y..y+3 {
+            for rx in 0..10 {
+                if rx < x-1 || rx > x+1 {
+                    if !board.occupied(rx, cy) {
+                        break 'fillcheckloop
                     }
                 }
-                filled += 1;
             }
+            filled += 1;
+        }
+        filled
+    }
 
-            // Check for left side TST
-            if !board.occupied(x-1, y+1) && board.occupied(x-1, y+2) && x >= 2 {
-                if board.column_heights()[x as usize - 1] > y+3 ||
-                        board.column_heights()[x as usize - 2] > y+3 {
-                    // TST slot not reachable
-                } else {
-                    best = match best {
-                        Some(fill) => Some(filled.max(fill)),
-                        None => Some(filled)
-                    };
-                }
+    let mut best = None;
+    for (x, hs) in board.column_heights().windows(3).enumerate() {
+        let x = x as i32;
+        let (left_h, middle_h, right_h) = (hs[0], hs[1], hs[2]);
+        if left_h > middle_h && middle_h >= right_h {
+            // right-pointing TST slot
+            // only really know that rightmost column and the lower pivot block match
+            let is_tst_slot =
+                board.occupied(x, middle_h+1) &&
+                !board.occupied(x, middle_h) &&
+                !board.occupied(x, middle_h-1) &&
+                !board.occupied(x, middle_h-2) &&
+                !board.occupied(x+1, middle_h-2) &&
+                !board.occupied(x, middle_h-3) && (
+                    board.occupied(x-1, middle_h-1) as usize +
+                    board.occupied(x-1, middle_h-3) as usize +
+                    board.occupied(x+1, middle_h-3) as usize
+                ) >= 2;
+            if is_tst_slot {
+                best = Some(filled_check(board, x, middle_h-3).max(best.unwrap_or(0)))
             }
-
-            // Check for right side TST
-            if  !board.occupied(x+1, y+1) && board.occupied(x+1, y+2) && x < 8 {
-                if board.column_heights()[x as usize + 1] > y+3 ||
-                        board.column_heights()[x as usize + 2] > y+3 {
-                    // TST slot not reachable
-                } else {
-                    best = match best {
-                        Some(fill) => Some(filled.max(fill)),
-                        None => Some(filled)
-                    };
-                }
+        } else if right_h > middle_h && middle_h >= left_h {
+            // left-pointing TST slot
+            // only really know that rightmost column and the lower pivot block match
+            let is_tst_slot =
+                board.occupied(x+2, middle_h+1) &&
+                !board.occupied(x+2, middle_h) &&
+                !board.occupied(x+2, middle_h-1) &&
+                !board.occupied(x+2, middle_h-2) &&
+                !board.occupied(x+1, middle_h-2) &&
+                !board.occupied(x+2, middle_h-3) && (
+                    board.occupied(x+1, middle_h-3) as usize +
+                    board.occupied(x+3, middle_h-1) as usize +
+                    board.occupied(x+3, middle_h-3) as usize
+                ) >= 2;
+            if is_tst_slot {
+                best = Some(filled_check(board, x+2, middle_h-3).max(best.unwrap_or(0)))
             }
         }
     }

@@ -244,7 +244,7 @@ fn run(
         };
         match result {
             Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => return,
+            Err(TryRecvError::Disconnected) => break,
             Ok(BotMsg::NewPiece(piece)) => if tree.add_next_piece(piece) {
                 // Only death is possible
                 break
