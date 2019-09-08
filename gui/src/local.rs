@@ -1,4 +1,4 @@
-use ggez::event::{ self, EventHandler };
+use ggez::event::EventHandler;
 use ggez::{ Context, GameResult };
 use ggez::graphics;
 use ggez::timer;
@@ -163,10 +163,4 @@ impl EventHandler for LocalGame<'_> {
 
         graphics::present(ctx)
     }
-
-    // fn gamepad_button_down_event(&mut self, _: &mut Context, _: Button, id: GamepadId) {
-    //     if self.gamepad_p2.is_none() {
-    //         self.gamepad_p2 = Some(id);
-    //     }
-    // }
 }

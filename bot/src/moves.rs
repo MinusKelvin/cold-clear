@@ -114,7 +114,7 @@ pub fn find_moves(
             }
         }
 
-        let mut change = attempt(
+        let change = attempt(
             board, &moves, position,
             &mut checked, &mut check_queue,
             mode == MovementMode::TwentyG, fast_mode,
@@ -186,18 +186,6 @@ fn attempt(
 }
 
 impl Input {
-    pub fn to_char(self) -> char {
-        match self {
-            Input::Left => '<',
-            Input::Right => '>',
-            Input::Cw => 'r',
-            Input::Ccw => 'l',
-            Input::SonicDrop => 'v',
-            Input::DasLeft => '[',
-            Input::DasRight => ']'
-        }
-    }
-
     fn apply(self, piece: &mut FallingPiece, board: &Board) -> bool {
         match self {
             Input::Left => piece.shift(board, -1, 0),
@@ -310,97 +298,6 @@ fn zero_g_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
             start(p, South, 1, &[Left, Cw, Left, Cw, Left]),
             start(p, South, 7, &[Right, Cw, Right, Cw, Right]),
             start(p, South, 8, &[Right, Cw, Right, Cw, Right, Right]),
-        ]
-    }
-}
-
-fn zero_g_finesse_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
-    use Piece::*;
-    use RotationState::*;
-    use Input::*;
-    match p {
-        O => vec![
-            start(O, North, 4, &[]),
-            start(O, North, 3, &[Left]),
-            start(O, North, 5, &[Right]),
-            start(O, North, 2, &[Left, Left]),
-            start(O, North, 6, &[Right, Right]),
-            start(O, North, 1, &[DasLeft, Right]),
-            start(O, North, 7, &[DasRight, Left]),
-            start(O, North, 0, &[DasLeft]),
-            start(O, North, 8, &[DasRight]),
-        ],
-        I => vec![
-            start(I, North, 4, &[]),
-            start(I, North, 3, &[Left]),
-            start(I, North, 5, &[Right]),
-            start(I, North, 2, &[Left, Left]),
-            start(I, North, 6, &[Right, Right]),
-            start(I, North, 1, &[DasLeft]),
-            start(I, North, 7, &[DasRight]),
-            start(I, West, 4, &[Ccw]),
-            start(I, West, 3, &[Left, Ccw]),
-            start(I, West, 2, &[Left, Ccw, Left]),
-            start(I, West, 1, &[DasLeft, Ccw]),
-            start(I, West, 0, &[Ccw, DasLeft]),
-            start(I, West, 5, &[Right, Ccw]),
-            start(I, West, 6, &[Right, Ccw, Right]),
-            start(I, West, 7, &[DasRight, Ccw]),
-            start(I, West, 8, &[DasRight, Ccw, Right]),
-            start(I, West, 9, &[Ccw, DasRight]),
-            start(I, East, 4, &[Cw]),
-            start(I, East, 3, &[Left, Cw]),
-            start(I, East, 2, &[Left, Cw, Left]),
-            start(I, East, 1, &[DasLeft, Cw]),
-            start(I, East, 0, &[Cw, DasLeft, Right]),
-            start(I, East, -1, &[Cw, DasLeft]),
-            start(I, East, 5, &[Right, Cw]),
-            start(I, East, 6, &[Right, Cw, Right]),
-            start(I, East, 7, &[DasRight, Cw]),
-            start(I, East, 8, &[Cw, DasRight]),
-            start(I, South, 4, &[Cw, Cw]),
-            start(I, South, 3, &[Cw, Left, Cw]),
-            start(I, South, 5, &[Cw, Right, Cw]),
-            start(I, South, 2, &[Cw, Left, Cw, Left]),
-            start(I, South, 6, &[Cw, Right, Cw, Right]),
-            start(I, South, 1, &[Cw, Cw, DasLeft]),
-            start(I, South, 7, &[Cw, Cw, DasRight]),
-        ],
-        _ => vec![
-            start(p, North, 4, &[]),
-            start(p, North, 3, &[Left]),
-            start(p, North, 5, &[Right]),
-            start(p, North, 2, &[Left, Left]),
-            start(p, North, 6, &[Right, Right]),
-            start(p, North, 1, &[DasLeft]),
-            start(p, North, 7, &[DasRight, Left]),
-            start(p, North, 8, &[DasRight]),
-            start(p, West, 4, &[Ccw]),
-            start(p, West, 3, &[Left, Ccw]),
-            start(p, West, 5, &[Right, Ccw]),
-            start(p, West, 2, &[Left, Ccw, Left]),
-            start(p, West, 6, &[Right, Ccw, Right]),
-            start(p, West, 1, &[DasLeft, Ccw]),
-            start(p, West, 7, &[DasRight, Ccw, Left]),
-            start(p, West, 8, &[DasRight, Ccw]),
-            start(p, West, 9, &[Ccw, DasRight]),
-            start(p, East, 4, &[Cw]),
-            start(p, East, 3, &[Left, Cw]),
-            start(p, East, 5, &[Right, Cw]),
-            start(p, East, 2, &[Left, Cw, Left]),
-            start(p, East, 6, &[Right, Cw, Right]),
-            start(p, East, 1, &[DasLeft, Cw]),
-            start(p, East, 7, &[DasRight, Cw, Left]),
-            start(p, East, 0, &[Cw, DasLeft]),
-            start(p, East, 8, &[DasRight, Cw]),
-            start(p, South, 4, &[Cw, Cw]),
-            start(p, South, 3, &[Cw, Left, Cw]),
-            start(p, South, 5, &[Cw, Right, Cw]),
-            start(p, South, 2, &[Cw, Left, Cw, Left]),
-            start(p, South, 6, &[Cw, Right, Cw, Right]),
-            start(p, South, 1, &[DasLeft, Cw, Cw]),
-            start(p, South, 7, &[DasRight, Cw, Left, Cw]),
-            start(p, South, 8, &[DasRight, Cw, Cw]),
         ]
     }
 }

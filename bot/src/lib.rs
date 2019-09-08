@@ -1,9 +1,6 @@
-use rand::prelude::*;
 use std::collections::VecDeque;
 use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
-use arrayvec::ArrayVec;
 
-mod display;
 pub mod evaluation;
 mod moves;
 mod misa;
@@ -32,7 +29,6 @@ impl BotController {
             if use_misa {
                 misa::glue(bot_recv, bot_send, initial_board);
             } else {
-                use crate::evaluation::*;
                 run(bot_recv, bot_send, initial_board, evaluator);
             }
         });

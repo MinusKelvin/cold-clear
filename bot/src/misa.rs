@@ -1,21 +1,20 @@
 use crate::*;
 use std::process::*;
 use std::io::{ BufRead, Write, BufReader };
-use std::collections::VecDeque;
 
-struct Mirror<'a>(&'a mut ChildStdin);
+// struct Mirror<'a>(&'a mut ChildStdin);
 
-impl<'a> Write for Mirror<'a> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)?;
-        std::io::stdout().write(buf)
-    }
+// impl<'a> Write for Mirror<'a> {
+//     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+//         self.0.write(buf)?;
+//         std::io::stdout().write(buf)
+//     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()?;
-        std::io::stdout().flush()
-    }
-}
+//     fn flush(&mut self) -> std::io::Result<()> {
+//         self.0.flush()?;
+//         std::io::stdout().flush()
+//     }
+// }
 
 fn mirror(piece: Piece) -> Piece {
     match piece {

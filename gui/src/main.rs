@@ -1,9 +1,8 @@
-use ggez::{ Context, ContextBuilder, GameResult };
+use ggez::ContextBuilder;
 use ggez::event;
 use ggez::graphics::{ Image };
 use ggez::graphics::spritebatch::SpriteBatch;
-use ggez::audio::{ self, SoundSource };
-use std::net::SocketAddr;
+use ggez::audio;
 
 mod common;
 mod local;

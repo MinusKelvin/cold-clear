@@ -1,8 +1,6 @@
 use serde::{ Serialize, Deserialize };
 use bot::evaluation::PatternEvaluator;
 use rand::prelude::*;
-use arrayvec::ArrayVec;
-use libtetris::*;
 
 mod battle;
 mod mutate;
