@@ -215,17 +215,19 @@ fn new_children(
 
     let mut board = board.clone();
     let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
-    if let Some(spawned) = FallingPiece::spawn(hold, &board) {
-        // Placements for hold piece
-        for mv in crate::moves::find_moves(&board, spawned, mode) {
-            let mut board = board.clone();
-            let lock = board.lock_piece(mv.location);
-            if !lock.locked_out {
-                children.push(Child {
-                    tree: Tree::new(board, &lock, mv.soft_dropped, evaluator),
-                    hold: true,
-                    mv, lock
-                })
+    if hold != next {
+        if let Some(spawned) = FallingPiece::spawn(hold, &board) {
+            // Placements for hold piece
+            for mv in crate::moves::find_moves(&board, spawned, mode) {
+                let mut board = board.clone();
+                let lock = board.lock_piece(mv.location);
+                if !lock.locked_out {
+                    children.push(Child {
+                        tree: Tree::new(board, &lock, mv.soft_dropped, evaluator),
+                        hold: true,
+                        mv, lock
+                    })
+                }
             }
         }
     }
