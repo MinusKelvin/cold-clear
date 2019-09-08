@@ -176,7 +176,7 @@ impl BotController {
                     if let Some(ref exec) = self.executing {
                         if exec.2 != *piece {
                             reset_bot = true;
-                            println!("Misdrop!");
+                            eprintln!("Misdrop!");
                         }
                     } else {
                         reset_bot = true;

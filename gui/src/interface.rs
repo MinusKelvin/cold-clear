@@ -110,8 +110,8 @@ impl Gui {
         if self.multiplier != 1.0 {
             queue_text(
                 ctx,
-                &text(format!("Margin Time: x{:.1}", self.multiplier), scale*1.0, 6.0*scale),
-                [center-3.0*scale, 21.9*scale],
+                &text(format!("Margin Time: x{:.1}", self.multiplier), scale*1.0, 8.0*scale),
+                [center-4.0*scale, 21.9*scale],
                 None
             );
         }

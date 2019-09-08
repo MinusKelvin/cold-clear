@@ -41,9 +41,11 @@ fn main() {
             .enumerate()
             .collect();
         results.sort_by_key(|v| -(v.1 as isize));
+        println!("Gen {} Results:", population.generation);
         for &(num, score) in &results {
             println!("{}: {} wins", population.individuals[num].1, score);
         }
+        println!();
 
         let weighted = rand::distributions::WeightedIndex::new(
             results.iter().map(|&(_, v)| v*v)
@@ -66,6 +68,18 @@ fn main() {
         }
 
         serde_json::to_writer(std::fs::File::create("pop.json").unwrap(), &new_population).unwrap();
+
+        match std::fs::File::create(format!("best/{}.json", population.generation)) {
+            Ok(f) => serde_json::to_writer(
+                std::io::BufWriter::new(f),
+                &new_population.individuals[0].0
+            ).unwrap_or_else(|e| eprintln!("Error saving best of generation: {}", e)),
+            Err(e) => eprintln!("Error saving best of generation: {}", e)
+        }
+
+        if std::fs::remove_file("end-request").is_ok() {
+            return
+        }
 
         population = new_population;
     }

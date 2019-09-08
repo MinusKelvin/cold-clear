@@ -145,7 +145,7 @@ pub fn playout<E: Evaluator + Clone + Send + 'static>(
         });
     }
 
-    const TICK_TIME: std::time::Duration = std::time::Duration::from_millis(2);
+    const TICK_TIME: std::time::Duration = std::time::Duration::from_micros(1_500);
 
     let mut t = std::time::Instant::now();
     loop {
