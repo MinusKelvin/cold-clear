@@ -68,13 +68,13 @@ impl Gui {
     ) -> GameResult<()> {
         push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
-            .dest([center - 17.0 * scale, 0.0])
+            .dest([center - 17.5 * scale, 0.0])
             .to_matrix()));
         apply_transformations(ctx)?;
 
         res.sprites.clear();
         let mut mesh = MeshBuilder::new();
-        self.player_1_graphics.draw(ctx, &mut res.sprites, &mut mesh, center - 17.0*scale, scale)?;
+        self.player_1_graphics.draw(ctx, &mut res.sprites, &mut mesh, center - 17.5*scale, scale)?;
         draw(ctx, &res.sprites, DrawParam::default())?;
         if let Ok(mesh) = mesh.build(ctx) {
             draw(ctx, &mesh, DrawParam::default())?;
@@ -84,13 +84,13 @@ impl Gui {
 
         push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
-            .dest([center + scale, 0.0])
+            .dest([center + 1.5*scale, 0.0])
             .to_matrix()));
         apply_transformations(ctx)?;
 
         let mut mesh = MeshBuilder::new();
         res.sprites.clear();
-        self.player_2_graphics.draw(ctx, &mut res.sprites, &mut mesh, center+scale, scale)?;
+        self.player_2_graphics.draw(ctx, &mut res.sprites, &mut mesh, center+1.5*scale, scale)?;
         draw(ctx, &res.sprites, DrawParam::default())?;
         if let Ok(mesh) = mesh.build(ctx) {
             draw(ctx, &mesh, DrawParam::default())?;
@@ -102,22 +102,16 @@ impl Gui {
             ctx,
             &text(
                 format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
-                scale*1.5, 6.0*scale
+                scale*1.5, 8.0*scale
             ),
-            [center-3.0*scale, 18.5*scale],
+            [center-4.0*scale, 20.6*scale],
             None
         );
         if self.multiplier != 1.0 {
             queue_text(
                 ctx,
-                &text("Margin Time", scale*1.0, 6.0*scale),
-                [center-3.0*scale, 20.1*scale],
-                None
-            );
-            queue_text(
-                ctx,
-                &text(format!("Attack x{:.1}", self.multiplier), scale*1.0, 6.0*scale),
-                [center-3.0*scale, 21.0*scale],
+                &text(format!("Margin Time: x{:.1}", self.multiplier), scale*1.0, 6.0*scale),
+                [center-3.0*scale, 21.9*scale],
                 None
             );
         }

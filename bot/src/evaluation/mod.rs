@@ -4,6 +4,8 @@ mod misalike;
 pub use self::misalike::MisalikeEvaluator;
 mod naive;
 pub use self::naive::NaiveEvaluator;
+mod pattern;
+pub use self::pattern::PatternEvaluator;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Evaluation {

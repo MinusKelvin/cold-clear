@@ -120,10 +120,15 @@ fn main() {
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         (None, None) => {
+            use bot::evaluation::NaiveEvaluator;
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(|board| Box::new(bot::BotController::new(board, false))),
-                Box::new(|board| Box::new(bot::BotController::new(board, false)))
+                Box::new(|board|
+                    Box::new(bot::BotController::new(board, false, NaiveEvaluator::default()))
+                ),
+                Box::new(|board|
+                    Box::new(bot::BotController::new(board, true, NaiveEvaluator::default()))
+                )
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }

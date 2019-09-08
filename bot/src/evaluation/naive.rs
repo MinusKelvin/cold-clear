@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use libtetris::{ Board, LockResult, PlacementKind };
 use super::*;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct NaiveEvaluator {
     pub back_to_back: i32,
     pub bumpiness: i32,
@@ -34,7 +34,9 @@ pub struct NaiveEvaluator {
     pub mini_tspin2: i32,
     pub perfect_clear: i32,
     pub combo_table: [i32; 12],
-    pub soft_drop: i32
+    pub soft_drop: i32,
+
+    pub extra_info: Option<String>
 }
 
 impl Default for NaiveEvaluator {
@@ -74,14 +76,20 @@ impl Default for NaiveEvaluator {
                 .map(|&v| v as i32 * 100)
                 .collect::<ArrayVec<[_; 12]>>()
                 .into_inner()
-                .unwrap()
+                .unwrap(),
+
+            extra_info: None
         }
     }
 }
 
 impl Evaluator for NaiveEvaluator {
     fn info(&self) -> Info {
-        vec![("Naive".to_string(), None)]
+        let mut info = vec![("Naive".to_string(), None)];
+        if let Some(extra) = &self.extra_info {
+            info.push((extra.to_owned(), None));
+        }
+        info
     }
 
     fn evaluate(&mut self, lock: &LockResult, board: &Board, soft_dropped: bool) -> Evaluation {

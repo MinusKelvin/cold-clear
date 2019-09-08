@@ -240,18 +240,16 @@ impl BoardDrawState {
             draw_piece_preview(sprites, 13, 18 - (i*2) as i32, piece);
         }
         if self.garbage_queue > 0 {
-            let mesh = Mesh::new_rectangle(
-                ctx,
+            particle_mesh.rectangle(
                 DrawMode::Fill(FillOptions::tolerance(0.1 / scale)),
                 Rect {
                     x: 13.0,
-                    w: 0.25,
+                    w: 0.15,
                     y: 20.25 - self.garbage_queue as f32,
                     h: self.garbage_queue as f32
                 },
                 Color::from_rgb(255, 32, 32)
-            )?;
-            draw(ctx, &mesh, DrawParam::default())?;
+            );
         }
         queue_text(
             ctx, &text("Hold", scale, 3.0*scale), [text_x, scale*0.25], None
@@ -260,36 +258,36 @@ impl BoardDrawState {
             ctx, &text("Next", scale, 3.0*scale), [text_x+13.0*scale, scale*0.25], None
         );
         queue_text(
-            ctx, &text("Statistics", scale*0.75, 3.0*scale), [text_x, scale*3.0], None
+            ctx, &text("Statistics", scale*0.75, 4.0*scale), [text_x-1.0*scale, scale*3.0], None
         );
         let seconds = self.game_time as f32 / 60.0;
         let lines = vec![
-            ("#", format!("{}", self.statistics.pieces)),
+            ("Pieces", format!("{}", self.statistics.pieces)),
             ("PPS", format!("{:.1}", self.statistics.pieces as f32 / seconds)),
             ("Lines", format!("{}", self.statistics.lines)),
-            ("ATK", format!("{}", self.statistics.attack)),
+            ("Attack", format!("{}", self.statistics.attack)),
             ("APM", format!("{:.1}", self.statistics.attack as f32 / seconds * 60.0)),
-            ("MxCb", format!("{}", self.statistics.max_combo)),
-            ("S", format!("{}", self.statistics.singles)),
-            ("D", format!("{}", self.statistics.doubles)),
-            ("T", format!("{}", self.statistics.triples)),
-            ("Tet", format!("{}", self.statistics.tetrises)),
-            ("tsz", format!("{}", self.statistics.mini_tspin_zeros)),
-            ("tss", format!("{}", self.statistics.mini_tspin_singles)),
-            ("tsd", format!("{}", self.statistics.mini_tspin_doubles)),
-            ("TSZ", format!("{}", self.statistics.tspin_zeros)),
-            ("TSS", format!("{}", self.statistics.tspin_singles)),
-            ("TSD", format!("{}", self.statistics.tspin_doubles)),
-            ("TST", format!("{}", self.statistics.tspin_triples)),
-            ("PC", format!("{}", self.statistics.perfect_clears))
+            ("Max Ren", format!("{}", self.statistics.max_combo)),
+            ("Single", format!("{}", self.statistics.singles)),
+            ("Double", format!("{}", self.statistics.doubles)),
+            ("Triple", format!("{}", self.statistics.triples)),
+            ("Tetris", format!("{}", self.statistics.tetrises)),
+            ("Mini T0", format!("{}", self.statistics.mini_tspin_zeros)),
+            ("Mini T1", format!("{}", self.statistics.mini_tspin_singles)),
+            ("Mini T2", format!("{}", self.statistics.mini_tspin_doubles)),
+            ("T-Spin 0", format!("{}", self.statistics.tspin_zeros)),
+            ("T-Spin 1", format!("{}", self.statistics.tspin_singles)),
+            ("T-Spin 2", format!("{}", self.statistics.tspin_doubles)),
+            ("T-Spin 3", format!("{}", self.statistics.tspin_triples)),
+            ("Perfect", format!("{}", self.statistics.perfect_clears))
         ];
         let mut y = 3.75*scale;
         for (label, stat) in lines {
             queue_text(
-                ctx, &text(label, scale*0.66, 0.0), [text_x+0.25*scale, y], None
+                ctx, &text(label, scale*0.66, 0.0), [text_x-0.75*scale, y], None
             );
             queue_text(
-                ctx, &text(stat, scale*0.66, -2.5*scale), [text_x+0.25*scale, y], None
+                ctx, &text(stat, scale*0.66, -3.5*scale), [text_x-0.75*scale, y], None
             );
             y += scale * 0.66;
         }
@@ -297,14 +295,14 @@ impl BoardDrawState {
         for (txt1, txt2) in &self.info_lines {
             match txt2 {
                 None => queue_text(
-                    ctx, &text(&**txt1, scale*0.66, 2.5*scale), [text_x+13.25*scale, y], None
+                    ctx, &text(&**txt1, scale*0.66, 3.5*scale), [text_x+13.25*scale, y], None
                 ),
                 Some(txt2) => {
                     queue_text(
                         ctx, &text(&**txt1, scale*0.66, 0.0), [text_x+13.25*scale, y], None
                     );
                     queue_text(
-                        ctx, &text(&**txt2, scale*0.66, -2.5*scale), [text_x+13.25*scale, y], None
+                        ctx, &text(&**txt2, scale*0.66, -3.5*scale), [text_x+13.25*scale, y], None
                     )
                 }
             }

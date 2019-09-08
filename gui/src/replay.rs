@@ -7,18 +7,19 @@ use crate::Resources;
 use libtetris::{ Battle, Controller, Info, Replay };
 use std::collections::VecDeque;
 
-pub struct ReplayGame<'a> {
+pub struct ReplayGame<'a, P> {
     gui: Gui,
     battle: Battle,
     updates: VecDeque<(Controller, Option<Info>, Controller, Option<Info>)>,
     start_delay: u32,
-    resources: &'a mut Resources
+    resources: &'a mut Resources,
+    file: P
 }
 
-impl<'a> ReplayGame<'a> {
-    pub fn new(resources: &'a mut Resources, file: impl AsRef<std::path::Path>) -> Self {
+impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
+    pub fn new(resources: &'a mut Resources, file: P) -> Self {
         let replay: Replay = serde_json::from_reader(
-            std::io::BufReader::new(std::fs::File::open(file).unwrap())
+            std::io::BufReader::new(std::fs::File::open(file.clone()).unwrap())
         ).unwrap();
         let battle = Battle::new(
             replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
@@ -27,13 +28,14 @@ impl<'a> ReplayGame<'a> {
             gui: Gui::new(&battle),
             battle,
             updates: replay.updates,
-            start_delay: 500,
-            resources
+            start_delay: 180,
+            resources,
+            file
         }
     }
 }
 
-impl EventHandler for ReplayGame<'_> {
+impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         while timer::check_update_time(ctx, 60) {
             if self.start_delay == 0 {
@@ -44,6 +46,29 @@ impl EventHandler for ReplayGame<'_> {
                     update.player_1.info = p1_info_update;
                     update.player_2.info = p2_info_update;
                     self.gui.update(update, self.resources)?;
+                } else {
+                    let replay: Replay;
+                    loop {
+                        match std::fs::File::open(self.file.clone()) {
+                            Ok(f) => {
+                                match serde_json::from_reader(std::io::BufReader::new(f)) {
+                                    Ok(r) => {
+                                        replay = r;
+                                        break
+                                    }
+                                    Err(_) => {}
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    let battle = Battle::new(
+                        replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
+                    );
+                    self.gui = Gui::new(&battle);
+                    self.battle = battle;
+                    self.updates = replay.updates;
+                    self.start_delay = 180;
                 }
             } else {
                 self.start_delay -= 1;
@@ -57,8 +82,8 @@ impl EventHandler for ReplayGame<'_> {
 
         if self.start_delay != 0 {
             let txt = text(format!("{}", self.start_delay / 60 + 1), scale * 4.0, 10.0*scale);
-            graphics::queue_text(ctx, &txt, [center-14.0*scale, 9.0*scale], None);
-            graphics::queue_text(ctx, &txt, [center+4.0*scale, 9.0*scale], None);
+            graphics::queue_text(ctx, &txt, [center-14.5*scale, 9.0*scale], None);
+            graphics::queue_text(ctx, &txt, [center+4.5*scale, 9.0*scale], None);
         }
 
         self.gui.draw(ctx, self.resources, scale, center)?;

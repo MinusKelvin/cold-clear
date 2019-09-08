@@ -4,7 +4,7 @@ use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
 use arrayvec::ArrayVec;
 
 mod display;
-mod evaluation;
+pub mod evaluation;
 mod moves;
 mod misa;
 mod tree;
@@ -23,7 +23,9 @@ pub struct BotController {
 }
 
 impl BotController {
-    pub fn new(initial_board: Board, use_misa: bool) -> Self {
+    pub fn new(
+        initial_board: Board, use_misa: bool, evaluator: impl Evaluator + Send + 'static
+    ) -> Self {
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
         std::thread::spawn(move || {
@@ -31,7 +33,7 @@ impl BotController {
                 misa::glue(bot_recv, bot_send, initial_board);
             } else {
                 use crate::evaluation::*;
-                run(bot_recv, bot_send, initial_board, NaiveEvaluator::default());
+                run(bot_recv, bot_send, initial_board, evaluator);
             }
         });
 
@@ -232,7 +234,7 @@ fn run(
     );
 
     let mut do_move = false;
-    const THINK_OUTSIDE_SPAWN_DELAY: bool = false;
+    const THINK_OUTSIDE_SPAWN_DELAY: bool = true;
     let mut think = THINK_OUTSIDE_SPAWN_DELAY;
     loop {
         let result = if think {
