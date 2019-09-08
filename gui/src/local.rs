@@ -149,14 +149,14 @@ impl EventHandler for LocalGame<'_> {
         graphics::queue_text(
             ctx,
             &text(format!("{} - {}", self.p1_wins, self.p2_wins), scale*2.0, 6.0*scale),
-            [center-3.0*scale, 17.0*scale],
+            [center-3.0*scale, 19.0*scale],
             None
         );
 
         if let State::Starting(t) = self.state {
             let txt = text(format!("{}", t / 60 + 1), scale * 4.0, 10.0*scale);
-            graphics::queue_text(ctx, &txt, [center-14.0*scale, 9.0*scale], None);
-            graphics::queue_text(ctx, &txt, [center+4.0*scale, 9.0*scale], None);
+            graphics::queue_text(ctx, &txt, [center-14.5*scale, 9.0*scale], None);
+            graphics::queue_text(ctx, &txt, [center+4.5*scale, 9.0*scale], None);
         }
 
         self.gui.draw(ctx, self.resources, scale, center)?;

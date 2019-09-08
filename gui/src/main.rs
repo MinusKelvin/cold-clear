@@ -25,21 +25,9 @@ pub struct Resources {
 }
 
 fn main() {
-    let mut connect = false;
     let mut replay = false;
-    let mut address: Option<SocketAddr> = None;
     let mut replay_file = None;
     for arg in std::env::args() {
-        if connect {
-            match arg.parse() {
-                Ok(addr) => address = Some(addr),
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return
-                }
-            }
-            break
-        }
         if replay {
             replay_file = Some(arg);
             break
@@ -47,18 +35,11 @@ fn main() {
         if arg == "--help" {
             println!("Cold Clear gameplay interface");
             println!("Options:");
-            println!("  --connect <address>    Spectate an arena");
             println!("  --play    <path>       View a replay");
             return
-        } else if arg == "--connect" {
-            connect = true;
         } else if arg == "--play" {
             replay = true;
         }
-    }
-    if connect && address.is_none() {
-        eprintln!("--connect requires argument");
-        return
     }
     if replay && replay_file.is_none() {
         eprintln!("--play requires argument");
@@ -110,16 +91,12 @@ fn main() {
         }).ok(),
     };
 
-    match (address, replay_file) {
-        (Some(addr), _) => {
-            // let mut net_game = NetGame::new(&mut ctx, addr);
-            // event::run(&mut ctx, &mut events, &mut net_game).unwrap();
-        }
-        (None, Some(file)) => {
+    match replay_file {
+        Some(file) => {
             let mut replay_game = ReplayGame::new(&mut resources, file);
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
-        (None, None) => {
+        None => {
             use bot::evaluation::NaiveEvaluator;
             let mut local_game = LocalGame::new(
                 &mut resources,
