@@ -69,8 +69,8 @@ impl Default for NaiveEvaluator {
             tspin1: 130,
             tspin2: 400,
             tspin3: 600,
-            mini_tspin1: 0,
-            mini_tspin2: 100,
+            mini_tspin1: -150,
+            mini_tspin2: -100,
             perfect_clear: 1000,
             combo_table: libtetris::COMBO_GARBAGE.iter()
                 .map(|&v| v as i32 * 100)
@@ -259,7 +259,12 @@ fn cavities_and_overhangs(board: &Board) -> (i32, i32) {
                 }
 
                 if y >= board.column_heights()[x as usize] {
-                    is_overhang = true;
+                    if x >= 1 {
+                        is_overhang |= y >= board.column_heights()[x as usize - 1];
+                    }
+                    if x < 9 {
+                        is_overhang |= y >= board.column_heights()[x as usize + 1];
+                    }
                     continue
                 }
 
@@ -292,14 +297,13 @@ fn covered_cells(board: &Board) -> (i32, i32) {
     let mut covered_sq = 0;
 
     for x in 0..10 {
-        let mut cells = 0;
-        for y in (0..board.column_heights()[x] as usize).rev() {
-            if !board.occupied(x as i32, y as i32) {
+        for y in (0..board.column_heights()[x] - 2).rev() {
+            if !board.occupied(x as i32, y) {
+                let cells = 6.min(board.column_heights()[x] - y - 1);
                 covered += cells;
                 covered_sq += cells * cells;
                 break
             }
-            cells += 1;
         }
     }
 
