@@ -405,7 +405,7 @@ pub struct Battle {
     p1_rng: Pcg64Mcg,
     p2_rng: Pcg64Mcg,
     garbage_rng: Pcg64Mcg,
-    time: u32,
+    pub time: u32,
     multiplier: f32,
     margin_time: Option<u32>,
     pub replay: Replay
@@ -505,7 +505,7 @@ impl Default for GameConfig {
             soft_drop_speed: 1,
             next_queue_size: 5,
             gravity: 4500,
-            margin_time: Some(18000), // 5 minutes
+            margin_time: None,
             max_garbage_add: 10
         }
     }

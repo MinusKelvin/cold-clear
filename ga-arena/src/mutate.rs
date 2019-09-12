@@ -14,6 +14,7 @@ impl Mutateable for PatternEvaluator {
             thresholds: [0; 4096].into(),
             below_values: [0; 4096].into(),
             above_values: [0; 4096].into(),
+            rows: [0; 1024].into(),
 
             b2b_clear: thread_rng().gen_range(-999, 1000),
             clear1: thread_rng().gen_range(-999, 1000),
@@ -31,11 +32,14 @@ impl Mutateable for PatternEvaluator {
         };
         for i in 0..4096 {
             individual.thresholds[i] = thread_rng().gen_range(0, 250);
-            individual.above_values[i] = thread_rng().gen_range(-999, 1000);
-            individual.below_values[i] = thread_rng().gen_range(-999, 1000);
+            individual.above_values[i] = thread_rng().gen_range(-99, 100);
+            individual.below_values[i] = thread_rng().gen_range(-99, 100);
         }
         for i in 0..12 {
             individual.combo_table[i] = thread_rng().gen_range(-999, 1000);
+        }
+        for i in 0..1024 {
+            individual.rows[i] = thread_rng().gen_range(-99, 100);
         }
         individual
     }
@@ -46,6 +50,7 @@ impl Mutateable for PatternEvaluator {
             thresholds: [0; 4096].into(),
             below_values: [0; 4096].into(),
             above_values: [0; 4096].into(),
+            rows: [0; 1024].into(),
 
             b2b_clear: crossover_gene(parent1.b2b_clear, parent2.b2b_clear, -999, 999, 10),
             clear1: crossover_gene(parent1.clear1, parent2.clear1, -999, 999, 10),
@@ -66,15 +71,20 @@ impl Mutateable for PatternEvaluator {
                 parent1.thresholds[i], parent2.thresholds[i], 0, 250, 1
             );
             this.above_values[i] = crossover_gene(
-                parent1.above_values[i], parent2.above_values[i], -999, 999, 10
+                parent1.above_values[i], parent2.above_values[i], -99, 99, 10
             );
             this.below_values[i] = crossover_gene(
-                parent1.below_values[i], parent2.below_values[i], -999, 999, 10
+                parent1.below_values[i], parent2.below_values[i], -99, 99, 10
             );
         }
         for i in 0..12 {
             this.combo_table[i] = crossover_gene(
                 parent1.combo_table[i], parent2.combo_table[i], -999, 999, 10
+            );
+        }
+        for i in 0..1024 {
+            this.rows[i] = crossover_gene(
+                parent1.rows[i], parent2.rows[i], -99, 99, 10
             );
         }
         this

@@ -46,7 +46,7 @@ fn main() {
         println!();
 
         let weighted = rand::distributions::WeightedIndex::new(
-            results.iter().map(|&(_, v)| v*v)
+            results.iter().map(|&(_, v)| v*v + 1)
         ).unwrap();
 
         let mut new_population = population.clone();

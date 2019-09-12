@@ -8,6 +8,7 @@ pub struct PatternEvaluator {
     pub thresholds: Array4096,
     pub below_values: Array4096,
     pub above_values: Array4096,
+    pub rows: Array1024,
 
     pub b2b_clear: i32,
     pub clear1: i32,
@@ -125,6 +126,10 @@ impl Evaluator for PatternEvaluator {
             }
         }
 
+        for y in 0..20 {
+            transient_eval += self.rows[*board.get_row(y) as usize];
+        }
+
         Evaluation {
             accumulated: acc_eval,
             transient: transient_eval
@@ -185,5 +190,61 @@ impl<'de> Deserialize<'de> for Array4096 {
             }
         }
         deser.deserialize_tuple(4096, Array4096Deserializer)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Array1024([i32; 1024]);
+
+impl std::ops::Deref for Array1024 {
+    type Target = [i32; 1024];
+    fn deref(&self) -> &[i32; 1024] {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Array1024 {
+    fn deref_mut(&mut self) -> &mut [i32; 1024] {
+        &mut self.0
+    }
+}
+
+impl From<[i32; 1024]> for Array1024 {
+    fn from(v: [i32; 1024]) -> Self {
+        Array1024(v)
+    }
+}
+
+impl Serialize for Array1024 {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut seq = ser.serialize_tuple(1024)?;
+        for v in self.0.iter() {
+            seq.serialize_element(v)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Array1024 {
+    fn deserialize<D: serde::Deserializer<'de>>(deser: D) -> Result<Self, D::Error> {
+        struct Array1024Deserializer;
+        impl<'de> Visitor<'de> for Array1024Deserializer {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "an array of length 1024")
+            }
+            type Value = Array1024;
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Array1024, A::Error> {
+                let mut v = [0; 1024];
+                for i in 0..1024 {
+                    if let Some(n) = seq.next_element()? {
+                        v[i] = n;
+                    } else {
+                        return Err(serde::de::Error::invalid_length(i, &self))
+                    }
+                }
+                Ok(Array1024(v))
+            }
+        }
+        deser.deserialize_tuple(1024, Array1024Deserializer)
     }
 }

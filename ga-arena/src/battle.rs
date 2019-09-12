@@ -30,7 +30,10 @@ impl Battle {
         p2_name: IndividualName
     ) -> Self {
         let battle = libtetris::Battle::new(
-            Default::default(), p1_seed, p2_seed, thread_rng().gen()
+            libtetris::GameConfig {
+                margin_time: None,
+                ..Default::default()
+            }, p1_seed, p2_seed, thread_rng().gen()
         );
         Battle {
             p1: BotController::new(
@@ -166,7 +169,12 @@ pub fn playout<E: Evaluator + Clone + Send + 'static>(
                             *current_replay.lock().unwrap() = Some(replay);
                             *game = None;
                         }
-                        None => {}
+                        None => {
+                            if battle.battle.time > 60*60*15 {
+                                // no winner
+                                *game = None;
+                            }
+                        }
                     }
                 }
             }
