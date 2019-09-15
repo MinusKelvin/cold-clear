@@ -1,198 +1,169 @@
-use std::collections::VecDeque;
 use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
 
+mod controller;
 pub mod evaluation;
-mod moves;
 mod misa;
+pub mod moves;
 mod tree;
 
 use libtetris::*;
 use crate::tree::Tree;
-use crate::moves::Input;
+use crate::moves::Move;
 use crate::evaluation::Evaluator;
 
-pub struct BotController {
-    executing: Option<(bool, VecDeque<moves::Input>, FallingPiece)>,
-    send: Sender<BotMsg>,
-    recv: Receiver<BotResult>,
-    controller: Controller,
-    dead: bool
+pub use crate::controller::Controller;
+
+#[derive(Copy, Clone, Debug)]
+pub struct Options {
+    pub mode: crate::moves::MovementMode,
+    pub use_hold: bool,
+    pub speculate: bool,
+    pub min_nodes: usize,
+    pub max_nodes: usize,
 }
 
-impl BotController {
-    pub fn new(
-        initial_board: Board, use_misa: bool, evaluator: impl Evaluator + Send + 'static
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            mode: crate::moves::MovementMode::ZeroG,
+            use_hold: true,
+            speculate: true,
+            min_nodes: 0,
+            max_nodes: std::usize::MAX
+        }
+    }
+}
+
+pub struct Interface {
+    send: Sender<BotMsg>,
+    recv: Receiver<BotResult>,
+    dead: bool,
+    mv: Option<Move>
+}
+
+impl Interface {
+    /// Launches a bot thread with the specified starting board and options.
+    pub fn launch(
+        board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
     ) -> Self {
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
-        std::thread::spawn(move || {
-            if use_misa {
-                misa::glue(bot_recv, bot_send, initial_board);
-            } else {
-                run(bot_recv, bot_send, initial_board, evaluator);
-            }
-        });
+        std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
 
-        BotController {
-            executing: None,
-            send, recv,
-            controller: Controller::default(),
-            dead: false
+        Interface {
+            send, recv, dead: false, mv: None
         }
     }
 
-    pub fn controller(&mut self) -> Controller {
-        self.controller
+    pub fn misa_glue(board: Board) -> Self {
+        let (bot_send, recv) = channel();
+        let (send, bot_recv) = channel();
+        std::thread::spawn(move || misa::glue(bot_recv, bot_send, board));
+
+        Interface {
+            send, recv, dead: false, mv: None
+        }
     }
 
-    pub fn update(
-        &mut self, events: &[Event], board: &Board<ColoredRow>
-    ) -> Option<Info> {
-        if self.dead {
-            self.controller.hard_drop ^= true;
+    pub fn misa_prepare_next_move(&mut self) {
+        if self.send.send(BotMsg::PrepareNextMove).is_err() {
+            self.dead = true;
         }
-        let mut update_info = None;
-        match self.recv.try_recv() {
-            Ok(BotResult::Move { inputs, expected_location, hold }) =>
-                self.executing = Some((hold, inputs.into_iter().collect(), expected_location)),
-            Ok(BotResult::BotInfo(lines)) => update_info = Some(lines),
-            _ => {}
-        }
-        let mut reset_bot = false;
-        for event in events {
-            match event {
-                Event::PieceSpawned { new_in_queue } => {
-                    self.dead = self.send.send(BotMsg::NewPiece(*new_in_queue)).is_err();
-                    if self.executing.is_none() {
-                        self.dead = self.send.send(BotMsg::NextMove).is_err();
-                    }
-                }
-                Event::SpawnDelayStart => if self.executing.is_none() {
-                    self.dead = self.send.send(BotMsg::PrepareNextMove).is_err();
-                }
-                Event::PieceHeld(_) => if let Some(ref mut exec) = self.executing {
-                    exec.0 = false;
-                }
-                Event::PieceFalling(piece, _) => if let Some(ref mut exec) = self.executing {
-                    if exec.0 {
-                        self.controller.hold ^= true;
-                    } else {
-                        self.controller.hold = false;
-                        self.controller.hard_drop = false;
-                        match exec.1.front() {
-                            None => {
-                                self.controller = Default::default();
-                                self.controller.hard_drop = true;
-                            }
-                            Some(Input::DasLeft) => {
-                                self.controller.right = false;
-                                self.controller.rotate_left = false;
-                                self.controller.rotate_right = false;
-                                self.controller.soft_drop = false;
+    }
 
-                                self.controller.left ^= true;
-                                let mut p = piece.clone();
-                                if !p.shift(board, -1, 0) {
-                                    exec.1.pop_front();
-                                }
-                            }
-                            Some(Input::DasRight) => {
-                                self.controller.left = false;
-                                self.controller.rotate_left = false;
-                                self.controller.rotate_right = false;
-                                self.controller.soft_drop = false;
+    /// Returns true if all possible piece placement sequences result in death, or some kind of
+    /// error occured that crashed the bot thread.
+    pub fn is_dead(&self) -> bool {
+        self.dead
+    }
 
-                                self.controller.right ^= true;
-                                let mut p = piece.clone();
-                                if !p.shift(board, 1, 0) {
-                                    exec.1.pop_front();
-                                }
-                            }
-                            Some(Input::SonicDrop) => {
-                                self.controller.right = false;
-                                self.controller.rotate_left = false;
-                                self.controller.rotate_right = false;
-                                self.controller.left = false;
-
-                                self.controller.soft_drop = true;
-                                let mut p = piece.clone();
-                                if !p.shift(board, 0, -1) {
-                                    exec.1.pop_front();
-                                }
-                            }
-                            Some(Input::Left) => {
-                                self.controller.right = false;
-                                self.controller.rotate_left = false;
-                                self.controller.rotate_right = false;
-                                self.controller.soft_drop = false;
-                                
-                                self.controller.left ^= true;
-                                if self.controller.left {
-                                    exec.1.pop_front();
-                                }
-                            }
-                            Some(Input::Right) => {
-                                self.controller.left = false;
-                                self.controller.rotate_left = false;
-                                self.controller.rotate_right = false;
-                                self.controller.soft_drop = false;
-                                
-                                self.controller.right ^= true;
-                                if self.controller.right {
-                                    exec.1.pop_front();
-                                }
-                            }
-                            Some(Input::Cw) => {
-                                self.controller.right = false;
-                                self.controller.rotate_left = false;
-                                self.controller.left = false;
-                                self.controller.soft_drop = false;
-                                
-                                self.controller.rotate_right ^= true;
-                                if self.controller.rotate_right {
-                                    exec.1.pop_front();
-                                }
-                            }
-                            Some(Input::Ccw) => {
-                                self.controller.left = false;
-                                self.controller.right = false;
-                                self.controller.rotate_right = false;
-                                self.controller.soft_drop = false;
-                                
-                                self.controller.rotate_left ^= true;
-                                if self.controller.rotate_left {
-                                    exec.1.pop_front();
-                                }
-                            }
-                        }
-                    }
+    fn poll_bot(&mut self) {
+        loop {
+            match self.recv.try_recv() {
+                Ok(BotResult::Move(mv)) => self.mv = Some(mv),
+                Ok(BotResult::BotInfo(_)) => { /* TODO */ },
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    self.dead = true;
+                    break
                 }
-                Event::PiecePlaced { piece, .. } => {
-                    self.controller = Default::default();
-                    if let Some(ref exec) = self.executing {
-                        if exec.2 != *piece {
-                            reset_bot = true;
-                            eprintln!("Misdrop!");
-                        }
-                    } else {
-                        reset_bot = true;
-                    }
-                    self.executing = None;
-                }
-                Event::GarbageAdded(_) => reset_bot = true,
-                _ => {}
             }
         }
-        if reset_bot {
-            self.dead = self.send.send(BotMsg::Reset(board.to_compressed())).is_err();
+    }
+
+    /// Request the bot to provide a move as soon as possible.
+    /// 
+    /// In most cases, "as soon as possible" is a very short amount of time, and is only longer if
+    /// the provided lower limit on thinking has not been reached yet or if the bot cannot provide
+    /// a move yet, usually because it lacks information on the next pieces.
+    /// 
+    /// For example, in a game with zero piece previews and hold enabled, the bot will never be able
+    /// to provide the first move because it cannot know what piece it will be placing if it chooses
+    /// to hold. Another example: in a game with zero piece previews and hold disabled, the bot
+    /// will only be able to provide a move after the current piece spawns and you provide the new
+    /// piece information to the bot using `add_next_piece`.
+    /// 
+    /// It is recommended that you wait to call this function until after the current piece spawns
+    /// and you update the queue using `add_next_piece`, as this will allow speculation to be
+    /// resolved and at least one thinking cycle to run.
+    /// 
+    /// Once a move is chosen, the bot will update its internal state to the result of the piece
+    /// being placed correctly and the move will become available by calling `poll_next_move`.
+    pub fn request_next_move(&mut self) {
+        if self.send.send(BotMsg::NextMove).is_err() {
+            self.dead = true;
         }
-        update_info
+    }
+
+    /// Checks to see if the bot has provided the previously requested move yet.
+    /// 
+    /// The returned move contains both a path and the expected location of the placed piece. The
+    /// returned path is reasonably good, but you might want to use your own pathfinder to, for
+    /// example, exploit movement intricacies in the game you're playing.
+    /// 
+    /// If the piece couldn't be placed in the expected location, you must call `reset` to reset the
+    /// game field, back-to-back status, and combo values.
+    pub fn poll_next_move(&mut self) -> Option<Move> {
+        self.poll_bot();
+        self.mv.take()
+    }
+
+    /// Adds a new piece to the end of the queue.
+    /// 
+    /// If speculation is enabled, the piece must be in the bag. For example, if you start a new
+    /// game with starting sequence IJOZT, the first time you call this function you can only
+    /// provide either an L or an S piece.
+    pub fn add_next_piece(&mut self, piece: Piece) {
+        if self.send.send(BotMsg::NewPiece(piece)).is_err() {
+            self.dead = true;
+        }
+    }
+
+    /// Resets the playfield, back-to-back status, and combo count.
+    /// 
+    /// This should only be used when garbage is received or when your client could not place the
+    /// piece in the correct position for some reason (e.g. 15 move rule), since this forces the
+    /// bot to throw away previous computations.
+    /// 
+    /// Note: combo is not the same as the displayed combo in guideline games. Here, it is better
+    /// thought of as the number of pieces that have been placed that cleared lines in a row. So,
+    /// generally speaking, if you break your combo, use 0 here; if you just clear a line, use 1
+    /// here; and if "x Combo" appears on the screen, use x+1 here.
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
+        if self.send.send(BotMsg::Reset {
+            field, b2b: b2b_active, combo
+        }).is_err() {
+            self.dead = true;
+        }
     }
 }
 
-#[derive(Debug)]
 enum BotMsg {
-    Reset(Board),
+    Reset {
+        field: [[bool; 10]; 40],
+        b2b: bool,
+        combo: u32
+    },
     NewPiece(Piece),
     NextMove,
     PrepareNextMove
@@ -200,11 +171,7 @@ enum BotMsg {
 
 #[derive(Debug)]
 enum BotResult {
-    Move {
-        inputs: moves::InputList,
-        expected_location: FallingPiece,
-        hold: bool
-    },
+    Move(Move),
     BotInfo(Info)
 }
 
@@ -212,10 +179,9 @@ fn run(
     recv: Receiver<BotMsg>,
     send: Sender<BotResult>,
     board: Board,
-    mut evaluator: impl Evaluator
+    mut evaluator: impl Evaluator,
+    options: Options
 ) {
-    const MOVEMENT_MODE: crate::moves::MovementMode = crate::moves::MovementMode::ZeroG;
-
     send.send(BotResult::BotInfo({
         let mut info = evaluator.info();
         info.insert(0, ("Cold Clear".to_string(), None));
@@ -230,10 +196,8 @@ fn run(
     );
 
     let mut do_move = false;
-    const THINK_OUTSIDE_SPAWN_DELAY: bool = true;
-    let mut think = THINK_OUTSIDE_SPAWN_DELAY;
     loop {
-        let result = if think {
+        let result = if tree.child_nodes < options.max_nodes {
             recv.try_recv()
         } else {
             recv.recv().map_err(|_| TryRecvError::Disconnected)
@@ -245,7 +209,13 @@ fn run(
                 // Only death is possible
                 break
             }
-            Ok(BotMsg::Reset(board)) => {
+            Ok(BotMsg::Reset {
+                field, b2b, combo
+            }) => {
+                let mut board = tree.board;
+                board.set_field(field);
+                board.combo = combo;
+                board.b2b_bonus = b2b;
                 tree = Tree::new(
                     board,
                     &Default::default(),
@@ -254,22 +224,19 @@ fn run(
                 );
             }
             Ok(BotMsg::NextMove) => do_move = true,
-            Ok(BotMsg::PrepareNextMove) => {
-                think = true;
-            }
+            Ok(BotMsg::PrepareNextMove) => {}
         }
 
-        if do_move {
+        if do_move && tree.child_nodes > options.min_nodes {
             let moves_considered = tree.child_nodes;
             match tree.into_best_child() {
                 Ok(child) => {
                     do_move = false;
-                    think = THINK_OUTSIDE_SPAWN_DELAY;
-                    if send.send(BotResult::Move {
+                    if send.send(BotResult::Move(Move {
                         hold: child.hold,
                         inputs: child.mv.inputs,
                         expected_location: child.mv.location
-                    }).is_err() {
+                    })).is_err() {
                         return
                     }
                     if send.send(BotResult::BotInfo({
@@ -290,7 +257,9 @@ fn run(
             }
         }
 
-        if think && tree.extend(MOVEMENT_MODE, &mut evaluator) {
+        if tree.child_nodes < options.max_nodes &&
+                tree.board.next_queue().count() > 0 &&
+                tree.extend(options, &mut evaluator) {
             break
         }
     }

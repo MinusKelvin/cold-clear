@@ -2,7 +2,6 @@ use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;
 use libtetris::{ Event, Replay, Info, Board, LockResult };
 use bot::evaluation::{ Evaluator, Evaluation };
-use bot::BotController;
 use std::collections::VecDeque;
 use crate::{ Population, IndividualName };
 use std::sync::{ Arc, Mutex };
@@ -10,8 +9,8 @@ use std::sync::{ Arc, Mutex };
 type Seed = <Pcg64Mcg as SeedableRng>::Seed;
 
 struct Battle {
-    p1: BotController,
-    p2: BotController,
+    p1: bot::Controller,
+    p2: bot::Controller,
     p1_num: usize,
     p2_num: usize,
     battle: libtetris::Battle,
@@ -36,16 +35,16 @@ impl Battle {
             }, p1_seed, p2_seed, thread_rng().gen()
         );
         Battle {
-            p1: BotController::new(
+            p1: bot::Controller::new(bot::Interface::launch(
                 battle.player_1.board.to_compressed(),
-                false,
+                bot::Options::default(),
                 GenInfoEvaluator { name: p1_name, eval: p1 }
-            ),
-            p2: BotController::new(
+            )),
+            p2: bot::Controller::new(bot::Interface::launch(
                 battle.player_2.board.to_compressed(),
-                false,
+                bot::Options::default(),
                 GenInfoEvaluator { name: p2_name, eval: p2 }
-            ),
+            )),
             p1_num, p2_num, battle
         }
     }
@@ -56,9 +55,9 @@ impl Battle {
 
         let result = self.battle.update(p1_controller, p2_controller);
 
-        let p1_info = self.p1.update(&result.player_1.events, &self.battle.player_1.board);
+        let p1_info = self.p1.update(&self.battle.player_1.board, &result.player_1.events);
         self.battle.replay.updates.back_mut().unwrap().1 = p1_info;
-        let p2_info = self.p2.update(&result.player_2.events, &self.battle.player_2.board);
+        let p2_info = self.p2.update(&self.battle.player_2.board, &result.player_2.events);
         self.battle.replay.updates.back_mut().unwrap().3 = p2_info;
 
         for event in result.player_1.events {

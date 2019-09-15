@@ -7,13 +7,13 @@ pub trait InputSource {
     fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<Info>;
 }
 
-impl InputSource for bot::BotController {
+impl InputSource for bot::Controller {
     fn controller(&mut self, _: &mut Context) -> Controller {
         self.controller()
     }
 
     fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<Info> {
-        self.update(events, board)
+        self.update(board, events)
     }
 }
 

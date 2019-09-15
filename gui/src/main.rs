@@ -100,10 +100,22 @@ fn main() {
             let mut local_game = LocalGame::new(
                 &mut resources,
                 Box::new(|board|
-                    Box::new(bot::BotController::new(board, false, NaiveEvaluator::default()))
+                    Box::new(bot::Controller::new(bot::Interface::launch(
+                        board,
+                        bot::Options {
+                            ..Default::default()
+                        },
+                        NaiveEvaluator::default()
+                    )))
                 ),
                 Box::new(|board|
-                    Box::new(bot::BotController::new(board, true, NaiveEvaluator::default()))
+                    Box::new(bot::Controller::new(bot::Interface::launch(
+                        board,
+                        bot::Options {
+                            ..Default::default()
+                        },
+                        NaiveEvaluator::default()
+                    )))
                 )
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();

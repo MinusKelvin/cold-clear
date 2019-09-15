@@ -3,8 +3,9 @@ use enum_map::EnumMap;
 use arrayvec::ArrayVec;
 use odds::vec::VecExt;
 use libtetris::{ Board, LockResult, Piece, FallingPiece };
-use crate::moves::Move;
+use crate::moves::Placement;
 use crate::evaluation::{ Evaluator, Evaluation };
+use crate::Options;
 
 pub struct Tree {
     pub board: Board,
@@ -24,7 +25,7 @@ type Speculation = EnumMap<Piece, Option<Vec<Child>>>;
 
 pub struct Child {
     pub hold: bool,
-    pub mv: Move,
+    pub mv: Placement,
     pub lock: LockResult,
     pub tree: Tree
 }
@@ -78,18 +79,18 @@ impl Tree {
 
     /// Does an iteration of MCTS. Returns true if only death is possible from this position.
     pub fn extend(
-        &mut self, mode: crate::moves::MovementMode, evaluator: &mut impl Evaluator
+        &mut self, opts: Options, evaluator: &mut impl Evaluator
     ) -> bool {
-        self.expand(mode, evaluator).is_death
+        self.expand(opts, evaluator).is_death
     }
 
     fn expand(
-        &mut self, mode: crate::moves::MovementMode, evaluator: &mut impl Evaluator
+        &mut self, opts: Options, evaluator: &mut impl Evaluator
     ) -> ExpandResult {
         match self.kind {
             // TODO: refactor the unexpanded case into TreeKind, and remove the board field
             Some(ref mut tk) => {
-                let er = tk.expand(mode, evaluator);
+                let er = tk.expand(opts, evaluator);
                 if !er.is_death {
                     // Update this node's information
                     self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
@@ -100,14 +101,14 @@ impl Tree {
             }
             None => {
                 if self.board.get_next_piece().is_ok() {
-                    if self.board.hold_piece().is_none() &&
+                    if opts.use_hold && self.board.hold_piece().is_none() &&
                             self.board.get_next_next_piece().is_none() {
                         // Speculate - next piece is known, but hold piece isn't
-                        self.speculate(mode, evaluator)
+                        self.speculate(opts, evaluator)
                     } else {
                         // Both next piece and hold piece are known
                         let children = new_children(
-                            self.board.clone(), mode, evaluator
+                            self.board.clone(), opts, evaluator
                         );
 
                         if children.is_empty() {
@@ -132,11 +133,11 @@ impl Tree {
                 } else {
                     // Speculate - hold should be known, but next piece isn't
                     assert!(
-                        self.board.hold_piece().is_some(),
+                        opts.use_hold && self.board.hold_piece().is_some(),
                         "Neither hold piece or next piece are known - what the heck happened?\n\
                          get_next_piece: {:?}", self.board.get_next_piece()
                     );
-                    self.speculate(mode, evaluator)
+                    self.speculate(opts, evaluator)
                 }
             }
         }
@@ -144,9 +145,16 @@ impl Tree {
 
     fn speculate(
         &mut self,
-        mode: crate::moves::MovementMode,
+        opts: Options,
         evaluator: &mut impl Evaluator
     ) -> ExpandResult {
+        if !opts.speculate {
+            return ExpandResult {
+                is_death: false,
+                depth: 0,
+                new_nodes: 0
+            }
+        }
         let possibilities = match self.board.get_next_piece() {
             Ok(_) => {
                 let mut b = self.board.clone();
@@ -160,7 +168,7 @@ impl Tree {
             let mut board = self.board.clone();
             board.add_next_piece(piece);
             let children = new_children(
-                board, mode, evaluator
+                board, opts, evaluator
             );
             self.child_nodes += children.len();
             speculation[piece] = Some(children);
@@ -190,7 +198,7 @@ impl Tree {
 /// Otherwise there is at least 1 piece in the queue.
 fn new_children(
     mut board: Board,
-    mode: crate::moves::MovementMode,
+    opts: Options,
     evaluator: &mut impl Evaluator
 ) -> Vec<Child> {
     let mut children = vec![];
@@ -201,7 +209,7 @@ fn new_children(
     };
 
     // Placements for next piece
-    for mv in crate::moves::find_moves(&board, spawned, mode) {
+    for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
         let mut board = board.clone();
         let lock = board.lock_piece(mv.location);
         if !lock.locked_out {
@@ -213,20 +221,22 @@ fn new_children(
         }
     }
 
-    let mut board = board.clone();
-    let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
-    if hold != next {
-        if let Some(spawned) = FallingPiece::spawn(hold, &board) {
-            // Placements for hold piece
-            for mv in crate::moves::find_moves(&board, spawned, mode) {
-                let mut board = board.clone();
-                let lock = board.lock_piece(mv.location);
-                if !lock.locked_out {
-                    children.push(Child {
-                        tree: Tree::new(board, &lock, mv.soft_dropped, evaluator),
-                        hold: true,
-                        mv, lock
-                    })
+    if opts.use_hold {
+        let mut board = board.clone();
+        let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
+        if hold != next {
+            if let Some(spawned) = FallingPiece::spawn(hold, &board) {
+                // Placements for hold piece
+                for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
+                    let mut board = board.clone();
+                    let lock = board.lock_piece(mv.location);
+                    if !lock.locked_out {
+                        children.push(Child {
+                            tree: Tree::new(board, &lock, mv.soft_dropped, evaluator),
+                            hold: true,
+                            mv, lock
+                        })
+                    }
                 }
             }
         }
@@ -303,7 +313,7 @@ impl TreeKind {
 
     fn expand(
         &mut self,
-        mode: crate::moves::MovementMode,
+        opts: Options,
         evaluator: &mut impl Evaluator
     ) -> ExpandResult {
         let to_expand = match self {
@@ -338,7 +348,7 @@ impl TreeKind {
         let sampler = rand::distributions::WeightedIndex::new(weights).unwrap();
         let index = thread_rng().sample(sampler);
 
-        let result = to_expand[index].tree.expand(mode, evaluator);
+        let result = to_expand[index].tree.expand(opts, evaluator);
         if result.is_death {
             to_expand.remove(index);
             match self {

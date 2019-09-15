@@ -16,10 +16,17 @@ pub enum Input {
 pub type InputList = ArrayVec<[Input; 32]>;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub struct Move {
+pub struct Placement {
     pub inputs: InputList,
     pub location: FallingPiece,
     pub soft_dropped: bool
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct Move {
+    pub inputs: InputList,
+    pub expected_location: FallingPiece,
+    pub hold: bool
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -33,7 +40,7 @@ pub fn find_moves(
     board: &Board,
     mut spawned: FallingPiece,
     mode: MovementMode
-) -> Vec<Move> {
+) -> Vec<Placement> {
     let mut locks = HashMap::with_capacity(1024);
     let mut checked = HashSet::with_capacity(1024);
     let mut check_queue = VecDeque::new();
@@ -129,7 +136,7 @@ pub fn find_moves(
 
 fn lock_check(
     piece: FallingPiece,
-    locks: &mut HashMap<(ArrayVec<[(i32, i32); 4]>, TspinStatus), Move>,
+    locks: &mut HashMap<(ArrayVec<[(i32, i32); 4]>, TspinStatus), Placement>,
     moves: InputList
 ) {
     let cells = piece.cells();
@@ -138,7 +145,7 @@ fn lock_check(
     }
     match locks.entry((cells, piece.tspin)) {
         Entry::Vacant(entry) => {
-            entry.insert(Move {
+            entry.insert(Placement {
                 soft_dropped: moves.contains(&Input::SonicDrop),
                 inputs: moves,
                 location: piece,
@@ -147,7 +154,7 @@ fn lock_check(
         Entry::Occupied(mut entry) => {
             let mv = entry.get_mut();
             if moves.len() < mv.inputs.len() {
-                *mv = Move {
+                *mv = Placement {
                     soft_dropped: moves.contains(&Input::SonicDrop),
                     inputs: moves,
                     location: piece,

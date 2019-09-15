@@ -56,8 +56,12 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board
             Ok(BotMsg::NewPiece(piece)) => {
                 board.add_next_piece(piece);
             }
-            Ok(BotMsg::Reset(b)) => {
-                board = b;
+            Ok(BotMsg::Reset {
+                field, combo, b2b
+            }) => {
+                board.set_field(field);
+                board.combo = combo;
+                board.b2b_bonus = b2b;
             }
             Ok(BotMsg::NextMove) => {}
             Ok(BotMsg::PrepareNextMove) => {
@@ -162,11 +166,11 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board
                             continue
                         }
                         board = b;
-                        send.send(BotResult::Move {
+                        send.send(BotResult::Move(Move {
                             inputs: mv.inputs,
                             expected_location: mv.location,
                             hold: false
-                        }).ok();
+                        })).ok();
                         continue 'botloop;
                     }
                 }
@@ -191,11 +195,11 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board
                             b.advance_queue();
                         }
                         board = b;
-                        send.send(BotResult::Move {
+                        send.send(BotResult::Move(Move {
                             inputs: mv.inputs,
                             expected_location: mv.location,
                             hold: true
-                        }).ok();
+                        })).ok();
                         continue 'botloop;
                     }
                 }

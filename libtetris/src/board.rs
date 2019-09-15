@@ -249,6 +249,31 @@ impl<R: Row> Board<R> {
             bag: self.bag
         }
     }
+
+    pub fn set_field(&mut self, field: [[bool; 10]; 40]) {
+        self.cells.clear();
+        self.column_heights = [0; 10];
+        for y in 0..40 {
+            let mut r = *R::EMPTY;
+            for x in 0..10 {
+                if field[y][x] {
+                    r.set(x, CellColor::Garbage);
+                    self.column_heights[x] = y as i32 + 1;
+                }
+            }
+            self.cells.push(r)
+        }
+    }
+
+    pub fn get_field(&self) -> [[bool; 10]; 40] {
+        let mut field = [[false; 10]; 40];
+        for y in 0..40 {
+            for x in 0..10 {
+                field[y][x] = self.occupied(x as i32, y as i32)
+            }
+        }
+        field
+    }
 }
 
 impl Row for u16 {
