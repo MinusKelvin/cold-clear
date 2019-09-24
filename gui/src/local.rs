@@ -2,13 +2,14 @@ use ggez::event::EventHandler;
 use ggez::{ Context, GameResult };
 use ggez::graphics;
 use ggez::timer;
-use libtetris::{ Battle, Board };
+use libtetris::Board;
+use battle::Battle;
 use crate::interface::{ Gui, text };
 use crate::Resources;
 use rand::prelude::*;
 use crate::input::InputSource;
 
-type InputFactory = dyn Fn(Board) -> Box<dyn InputSource>;
+type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
 
 pub struct LocalGame<'a> {
     gui: Gui,
@@ -34,16 +35,17 @@ impl<'a> LocalGame<'a> {
         let battle = Battle::new(
             Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
+        let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
+        let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
         LocalGame {
-            p1_input: p1(battle.player_1.board.to_compressed()),
-            p2_input: p2(battle.player_2.board.to_compressed()),
+            p1_input, p2_input,
             p1_input_factory: p1,
             p2_input_factory: p2,
-            gui: Gui::new(&battle),
+            gui: Gui::new(&battle, p1_name, p2_name),
             battle,
             p1_wins: 0,
             p2_wins: 0,
-            state: State::Starting(500),
+            state: State::Starting(50),
             resources
         }
     }
@@ -70,14 +72,17 @@ impl EventHandler for LocalGame<'_> {
                         Default::default(),
                         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
                     );
-                    self.gui = Gui::new(&self.battle);
 
-                    self.p1_input = (self.p1_input_factory)(
+                    let (p1_input, p1_name) = (self.p1_input_factory)(
                         self.battle.player_1.board.to_compressed()
                     );
-                    self.p2_input = (self.p2_input_factory)(
+                    let (p2_input, p2_name) = (self.p2_input_factory)(
                         self.battle.player_2.board.to_compressed()
                     );
+
+                    self.gui = Gui::new(&self.battle, p1_name, p2_name);
+                    self.p1_input = p1_input;
+                    self.p2_input = p2_input;
 
                     self.state = State::Starting(180);
                     false
@@ -101,21 +106,15 @@ impl EventHandler for LocalGame<'_> {
                 let p1_controller = self.p1_input.controller(ctx);
                 let p2_controller = self.p2_input.controller(ctx);
 
-                let mut update = self.battle.update(p1_controller, p2_controller);
+                let update = self.battle.update(p1_controller, p2_controller);
 
-                update.player_1.info = self.p1_input.update(
-                    &self.battle.player_1.board, &update.player_1.events
-                );
-                self.battle.replay.updates.back_mut().unwrap().1 = update.player_1.info.clone();
-
-                update.player_2.info = self.p2_input.update(
-                    &self.battle.player_2.board, &update.player_2.events
-                );
-                self.battle.replay.updates.back_mut().unwrap().3 = update.player_2.info.clone();
+                // TODO: display bot info, possibly save to replay
+                self.p1_input.update(&self.battle.player_1.board, &update.player_1.events);
+                self.p2_input.update(&self.battle.player_2.board, &update.player_2.events);
 
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {
-                        use libtetris::Event::*;
+                        use battle::Event::*;
                         match event {
                             GameOver => {
                                 self.p2_wins += 1;
@@ -125,7 +124,7 @@ impl EventHandler for LocalGame<'_> {
                         }
                     }
                     for event in &update.player_2.events {
-                        use libtetris::Event::*;
+                        use battle::Event::*;
                         match event {
                             GameOver => {
                                 self.p1_wins += 1;

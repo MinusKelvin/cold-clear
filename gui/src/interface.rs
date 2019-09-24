@@ -3,7 +3,7 @@ use crate::Resources;
 use ggez::{ Context, GameResult };
 use ggez::audio::SoundSource;
 use ggez::graphics::*;
-use libtetris::{ UpdateResult, Battle };
+use battle::{ BattleUpdate, Battle };
 
 pub struct Gui {
     player_1_graphics: BoardDrawState,
@@ -14,19 +14,19 @@ pub struct Gui {
 }
 
 impl Gui {
-    pub fn new(battle: &Battle) -> Self {
+    pub fn new(battle: &Battle, p1_name: String, p2_name: String) -> Self {
         Gui {
-            player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue()),
-            player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue()),
+            player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue(), p1_name),
+            player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue(), p2_name),
             time: 0,
             multiplier: 1.0,
             move_sound_play: 0
         }
     }
 
-    pub fn update(&mut self, update: UpdateResult, res: &mut Resources) -> GameResult {
+    pub fn update(&mut self, update: BattleUpdate, res: &mut Resources) -> GameResult {
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
-            use libtetris::Event::*;
+            use battle::Event::*;
             match event {
                 PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
                     if let Some(move_sound) = &mut res.move_sound {

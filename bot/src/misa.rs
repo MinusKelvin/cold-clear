@@ -38,17 +38,11 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board
     let mut misa_out = BufReader::new(misa.stdout.as_mut().unwrap());
 
     writeln!(misa_in, "settings style 1").unwrap();
-    writeln!(misa_in, "settings level 10").unwrap();
     let mut l = String::new();
     misa_out.read_line(&mut l).unwrap();
+    writeln!(misa_in, "settings level 10").unwrap();
     l.clear();
     misa_out.read_line(&mut l).unwrap();
-    let name = &l[9..l.len()-3];
-
-    send.send(BotResult::BotInfo(vec![
-        ("MisaMino".to_owned(), None),
-        (name.to_owned(), None)
-    ])).ok();
 
     'botloop: loop {
         match recv.recv() {
@@ -167,7 +161,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board
                         }
                         board = b;
                         send.send(BotResult::Move(Move {
-                            inputs: mv.inputs,
+                            inputs: mv.inputs.movements,
                             expected_location: mv.location,
                             hold: false
                         })).ok();
@@ -196,7 +190,7 @@ pub(in super) fn glue(recv: Receiver<BotMsg>, send: Sender<BotResult>, mut board
                         }
                         board = b;
                         send.send(BotResult::Move(Move {
-                            inputs: mv.inputs,
+                            inputs: mv.inputs.movements,
                             expected_location: mv.location,
                             hold: true
                         })).ok();

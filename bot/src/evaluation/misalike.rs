@@ -1,27 +1,29 @@
-use arrayvec::ArrayVec;
+use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use super::*;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct MisalikeEvaluator {
-    pub in_row_transitions: i32,
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct Misalike {
+    pub sub_name: Option<String>,
 
+    pub in_row_transitions: i32,
     pub t_piece_in_hold: i32,
     pub i_piece_in_hold: i32,
-
     pub open_hole: i32,
     pub closed_hole: i32,
+    pub topmost_closed_hole: i32
 }
 
-impl Evaluator for MisalikeEvaluator {
-    fn info(&self) -> Info {
-        vec![
-            ("Misalike".to_string(), None),
-            ("ai style".to_string(), None)
-        ]
+impl Evaluator for Misalike {
+    fn name(&self) -> String {
+        let mut s = "Misalike\n".to_owned();
+        if let Some(sub_name) = &self.sub_name {
+            s.push_str(sub_name);
+        }
+        s
     }
 
-    fn evaluate(&mut self, lock: &LockResult, board: &Board, soft_dropped: bool) -> Evaluation {
+    fn evaluate(&mut self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
         // Context: We're trying to translate this function from MisaMino:
         // https://github.com/misakamm/MisaMino/blob/master/tetris_ai/tetris_ai.cpp#L45
         // Note: the board is y-down; high y = low on the board, low y = high on the board
@@ -136,40 +138,21 @@ impl Evaluator for MisalikeEvaluator {
 
         // Line 236 to 288
         // This loop determines some information about the holes on the board and calculates the
-        // hole score. A hole is defined as any empty cell that is either: a) below the topmost
-        // solid cell, or b) 6 cells below the topmost solid cell of the lower of the two adjacent
-        // columns. If soft dropping is allowed, a hole is "open" if (basically) it can be filled by
-        // a possibly-floating L or J tuck. Otherwise, it is "closed".
-        // In many cases, holes aren't counted if they're above the skyline. I will omit this here.
+        // hole score. A hole is defined as any empty cell that is either: a) below the highest
+        // solid cell in its column, or b) 6 cells below the topmost solid cell of the shorter of
+        // the two adjacent columns. If soft dropping is allowed, a hole is "open" if (basically)
+        // it can be filled by a possibly-floating L or J tuck. Otherwise, it is "closed".
+        // Holes are scored according to their type and height; a hole that is higher up is scored
+        // linearly worse than a hole that is lower down.
+        // Holes that are higher up are scored worse than holes lower down. The relationship with
+        // height is linear.
 
-        // Operates on columns
-        // first_hole_y[column] is set to below bottom of the board
-        // loops starts at either the top of the current column or 6 below the
-        // top of the shorter of the adjacent columns
-        // The code acceses min_y[-1]. This is undefined behaviour. I'll just remove that bit.
-        // Anyways, last is true if the above cell is empty. Nothing interesting happens
-        // if the current cell is filled.
-        // factor is 1.0 when y below the bottom of the board (?), and ranges from 1.0 to 3.0 as
-        // you go from the bottom of the playfield to the skyline
-        // column holes is incremented
-        // softdropEnable() is always true for our purposes
-        // (now, find "open holes")
-        // if this isn't one of the leftmost two columns:
-        //     if both the two leftmost columns are shorted than current y, then
-        //     hole_score is increased
-        //     if we're below the skyline, x_op_holes[y] is incremented
-        //     go to next loop iteration
-        // if this isn't onw of the rightmost two columns:
-        //     same thing as above, but on the other side
-        // So now we know that this isn't an "open hole".
-        // if below the skyline, increment the number of holes in that column
-        // if it's the highest hole in the column, record it
-        // if the above cell is empty, the score is hole/2. Otherwise it's hole*2.
-        // if the above cell is empty and we're below the skyline, renholes for that row is inc'd
-        // hole scrore is increased by the above amount * factor
+        // The original code acceses min_y[-1]. This is undefined behaviour and is removed here.
+        // In many cases, holes aren't counted if they're above the skyline. I will omit this here.
         let mut column_holes = [0; 10];
-        let mut row_open_holes = [0; 40];
         let mut column_first_closed_hole = [-1; 10];
+        let mut row_open_holes = [0; 40];
+        let mut row_closed_holes = [0; 40];
         let mut row_ren_closed_holes = [0; 40];
         let mut hole_score = 0.0;
         let mut hole_count = 0;
@@ -208,6 +191,7 @@ impl Evaluator for MisalikeEvaluator {
                         }
                     }
                     // closed hole
+                    row_closed_holes[y as usize] += 1;
 
                     if column_first_closed_hole[x] == -1 {
                         column_first_closed_hole[x] = y;
@@ -227,6 +211,26 @@ impl Evaluator for MisalikeEvaluator {
                 }
             }
         }
+
+        // Line 301 to 306
+        // This loop finds the topmost row with closed holes and changes score
+        // according to how high it is.
+        for y in (0..40).rev() {
+            if row_closed_holes[y as usize] > 0 {
+                score += self.topmost_closed_hole * (y+1);
+                break
+            }
+        }
+
+        // Line 308 to 327
+        // For the top 5 rows with holes in them:
+        //     For each empty cell in the row:
+        //         h = distance of hole from top of the column
+        //         if h > 4 - the row number:
+        //             h = some weird thing
+        //         if the cell is any kind of hole and the above cell is filled:
+        //             score += ai_param.hole_dis_factor * h * cnt / 5 / 2
+        
 
         unimplemented!()
     }

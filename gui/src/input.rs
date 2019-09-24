@@ -1,24 +1,68 @@
 use ggez::Context;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use libtetris::*;
+use battle::{ Controller, Event, PieceMoveExecutor };
 
 pub trait InputSource {
     fn controller(&mut self, ctx: &mut Context) -> Controller;
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<Info>;
+    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info>;
 }
 
-impl InputSource for bot::Controller {
+pub struct BotInput {
+    interface: bot::Interface,
+    executing: Option<(FallingPiece, PieceMoveExecutor)>,
+    controller: Controller
+}
+
+impl BotInput {
+    pub fn new(interface: bot::Interface) -> Self {
+        BotInput {
+            interface,
+            executing: None,
+            controller: Default::default()
+        }
+    }
+}
+
+impl InputSource for BotInput {
     fn controller(&mut self, _: &mut Context) -> Controller {
-        self.controller()
+        self.controller
     }
 
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<Info> {
-        self.update(board, events)
+    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+        for event in events {
+            match event {
+                Event::PieceSpawned { new_in_queue } => {
+                    self.interface.add_next_piece(*new_in_queue);
+                    if self.executing.is_none() {
+                        self.interface.request_next_move();
+                    }
+                }
+                Event::GarbageAdded(_) => {
+                    self.interface.reset(board.get_field(), board.b2b_bonus, board.combo);
+                }
+                _ => {}
+            }
+        }
+        if let Some((expected, ref mut executor)) = self.executing {
+            if let Some(loc) = executor.update(&mut self.controller, board, events) {
+                if loc != expected {
+                    self.interface.reset(board.get_field(), board.b2b_bonus, board.combo);
+                }
+                self.executing = None;
+            }
+        } else if let Some(mv) = self.interface.poll_next_move() {
+            self.executing = Some((
+                mv.expected_location,
+                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
+            ));
+        }
+        self.interface.poll_info()
     }
 }
 
 #[derive(Default, Copy, Clone)]
-pub struct Keyboard(bool);
+pub struct Keyboard;
 
 impl InputSource for Keyboard {
     fn controller(&mut self, ctx: &mut Context) -> Controller {
@@ -33,12 +77,7 @@ impl InputSource for Keyboard {
         }
     }
 
-    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<Info> {
-        if self.0 {
-            None
-        } else {
-            self.0 = true;
-            Some(vec![("Human".to_owned(), None)])
-        }
+    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<bot::Info> {
+        None
     }
 }

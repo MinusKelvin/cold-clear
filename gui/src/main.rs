@@ -96,27 +96,32 @@ fn main() {
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         None => {
-            use bot::evaluation::NaiveEvaluator;
+            use bot::evaluation::*;
+            use crate::input::*;
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(|board|
-                    Box::new(bot::Controller::new(bot::Interface::launch(
+                Box::new(|board| {
+                    let evaluator = Standard::default();
+                    let name = format!("Cold Clear\n{}", evaluator.name());
+                    (Box::new(BotInput::new(bot::Interface::launch(
                         board,
                         bot::Options {
                             ..Default::default()
                         },
-                        NaiveEvaluator::default()
-                    )))
-                ),
-                Box::new(|board|
-                    Box::new(bot::Controller::new(bot::Interface::launch(
+                        evaluator
+                    ))), name)
+                }),
+                Box::new(|board|{
+                    let evaluator = Standard::default();
+                    let name = format!("Cold Clear\n{}", evaluator.name());
+                    (Box::new(BotInput::new(bot::Interface::launch(
                         board,
                         bot::Options {
                             ..Default::default()
                         },
-                        NaiveEvaluator::default()
-                    )))
-                )
+                        evaluator
+                    ))), name)
+                })
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }

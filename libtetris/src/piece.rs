@@ -114,9 +114,10 @@ impl FallingPiece {
                             // The leaked 2009 guideline says that rotations made after using the
                             // TST twist stay as full tspins, not minis. Example:
                             // http://harddrop.com/fumen/?v115@4gB8IeA8CeE8AeH8CeG8BeD8JeVBnvhC9rflrBAAA
-                            // That guideline contains no examples of this, and I don't know if it
-                            // is in fact the case in e.g. Puyo Puyo Tetris.
-                            // For now, we will ignore this rule.
+                            // That guideline contains no examples of this, and this isn't the case
+                            // in recent guideline games such as Puyo Puyo Tetris.
+                            // For now, we won't implement it.
+                            
                             // self.tspin = TspinStatus::PersistentFull;
                             self.tspin = TspinStatus::Full;
                         } else if mini_corners == 2 {
@@ -330,6 +331,27 @@ impl Piece {
             Piece::J => CellColor::J,
             Piece::S => CellColor::S,
             Piece::Z => CellColor::Z,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub enum PieceMovement {
+    Left,
+    Right,
+    Cw,
+    Ccw,
+    SonicDrop
+}
+
+impl PieceMovement {
+    pub fn apply(self, piece: &mut FallingPiece, board: &Board) -> bool {
+        match self {
+            PieceMovement::Left => piece.shift(board, -1, 0),
+            PieceMovement::Right => piece.shift(board, 1, 0),
+            PieceMovement::Ccw => piece.ccw(board),
+            PieceMovement::Cw => piece.cw(board),
+            PieceMovement::SonicDrop => piece.sonic_drop(board)
         }
     }
 }

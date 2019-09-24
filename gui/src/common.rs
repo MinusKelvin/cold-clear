@@ -3,6 +3,7 @@ use ggez::graphics::*;
 use ggez::graphics::spritebatch::SpriteBatch;
 use std::collections::VecDeque;
 use libtetris::*;
+use battle::{ PlayerUpdate, Event };
 use arrayvec::ArrayVec;
 use crate::interface::text;
 use rand::prelude::*;
@@ -19,7 +20,7 @@ pub struct BoardDrawState {
     combo_splash: Option<(u32, u32)>,
     back_to_back_splash: Option<u32>,
     clear_splash: Option<(&'static str, u32)>,
-    info_lines: Vec<(String, Option<String>)>,
+    name: String,
     hard_drop_particles: Option<(u32, Vec<(f32, f32, f32)>)>
 }
 
@@ -30,7 +31,7 @@ enum State {
 }
 
 impl BoardDrawState {
-    pub fn new(queue: impl IntoIterator<Item=Piece>) -> Self {
+    pub fn new(queue: impl IntoIterator<Item=Piece>, name: String) -> Self {
         BoardDrawState {
             board: ArrayVec::from([*ColoredRow::EMPTY; 40]),
             state: State::Delay,
@@ -44,16 +45,13 @@ impl BoardDrawState {
             back_to_back_splash: None,
             clear_splash: None,
             hard_drop_particles: None,
-            info_lines: vec![]
+            name
         }
     }
 
-    pub fn update(&mut self, update: GraphicsUpdate, time: u32) {
+    pub fn update(&mut self, update: PlayerUpdate, time: u32) {
         self.garbage_queue = update.garbage_queue;
         self.game_time = time;
-        if let Some(info) = update.info {
-            self.info_lines = info;
-        }
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
             *frames += 1;
         }
@@ -291,23 +289,10 @@ impl BoardDrawState {
             );
             y += scale * 0.66;
         }
-        let mut y = (self.next_queue.len() as f32 * 2.0 + 1.0) * scale;
-        for (txt1, txt2) in &self.info_lines {
-            match txt2 {
-                None => queue_text(
-                    ctx, &text(&**txt1, scale*0.66, 3.5*scale), [text_x+13.25*scale, y], None
-                ),
-                Some(txt2) => {
-                    queue_text(
-                        ctx, &text(&**txt1, scale*0.66, 0.0), [text_x+13.25*scale, y], None
-                    );
-                    queue_text(
-                        ctx, &text(&**txt2, scale*0.66, -3.5*scale), [text_x+13.25*scale, y], None
-                    )
-                }
-            }
-            y += scale * 0.66
-        }
+        let y = (self.next_queue.len() as f32 * 2.0 + 1.0) * scale;
+        queue_text(
+            ctx, &text(&*self.name, scale*0.66, 3.5*scale), [text_x+13.25*scale, y], None
+        );
         if let Some(timer) = self.back_to_back_splash {
             queue_text(
                 ctx,

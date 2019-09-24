@@ -4,7 +4,7 @@ use libtetris::{ Board, LockResult, PlacementKind };
 use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct NaiveEvaluator {
+pub struct Standard {
     pub back_to_back: i32,
     pub bumpiness: i32,
     pub bumpiness_sq: i32,
@@ -34,14 +34,14 @@ pub struct NaiveEvaluator {
     pub mini_tspin2: i32,
     pub perfect_clear: i32,
     pub combo_table: [i32; 12],
-    pub soft_drop: i32,
+    pub move_time: i32,
 
-    pub extra_info: Option<String>
+    pub sub_name: Option<String>
 }
 
-impl Default for NaiveEvaluator {
+impl Default for Standard {
     fn default() -> Self {
-        NaiveEvaluator {
+        Standard {
             back_to_back: 50,
             bumpiness: -10,
             bumpiness_sq: -5,
@@ -60,7 +60,7 @@ impl Default for NaiveEvaluator {
             well_depth: 50,
             max_well_depth: 8,
 
-            soft_drop: -10,
+            move_time: -1,
             b2b_clear: 100,
             clear1: -150,
             clear2: -100,
@@ -78,21 +78,21 @@ impl Default for NaiveEvaluator {
                 .into_inner()
                 .unwrap(),
 
-            extra_info: None
+            sub_name: None
         }
     }
 }
 
-impl Evaluator for NaiveEvaluator {
-    fn info(&self) -> Info {
-        let mut info = vec![("Naive".to_string(), None)];
-        if let Some(extra) = &self.extra_info {
-            info.push((extra.to_owned(), None));
+impl Evaluator for Standard {
+    fn name(&self) -> String {
+        let mut info = "Standard".to_owned();
+        if let Some(extra) = &self.sub_name {
+            info.push_str(extra);
         }
         info
     }
 
-    fn evaluate(&mut self, lock: &LockResult, board: &Board, soft_dropped: bool) -> Evaluation {
+    fn evaluate(&mut self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
 
@@ -138,9 +138,12 @@ impl Evaluator for NaiveEvaluator {
             }
         }
 
-        if soft_dropped {
-            acc_eval += self.soft_drop;
-        }
+        // magic approximations of spawn delay and line clear delay
+        acc_eval += if lock.placement_kind.is_clear() {
+            self.move_time * (move_time + 10 + 45) as i32
+         } else {
+            self.move_time * (move_time + 10) as i32
+         };
 
         if board.b2b_bonus {
             transient_eval += self.back_to_back;

@@ -8,8 +8,7 @@ edition = "2018"
 
 [dependencies]
 arrayvec = { version = "0.4.11", features = ["serde-1"] }
-rand = "0.7.0"
-rand_pcg = "0.2.0"
 enumset = "0.4.0"
 enum-map = "0.6.0"
 serde = { version = "1", features = ["derive"] }
+rand = "0.7.0"

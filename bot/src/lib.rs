@@ -1,6 +1,6 @@
 use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
+use serde::{ Serialize, Deserialize };
 
-mod controller;
 pub mod evaluation;
 mod misa;
 pub mod moves;
@@ -10,8 +10,6 @@ use libtetris::*;
 use crate::tree::Tree;
 use crate::moves::Move;
 use crate::evaluation::Evaluator;
-
-pub use crate::controller::Controller;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Options {
@@ -38,7 +36,8 @@ pub struct Interface {
     send: Sender<BotMsg>,
     recv: Receiver<BotResult>,
     dead: bool,
-    mv: Option<Move>
+    mv: Option<Move>,
+    info: Option<Info>
 }
 
 impl Interface {
@@ -51,7 +50,7 @@ impl Interface {
         std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
 
         Interface {
-            send, recv, dead: false, mv: None
+            send, recv, dead: false, mv: None, info: None
         }
     }
 
@@ -61,7 +60,7 @@ impl Interface {
         std::thread::spawn(move || misa::glue(bot_recv, bot_send, board));
 
         Interface {
-            send, recv, dead: false, mv: None
+            send, recv, dead: false, mv: None, info: None
         }
     }
 
@@ -81,7 +80,7 @@ impl Interface {
         loop {
             match self.recv.try_recv() {
                 Ok(BotResult::Move(mv)) => self.mv = Some(mv),
-                Ok(BotResult::BotInfo(_)) => { /* TODO */ },
+                Ok(BotResult::Info(info)) => self.info = Some(info),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     self.dead = true;
@@ -128,6 +127,11 @@ impl Interface {
         self.mv.take()
     }
 
+    pub fn poll_info(&mut self) -> Option<Info> {
+        self.poll_bot();
+        self.info.take()
+    }
+
     /// Adds a new piece to the end of the queue.
     /// 
     /// If speculation is enabled, the piece must be in the bag. For example, if you start a new
@@ -172,7 +176,7 @@ enum BotMsg {
 #[derive(Debug)]
 enum BotResult {
     Move(Move),
-    BotInfo(Info)
+    Info(Info)
 }
 
 fn run(
@@ -182,20 +186,15 @@ fn run(
     mut evaluator: impl Evaluator,
     options: Options
 ) {
-    send.send(BotResult::BotInfo({
-        let mut info = evaluator.info();
-        info.insert(0, ("Cold Clear".to_string(), None));
-        info
-    })).ok();
-
     let mut tree = Tree::new(
         board,
         &Default::default(),
-        false,
+        0,
         &mut evaluator
     );
 
     let mut do_move = false;
+    let mut cycles = 0;
     loop {
         let result = if tree.child_nodes < options.max_nodes {
             recv.try_recv()
@@ -219,9 +218,10 @@ fn run(
                 tree = Tree::new(
                     board,
                     &Default::default(),
-                    false,
+                    0,
                     &mut evaluator
                 );
+                cycles = 0;
             }
             Ok(BotMsg::NextMove) => do_move = true,
             Ok(BotMsg::PrepareNextMove) => {}
@@ -234,24 +234,21 @@ fn run(
                     do_move = false;
                     if send.send(BotResult::Move(Move {
                         hold: child.hold,
-                        inputs: child.mv.inputs,
+                        inputs: child.mv.inputs.movements,
                         expected_location: child.mv.location
                     })).is_err() {
                         return
                     }
-                    if send.send(BotResult::BotInfo({
-                        let mut info = evaluator.info();
-                        info.insert(0, ("Cold Clear".to_owned(), None));
-                        info.push(("Depth".to_owned(), Some(format!("{}", child.tree.depth))));
-                        info.push(("Evaluation".to_owned(), Some("".to_owned())));
-                        info.push(("".to_owned(), Some(format!("{}", child.tree.evaluation))));
-                        info.push(("Nodes".to_owned(), Some("".to_owned())));
-                        info.push(("".to_owned(), Some(format!("{}", moves_considered))));
-                        info
+                    if send.send(BotResult::Info(Info {
+                        evaluation: child.tree.evaluation,
+                        nodes: moves_considered,
+                        depth: child.tree.depth,
+                        cycles: cycles
                     })).is_err() {
                         return
                     }
                     tree = child.tree;
+                    cycles = 0;
                 }
                 Err(t) => tree = t
             }
@@ -262,5 +259,14 @@ fn run(
                 tree.extend(options, &mut evaluator) {
             break
         }
+        cycles += 1;
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct Info {
+    pub nodes: usize,
+    pub depth: usize,
+    pub cycles: u32,
+    pub evaluation: i32
 }

@@ -34,10 +34,10 @@ impl Tree {
     pub fn new(
         board: Board,
         lock: &LockResult,
-        soft_dropped: bool,
+        move_time: u32,
         evaluator: &mut impl Evaluator
     ) -> Self {
-        let raw_eval = evaluator.evaluate(lock, &board, soft_dropped);
+        let raw_eval = evaluator.evaluate(lock, &board, move_time);
         Tree {
             raw_eval, board,
             evaluation: raw_eval.accumulated + raw_eval.transient,
@@ -214,7 +214,7 @@ fn new_children(
         let lock = board.lock_piece(mv.location);
         if !lock.locked_out {
             children.push(Child {
-                tree: Tree::new(board, &lock, mv.soft_dropped, evaluator),
+                tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
                 hold: false,
                 mv, lock
             })
@@ -232,7 +232,7 @@ fn new_children(
                     let lock = board.lock_piece(mv.location);
                     if !lock.locked_out {
                         children.push(Child {
-                            tree: Tree::new(board, &lock, mv.soft_dropped, evaluator),
+                            tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
                             hold: true,
                             mv, lock
                         })

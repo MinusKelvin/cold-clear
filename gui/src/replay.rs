@@ -4,13 +4,13 @@ use ggez::timer;
 use ggez::graphics;
 use crate::interface::{ Gui, setup_graphics, text };
 use crate::Resources;
-use libtetris::{ Battle, Controller, Info, Replay };
+use battle::{ Battle, Controller, Replay };
 use std::collections::VecDeque;
 
 pub struct ReplayGame<'a, P> {
     gui: Gui,
     battle: Battle,
-    updates: VecDeque<(Controller, Option<Info>, Controller, Option<Info>)>,
+    updates: VecDeque<(Controller, Controller)>,
     start_delay: u32,
     resources: &'a mut Resources,
     file: P
@@ -25,7 +25,7 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
             replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
         );
         ReplayGame {
-            gui: Gui::new(&battle),
+            gui: Gui::new(&battle, replay.p1_name, replay.p2_name),
             battle,
             updates: replay.updates,
             start_delay: 180,
@@ -40,11 +40,9 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
         while timer::check_update_time(ctx, 60) {
             if self.start_delay == 0 {
                 if let Some(
-                    (p1_controller, p1_info_update, p2_controller, p2_info_update)
+                    (p1_controller, p2_controller)
                 ) = self.updates.pop_front() {
-                    let mut update = self.battle.update(p1_controller, p2_controller);
-                    update.player_1.info = p1_info_update;
-                    update.player_2.info = p2_info_update;
+                    let update = self.battle.update(p1_controller, p2_controller);
                     self.gui.update(update, self.resources)?;
                 } else {
                     let replay: Replay;
@@ -65,7 +63,7 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     let battle = Battle::new(
                         replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
                     );
-                    self.gui = Gui::new(&battle);
+                    self.gui = Gui::new(&battle, replay.p1_name, replay.p2_name);
                     self.battle = battle;
                     self.updates = replay.updates;
                     self.start_delay = 180;
