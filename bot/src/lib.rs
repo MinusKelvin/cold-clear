@@ -8,7 +8,7 @@ mod tree;
 
 use libtetris::*;
 use crate::tree::Tree;
-use crate::moves::Move;
+use crate::moves::{ Move, Placement };
 use crate::evaluation::Evaluator;
 
 #[derive(Copy, Clone, Debug)]
@@ -232,6 +232,7 @@ fn run(
             match tree.into_best_child() {
                 Ok(child) => {
                     do_move = false;
+                    let mut plan = vec![(child.mv.clone(), child.lock.clone())];
                     if send.send(BotResult::Move(Move {
                         hold: child.hold,
                         inputs: child.mv.inputs.movements,
@@ -239,11 +240,13 @@ fn run(
                     })).is_err() {
                         return
                     }
+                    child.tree.get_plan(&mut plan);
                     if send.send(BotResult::Info(Info {
                         evaluation: child.tree.evaluation,
                         nodes: moves_considered,
                         depth: child.tree.depth,
-                        cycles: cycles
+                        cycles: cycles,
+                        plan
                     })).is_err() {
                         return
                     }
@@ -268,5 +271,6 @@ pub struct Info {
     pub nodes: usize,
     pub depth: usize,
     pub cycles: u32,
-    pub evaluation: i32
+    pub evaluation: i32,
+    pub plan: Vec<(Placement, LockResult)>
 }

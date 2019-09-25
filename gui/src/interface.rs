@@ -24,7 +24,13 @@ impl Gui {
         }
     }
 
-    pub fn update(&mut self, update: BattleUpdate, res: &mut Resources) -> GameResult {
+    pub fn update(
+        &mut self,
+        update: BattleUpdate,
+        p1_info_update: Option<bot::Info>,
+        p2_info_update: Option<bot::Info>,
+        res: &mut Resources
+    ) -> GameResult {
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
             use battle::Event::*;
             match event {
@@ -55,8 +61,8 @@ impl Gui {
             self.move_sound_play -= 1;
         }
 
-        self.player_1_graphics.update(update.player_1, update.time);
-        self.player_2_graphics.update(update.player_2, update.time);
+        self.player_1_graphics.update(update.player_1, p1_info_update, update.time);
+        self.player_2_graphics.update(update.player_2, p2_info_update, update.time);
         self.time = update.time;
         self.multiplier = update.attack_multiplier;
 

@@ -43,7 +43,7 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     (p1_controller, p2_controller)
                 ) = self.updates.pop_front() {
                     let update = self.battle.update(p1_controller, p2_controller);
-                    self.gui.update(update, self.resources)?;
+                    self.gui.update(update, None, None, self.resources)?;
                 } else {
                     let replay: Replay;
                     loop {

@@ -62,6 +62,12 @@ impl Tree {
         }
     }
 
+    pub fn get_plan(&self, into: &mut Vec<(Placement, LockResult)>) {
+        if let Some(ref tk) = self.kind {
+            tk.get_plan(into);
+        }
+    }
+
     /// Returns is_death
     pub fn add_next_piece(&mut self, piece: Piece) -> bool {
         self.board.add_next_piece(piece);
@@ -261,6 +267,16 @@ impl TreeKind {
                 Ok(children.into_iter().next().unwrap())
             },
             TreeKind::Unknown(_) => Err(self),
+        }
+    }
+
+    fn get_plan(&self, into: &mut Vec<(Placement, LockResult)>) {
+        match self {
+            TreeKind::Known(children) => if let Some(mv) = children.first() {
+                into.push((mv.mv.clone(), mv.lock.clone()));
+                mv.tree.get_plan(into);
+            }
+            _ => {}
         }
     }
 

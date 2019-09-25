@@ -97,6 +97,23 @@ impl PlacementKind {
             PlacementKind::Tspin3     => "T-Spin Triple",
         }
     }
+
+    pub fn short_name(self) -> &'static str {
+        match self {
+            PlacementKind::None       => "...",
+            PlacementKind::Clear1     => "S",
+            PlacementKind::Clear2     => "D",
+            PlacementKind::Clear3     => "T",
+            PlacementKind::Clear4     => "Tet",
+            PlacementKind::MiniTspin  => "ts",
+            PlacementKind::MiniTspin1 => "tss",
+            PlacementKind::MiniTspin2 => "tsd",
+            PlacementKind::Tspin      => "TS",
+            PlacementKind::Tspin1     => "TSS",
+            PlacementKind::Tspin2     => "TSD",
+            PlacementKind::Tspin3     => "TST",
+        }
+    }
 }
 
 impl Default for PlacementKind {

@@ -108,9 +108,13 @@ impl EventHandler for LocalGame<'_> {
 
                 let update = self.battle.update(p1_controller, p2_controller);
 
-                // TODO: display bot info, possibly save to replay
-                self.p1_input.update(&self.battle.player_1.board, &update.player_1.events);
-                self.p2_input.update(&self.battle.player_2.board, &update.player_2.events);
+                // TODO: figure out how to save bot info to replay
+                let p1_info_update = self.p1_input.update(
+                    &self.battle.player_1.board, &update.player_1.events
+                );
+                let p2_info_update = self.p2_input.update(
+                    &self.battle.player_2.board, &update.player_2.events
+                );
 
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {
@@ -135,7 +139,7 @@ impl EventHandler for LocalGame<'_> {
                     }
                 }
 
-                self.gui.update(update, self.resources)?;
+                self.gui.update(update, p1_info_update, p2_info_update, self.resources)?;
             }
         }
 

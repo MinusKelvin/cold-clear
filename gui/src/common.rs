@@ -21,7 +21,8 @@ pub struct BoardDrawState {
     back_to_back_splash: Option<u32>,
     clear_splash: Option<(&'static str, u32)>,
     name: String,
-    hard_drop_particles: Option<(u32, Vec<(f32, f32, f32)>)>
+    hard_drop_particles: Option<(u32, Vec<(f32, f32, f32)>)>,
+    info: Option<bot::Info>
 }
 
 enum State {
@@ -45,12 +46,14 @@ impl BoardDrawState {
             back_to_back_splash: None,
             clear_splash: None,
             hard_drop_particles: None,
-            name
+            name,
+            info: None
         }
     }
 
-    pub fn update(&mut self, update: PlayerUpdate, time: u32) {
+    pub fn update(&mut self, update: PlayerUpdate, info_update: Option<bot::Info>, time: u32) {
         self.garbage_queue = update.garbage_queue;
+        self.info = info_update.or(self.info.take());
         self.game_time = time;
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
             *frames += 1;
@@ -293,6 +296,69 @@ impl BoardDrawState {
         queue_text(
             ctx, &text(&*self.name, scale*0.66, 3.5*scale), [text_x+13.25*scale, y], None
         );
+        if let Some(ref info) = self.info {
+            queue_text(
+                ctx, &text("Depth", scale*0.66, 0.0), [text_x+13.25*scale, y + 2.0*scale], None
+            );
+            queue_text(
+                ctx,
+                &text(format!("{}", info.depth), scale*0.66, -3.5*scale),
+                [text_x+13.25*scale, y + 2.0*scale],
+                None
+            );
+            queue_text(
+                ctx, &text("Cycles", scale*0.66, 0.0), [text_x+13.25*scale, y + 2.7*scale], None
+            );
+            queue_text(
+                ctx,
+                &text(format!("{}", info.cycles), scale*0.66, -3.5*scale),
+                [text_x+13.25*scale, y + 2.7*scale],
+                None
+            );
+            queue_text(
+                ctx, &text("Nodes", scale*0.66, 0.0), [text_x+13.25*scale, y + 3.4*scale], None
+            );
+            queue_text(
+                ctx,
+                &text(format!("{}", info.nodes), scale*0.66, -3.5*scale),
+                [text_x+13.25*scale, y + 3.4*scale],
+                None
+            );
+            queue_text(
+                ctx, &text("Eval", scale*0.66, 0.0), [text_x+13.25*scale, y + 4.1*scale], None
+            );
+            queue_text(
+                ctx,
+                &text(format!("{}", info.evaluation), scale*0.66, -3.5*scale),
+                [text_x+13.25*scale, y + 4.1*scale],
+                None
+            );
+            queue_text(
+                ctx, &text("Plan:", scale*0.66, 0.0), [text_x+13.25*scale, y + 4.8*scale], None
+            );
+            let mut y = y + 4.8*scale;
+            let mut x = text_x+13.25*scale;
+            for (_, lock) in &info.plan {
+                x += 1.4 * scale;
+                if x > text_x+16.25*scale {
+                    x = text_x+13.25*scale;
+                    y += 0.7 * scale;
+                }
+                queue_text(
+                    ctx,
+                    &text(
+                        if lock.perfect_clear {
+                            "PC"
+                        } else {
+                            lock.placement_kind.short_name()
+                        },
+                        scale*0.66, 0.0
+                    ),
+                    [x, y],
+                    None
+                )
+            }
+        }
         if let Some(timer) = self.back_to_back_splash {
             queue_text(
                 ctx,

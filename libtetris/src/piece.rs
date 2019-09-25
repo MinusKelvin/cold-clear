@@ -335,7 +335,7 @@ impl Piece {
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum PieceMovement {
     Left,
     Right,

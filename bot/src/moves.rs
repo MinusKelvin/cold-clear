@@ -1,14 +1,15 @@
 use libtetris::{ Board, FallingPiece, Piece, RotationState, TspinStatus, PieceMovement };
 use arrayvec::ArrayVec;
 use std::collections::{ HashMap, HashSet, VecDeque, hash_map::Entry };
+use serde::{ Serialize, Deserialize };
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct InputList {
     pub movements: ArrayVec<[PieceMovement; 32]>,
     pub time: u32
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Placement {
     pub inputs: InputList,
     pub location: FallingPiece
