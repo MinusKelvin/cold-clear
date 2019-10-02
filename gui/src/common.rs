@@ -175,6 +175,7 @@ impl BoardDrawState {
         text_x: f32,
         scale: f32
     ) -> GameResult {
+        // Draw the playfield
         for y in 0..21 {
             for x in 0..10 {
                 sprites.add(draw_tile(
@@ -191,6 +192,7 @@ impl BoardDrawState {
                 ));
             }
         }
+        // Draw hard drop particle effects
         if let Some((timer, particles)) = &self.hard_drop_particles {
             for &(x, y, factor) in particles {
                 particle_mesh.circle(
@@ -202,6 +204,7 @@ impl BoardDrawState {
                 );
             }
         }
+        // Draw either the falling piece or the line clear animation
         match self.state {
             State::Falling(piece, ghost) => {
                 for (x,y) in ghost.cells() {
@@ -234,12 +237,14 @@ impl BoardDrawState {
             }
             _ => {}
         }
+        // Draw hold piece and next queue
         if let Some(piece) = self.hold_piece {
             draw_piece_preview(sprites, 0, 18, piece);
         }
         for (i, &piece) in self.next_queue.iter().enumerate() {
             draw_piece_preview(sprites, 13, 18 - (i*2) as i32, piece);
         }
+        // Draw the pending garbage bar
         if self.garbage_queue > 0 {
             particle_mesh.rectangle(
                 DrawMode::Fill(FillOptions::tolerance(0.1 / scale)),
@@ -261,6 +266,7 @@ impl BoardDrawState {
         queue_text(
             ctx, &text("Statistics", scale*0.75, 4.0*scale), [text_x-1.0*scale, scale*3.0], None
         );
+        // Prepare statistics text
         let seconds = self.game_time as f32 / 60.0;
         let lines = vec![
             ("Pieces", format!("{}", self.statistics.pieces)),
@@ -273,15 +279,16 @@ impl BoardDrawState {
             ("Double", format!("{}", self.statistics.doubles)),
             ("Triple", format!("{}", self.statistics.triples)),
             ("Tetris", format!("{}", self.statistics.tetrises)),
-            ("Mini T0", format!("{}", self.statistics.mini_tspin_zeros)),
-            ("Mini T1", format!("{}", self.statistics.mini_tspin_singles)),
-            ("Mini T2", format!("{}", self.statistics.mini_tspin_doubles)),
+            // ("Mini T0", format!("{}", self.statistics.mini_tspin_zeros)),
+            // ("Mini T1", format!("{}", self.statistics.mini_tspin_singles)),
+            // ("Mini T2", format!("{}", self.statistics.mini_tspin_doubles)),
             ("T-Spin 0", format!("{}", self.statistics.tspin_zeros)),
             ("T-Spin 1", format!("{}", self.statistics.tspin_singles)),
             ("T-Spin 2", format!("{}", self.statistics.tspin_doubles)),
             ("T-Spin 3", format!("{}", self.statistics.tspin_triples)),
             ("Perfect", format!("{}", self.statistics.perfect_clears))
         ];
+        // Draw statistics text
         let mut y = 3.75*scale;
         for (label, stat) in lines {
             queue_text(
@@ -292,56 +299,60 @@ impl BoardDrawState {
             );
             y += scale * 0.66;
         }
+        // Draw player name
         let y = (self.next_queue.len() as f32 * 2.0 + 1.0) * scale;
         queue_text(
             ctx, &text(&*self.name, scale*0.66, 3.5*scale), [text_x+13.25*scale, y], None
         );
         if let Some(ref info) = self.info {
+            // Draw bot information
+            let y = 12.0 * scale;
             queue_text(
-                ctx, &text("Depth", scale*0.66, 0.0), [text_x+13.25*scale, y + 2.0*scale], None
+                ctx, &text("Depth", scale*0.66, 0.0), [text_x-0.75*scale, y + 2.0*scale], None
             );
             queue_text(
                 ctx,
                 &text(format!("{}", info.depth), scale*0.66, -3.5*scale),
-                [text_x+13.25*scale, y + 2.0*scale],
+                [text_x-0.75*scale, y + 2.0*scale],
                 None
             );
             queue_text(
-                ctx, &text("Cycles", scale*0.66, 0.0), [text_x+13.25*scale, y + 2.7*scale], None
+                ctx, &text("Cycles", scale*0.66, 0.0), [text_x-0.75*scale, y + 2.7*scale], None
             );
             queue_text(
                 ctx,
                 &text(format!("{}", info.cycles), scale*0.66, -3.5*scale),
-                [text_x+13.25*scale, y + 2.7*scale],
+                [text_x-0.75*scale, y + 2.7*scale],
                 None
             );
             queue_text(
-                ctx, &text("Nodes", scale*0.66, 0.0), [text_x+13.25*scale, y + 3.4*scale], None
+                ctx, &text("Nodes", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
             );
             queue_text(
                 ctx,
                 &text(format!("{}", info.nodes), scale*0.66, -3.5*scale),
-                [text_x+13.25*scale, y + 3.4*scale],
+                [text_x-0.75*scale, y + 3.4*scale],
                 None
             );
             queue_text(
-                ctx, &text("Eval", scale*0.66, 0.0), [text_x+13.25*scale, y + 4.1*scale], None
+                ctx, &text("Eval", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.1*scale], None
             );
             queue_text(
                 ctx,
                 &text(format!("{}", info.evaluation), scale*0.66, -3.5*scale),
-                [text_x+13.25*scale, y + 4.1*scale],
+                [text_x-0.75*scale, y + 4.1*scale],
                 None
             );
+            // Draw plan description (TODO: draw plan on playfield)
             queue_text(
-                ctx, &text("Plan:", scale*0.66, 0.0), [text_x+13.25*scale, y + 4.8*scale], None
+                ctx, &text("Plan:", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.8*scale], None
             );
             let mut y = y + 4.8*scale;
-            let mut x = text_x+13.25*scale;
+            let mut x = text_x-0.75*scale;
             for (_, lock) in &info.plan {
-                x += 1.4 * scale;
-                if x > text_x+16.25*scale {
-                    x = text_x+13.25*scale;
+                x += 1.3 * scale;
+                if x > text_x+2.25*scale {
+                    x = text_x-0.75*scale;
                     y += 0.7 * scale;
                 }
                 queue_text(
@@ -359,6 +370,7 @@ impl BoardDrawState {
                 )
             }
         }
+        // Draw clear info stuff
         if let Some(timer) = self.back_to_back_splash {
             queue_text(
                 ctx,

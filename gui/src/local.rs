@@ -3,7 +3,7 @@ use ggez::{ Context, GameResult };
 use ggez::graphics;
 use ggez::timer;
 use libtetris::Board;
-use battle::Battle;
+use battle::{ Battle, GameConfig };
 use crate::interface::{ Gui, text };
 use crate::Resources;
 use rand::prelude::*;
@@ -21,7 +21,8 @@ pub struct LocalGame<'a> {
     p1_wins: u32,
     p2_wins: u32,
     state: State,
-    resources: &'a mut Resources
+    resources: &'a mut Resources,
+    config: GameConfig
 }
 
 enum State {
@@ -31,9 +32,14 @@ enum State {
 }
 
 impl<'a> LocalGame<'a> {
-    pub fn new(resources: &'a mut Resources, p1: Box<InputFactory>, p2: Box<InputFactory>) -> Self {
+    pub fn new(
+        resources: &'a mut Resources,
+        p1: Box<InputFactory>,
+        p2: Box<InputFactory>,
+        config: GameConfig
+    ) -> Self {
         let battle = Battle::new(
-            Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+            config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
         let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
         let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
@@ -45,8 +51,9 @@ impl<'a> LocalGame<'a> {
             battle,
             p1_wins: 0,
             p2_wins: 0,
-            state: State::Starting(50),
-            resources
+            state: State::Starting(500),
+            resources,
+            config
         }
     }
 }
@@ -69,7 +76,7 @@ impl EventHandler for LocalGame<'_> {
                     while timer::check_update_time(ctx, 60) {}
 
                     self.battle = Battle::new(
-                        Default::default(),
+                        self.config,
                         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
                     );
 

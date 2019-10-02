@@ -18,6 +18,7 @@ impl Evaluator for Misalike {
     fn name(&self) -> String {
         let mut s = "Misalike\n".to_owned();
         if let Some(sub_name) = &self.sub_name {
+            s.push('\n');
             s.push_str(sub_name);
         }
         s

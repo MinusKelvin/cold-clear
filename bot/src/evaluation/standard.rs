@@ -87,6 +87,7 @@ impl Evaluator for Standard {
     fn name(&self) -> String {
         let mut info = "Standard".to_owned();
         if let Some(extra) = &self.sub_name {
+            info.push('\n');
             info.push_str(extra);
         }
         info
