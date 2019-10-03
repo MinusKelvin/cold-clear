@@ -8,6 +8,8 @@ use crate::interface::{ Gui, text };
 use crate::Resources;
 use rand::prelude::*;
 use crate::input::InputSource;
+use crate::replay::InfoReplay;
+use std::collections::VecDeque;
 
 type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
 
@@ -20,6 +22,8 @@ pub struct LocalGame<'a> {
     p2_input: Box<dyn InputSource>,
     p1_wins: u32,
     p2_wins: u32,
+    p1_info_updates: VecDeque<Option<bot::Info>>,
+    p2_info_updates: VecDeque<Option<bot::Info>>,
     state: State,
     resources: &'a mut Resources,
     config: GameConfig
@@ -51,6 +55,8 @@ impl<'a> LocalGame<'a> {
             battle,
             p1_wins: 0,
             p2_wins: 0,
+            p1_info_updates: VecDeque::new(),
+            p2_info_updates: VecDeque::new(),
             state: State::Starting(500),
             resources,
             config
@@ -68,7 +74,11 @@ impl EventHandler for LocalGame<'_> {
                         std::io::BufWriter::new(
                             std::fs::File::create("test-replay.json"
                         ).unwrap()),
-                        &self.battle.replay
+                        &InfoReplay {
+                            replay: self.battle.replay.clone(),
+                            p1_info_updates: self.p1_info_updates.clone(),
+                            p2_info_updates: self.p2_info_updates.clone()
+                        }
                     ).unwrap();
                     println!("Took {:?} to save replay", t.elapsed());
 
@@ -87,9 +97,14 @@ impl EventHandler for LocalGame<'_> {
                         self.battle.player_2.board.to_compressed()
                     );
 
-                    self.gui = Gui::new(&self.battle, p1_name, p2_name);
+                    self.gui = Gui::new(&self.battle, p1_name.clone(), p2_name.clone());
                     self.p1_input = p1_input;
                     self.p2_input = p2_input;
+                    self.battle.replay.p1_name = p1_name;
+                    self.battle.replay.p2_name = p2_name;
+
+                    self.p1_info_updates.clear();
+                    self.p2_info_updates.clear();
 
                     self.state = State::Starting(180);
                     false
@@ -115,13 +130,15 @@ impl EventHandler for LocalGame<'_> {
 
                 let update = self.battle.update(p1_controller, p2_controller);
 
-                // TODO: figure out how to save bot info to replay
                 let p1_info_update = self.p1_input.update(
                     &self.battle.player_1.board, &update.player_1.events
                 );
                 let p2_info_update = self.p2_input.update(
                     &self.battle.player_2.board, &update.player_2.events
                 );
+
+                self.p1_info_updates.push_back(p1_info_update.clone());
+                self.p2_info_updates.push_back(p2_info_update.clone());
 
                 if let State::Playing = self.state {
                     for event in &update.player_1.events {
@@ -170,6 +187,8 @@ impl EventHandler for LocalGame<'_> {
         }
 
         self.gui.draw(ctx, self.resources, scale, center)?;
+
+        graphics::set_window_title(ctx, &format!("Cold Clear (FPS: {:.0})", ggez::timer::fps(ctx)));
 
         graphics::present(ctx)
     }

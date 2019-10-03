@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use enumset::EnumSetType;
+use enumset::{ EnumSet, EnumSetType };
 use enum_map::Enum;
 use serde::{ Serialize, Deserialize };
 
@@ -33,12 +33,12 @@ impl FallingPiece {
         }
     }
 
-    pub fn cells(&self) -> ArrayVec<[(i32, i32); 4]> {
+    pub fn cells(&self) -> ArrayVec<[(i32, i32, EnumSet<Direction>); 4]> {
         let x = self.x;
         let y = self.y;
         self.kind.cells()
             .into_iter()
-            .map(move |(dx, dy)| (x + dx, y + dy))
+            .map(move |(dx, dy, d)| (x + dx, y + dy, d))
             .collect()
     }
 
@@ -58,7 +58,7 @@ impl FallingPiece {
     pub fn sonic_drop<R: Row>(&mut self, board: &Board<R>) -> bool {
         let drop_by = self.cells()
             .into_iter()
-            .map(|(x, y)| y - board.column_heights()[x as usize])
+            .map(|(x, y, _)| y - board.column_heights()[x as usize])
             .min().unwrap();
         if drop_by > 0 {
             self.tspin = TspinStatus::None;
@@ -230,43 +230,172 @@ impl PieceState {
         self.1.ccw()
     }
 
-    /// Returns the cells this piece and orientation occupy relative
-    /// to rotation point 1, in no particular order.
-    pub fn cells(&self) -> ArrayVec<[(i32, i32); 4]> {
+    /// Returns the cells this piece and orientation occupy relative to rotation point 1, as well
+    /// as the connection directions, in no particular order.
+    pub fn cells(&self) -> ArrayVec<[(i32, i32, EnumSet<Direction>); 4]> {
         use Piece::*;
         use RotationState::*;
+        use Direction::*;
+        fn only<T: EnumSetType>(t: T) -> EnumSet<T> {
+            EnumSet::only(t)
+        }
         match (self.0, self.1) {
-            (I, North) => [(-1, 0),  (0, 0),  (1, 0),  (2, 0)],
-            (I, East)  => [(1, -2),  (1, -1), (1, 0),  (1, 1)],
-            (I, South) => [(-1, -1), (0, -1), (1, -1), (2, -1)],
-            (I, West)  => [(0, -2),  (0, -1), (0, 0),  (0, 1)],
+            (I, North) => [
+                (-1, 0, only(Right)),
+                (0, 0, Left | Right),
+                (1, 0, Left | Right),
+                (2, 0, only(Left))
+            ],
+            (I, East)  => [
+                (1, -2, only(Up)),
+                (1, -1, Up | Down),
+                (1, 0, Up | Down),
+                (1, 1, only(Down))
+            ],
+            (I, South) => [
+                (-1, -1, only(Right)),
+                (0, -1, Left | Right),
+                (1, -1, Left | Right),
+                (2, -1, only(Left))
+            ],
+            (I, West)  => [
+                (0, -2, only(Up)),
+                (0, -1, Up | Down),
+                (0, 0, Up | Down),
+                (0, 1, only(Down))
+            ],
             
-            (O, _) => [(0, 0), (0, 1), (1, 0), (1, 1)],
+            (O, _) => [
+                (0, 0, Up | Right),
+                (0, 1, Down | Right),
+                (1, 0, Up | Left),
+                (1, 1, Down | Left)
+            ],
 
-            (T, North) => [(-1, 0), (0, 0), (1, 0),  (0, 1)],
-            (T, East)  => [(0, 1),  (0, 0), (0, -1), (1, 0)],
-            (T, South) => [(1, 0),  (0, 0), (-1, 0), (0, -1)],
-            (T, West)  => [(0, -1), (0, 0), (0, 1),  (-1, 0)],
+            (T, North) => [
+                (-1, 0, only(Right)),
+                (0, 0, Left | Right | Up),
+                (1, 0, only(Left)),
+                (0, 1, only(Down))
+            ],
+            (T, East)  => [
+                (0, 1, only(Down)),
+                (0, 0, Up | Down | Right),
+                (0, -1, only(Up)),
+                (1, 0, only(Left))
+            ],
+            (T, South) => [
+                (1, 0, only(Left)),
+                (0, 0, Left | Right | Down),
+                (-1, 0, only(Right)),
+                (0, -1, only(Up))
+            ],
+            (T, West)  => [
+                (0, -1, only(Up)),
+                (0, 0, Left | Up | Down),
+                (0, 1, only(Down)),
+                (-1, 0, only(Right))
+            ],
 
-            (L, North) => [(-1, 0), (0, 0), (1, 0),  (1, 1)],
-            (L, East)  => [(0, 1),  (0, 0), (0, -1), (1, -1)],
-            (L, South) => [(1, 0),  (0, 0), (-1, 0), (-1, -1)],
-            (L, West)  => [(0, -1), (0, 0), (0, 1),  (-1, 1)],
+            (L, North) => [
+                (-1, 0, only(Right)),
+                (0, 0, Left | Right),
+                (1, 0, Left | Up),
+                (1, 1, only(Down))
+            ],
+            (L, East)  => [
+                (0, 1, only(Down)),
+                (0, 0, Up | Down),
+                (0, -1, Up | Right),
+                (1, -1, only(Left))
+            ],
+            (L, South) => [
+                (1, 0, only(Left)),
+                (0, 0, Left | Right),
+                (-1, 0, Right | Down),
+                (-1, -1, only(Up))
+            ],
+            (L, West)  => [
+                (0, -1, only(Up)),
+                (0, 0, Up | Down),
+                (0, 1, Down | Left),
+                (-1, 1, only(Right))
+            ],
 
-            (J, North) => [(-1, 0), (0, 0), (1, 0),  (-1, 1)],
-            (J, East)  => [(0, 1),  (0, 0), (0, -1), (1, 1)],
-            (J, South) => [(1, 0),  (0, 0), (-1, 0), (1, -1)],
-            (J, West)  => [(0, -1), (0, 0), (0, 1),  (-1, -1)],
+            (J, North) => [
+                (-1, 0, Right | Up),
+                (0, 0, Left | Right),
+                (1, 0, only(Left)),
+                (-1, 1, only(Down))
+            ],
+            (J, East)  => [
+                (0, 1, Down | Right),
+                (0, 0, Up | Down),
+                (0, -1, only(Up)),
+                (1, 1, only(Left))
+            ],
+            (J, South) => [
+                (1, 0, Down | Left),
+                (0, 0, Left | Right),
+                (-1, 0, only(Right)),
+                (1, -1, only(Up))
+            ],
+            (J, West)  => [
+                (0, -1, Left | Up),
+                (0, 0, Up | Down),
+                (0, 1, only(Down)),
+                (-1, -1, only(Right))
+            ],
 
-            (S, North) => [(0, 0),  (0, 1),  (-1, 0),  (1, 1)],
-            (S, East)  => [(0, 0),  (1, 0),  (0, 1),   (1, -1)],
-            (S, South) => [(0, -1), (0, 0),  (-1, -1), (1, 0)],
-            (S, West)  => [(-1, 0), (0, 0),  (-1, 1),  (0, -1)],
+            (S, North) => [
+                (0, 0, Left | Up),
+                (0, 1, Down | Right),
+                (-1, 0, only(Right)),
+                (1, 1, only(Left))
+            ],
+            (S, East)  => [
+                (0, 0, Right | Up),
+                (1, 0, Down | Left),
+                (0, 1, only(Down)),
+                (1, -1, only(Up))
+            ],
+            (S, South) => [
+                (0, -1, Left | Up),
+                (0, 0, Down | Right),
+                (-1, -1, only(Right)),
+                (1, 0, only(Left))
+            ],
+            (S, West)  => [
+                (-1, 0, Right | Up),
+                (0, 0, Down | Left),
+                (-1, 1, only(Down)),
+                (0, -1, only(Up))
+            ],
 
-            (Z, North) => [(0, 0),  (0, 1),  (-1, 1), (1, 0)],
-            (Z, East)  => [(0, 0),  (1, 0),  (1, 1),  (0, -1)],
-            (Z, South) => [(0, -1), (0, 0),  (-1, 0), (1, -1)],
-            (Z, West)  => [(-1, 0), (0, 0),  (0, 1),  (-1, -1)],
+            (Z, North) => [
+                (0, 0, Up | Right),
+                (0, 1, Down | Left),
+                (-1, 1, only(Right)),
+                (1, 0, only(Left))
+            ],
+            (Z, East)  => [
+                (0, 0, Right | Down),
+                (1, 0, Left | Up),
+                (1, 1, only(Down)),
+                (0, -1, only(Up))
+            ],
+            (Z, South) => [
+                (0, -1, Up | Right),
+                (0, 0, Down | Left),
+                (-1, 0, only(Right)),
+                (1, -1, only(Left))
+            ],
+            (Z, West)  => [
+                (-1, 0, Right | Down),
+                (0, 0, Left | Up),
+                (0, 1, only(Down)),
+                (-1, -1, only(Up))
+            ],
         }.into()
     }
 
@@ -354,4 +483,9 @@ impl PieceMovement {
             PieceMovement::SonicDrop => piece.sonic_drop(board)
         }
     }
+}
+
+#[derive(EnumSetType, Debug)]
+pub enum Direction {
+    Up, Down, Left, Right
 }

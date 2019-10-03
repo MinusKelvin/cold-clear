@@ -103,19 +103,7 @@ fn main() {
                 &mut resources,
                 Box::new(|board| {
                     let evaluator = Standard {
-                        move_time: -2,
-                        b2b_clear: 100,
-                        clear1: 0,
-                        clear2: 100,
-                        clear3: 200,
-                        clear4: 400,
-                        tspin1: 200,
-                        tspin2: 400,
-                        tspin3: 600,
-                        mini_tspin1: 0,
-                        mini_tspin2: 100,
-                        perfect_clear: 1000,
-                        sub_name: Some("New".to_owned()),
+                        sub_name: Some("No search".to_owned()),
                         ..Standard::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
@@ -126,10 +114,11 @@ fn main() {
                         },
                         evaluator
                     ))), name)
+                    // (Box::new(Keyboard), "Human".to_owned())
                 }),
                 Box::new(|board|{
                     let evaluator = Standard {
-                        sub_name: Some("Old".to_owned()),
+                        sub_name: Some("No Search".to_owned()),
                         ..Standard::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());

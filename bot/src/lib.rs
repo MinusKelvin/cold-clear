@@ -257,12 +257,12 @@ fn run(
             }
         }
 
-        if tree.child_nodes < options.max_nodes &&
-                tree.board.next_queue().count() > 0 &&
-                tree.extend(options, &mut evaluator) {
-            break
+        if tree.child_nodes < options.max_nodes && tree.board.next_queue().count() > 0 {
+            cycles += 1;
+            if tree.extend(options, &mut evaluator) {
+                break
+            }
         }
-        cycles += 1;
     }
 }
 

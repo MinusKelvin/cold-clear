@@ -97,7 +97,7 @@ impl BoardDrawState {
                     self.statistics.update(&locked);
                     if hard_drop_distance.is_some() {
                         let mut particles = vec![];
-                        for (x, y) in piece.cells() {
+                        for (x, y, _) in piece.cells() {
                             if y == 0 || self.board[y as usize - 1].get(x as usize) {
                                 for i in 0..5 {
                                     let r: f32 = thread_rng().gen();
@@ -109,7 +109,7 @@ impl BoardDrawState {
                         }
                         self.hard_drop_particles = Some((5, particles));
                     }
-                    for (x, y) in piece.cells() {
+                    for (x, y, _) in piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
                     if locked.cleared_lines.is_empty() {
@@ -207,12 +207,12 @@ impl BoardDrawState {
         // Draw either the falling piece or the line clear animation
         match self.state {
             State::Falling(piece, ghost) => {
-                for (x,y) in ghost.cells() {
+                for (x,y,_) in ghost.cells() {
                     sprites.add(draw_tile(
                         x+3, y, 2, 0, cell_color_to_color(piece.kind.0.color())
                     ));
                 }
-                for (x,y) in piece.cells() {
+                for (x,y,_) in piece.cells() {
                     sprites.add(draw_tile(
                         x+3, y, 1, 0, cell_color_to_color(piece.kind.0.color())
                     ));
@@ -343,12 +343,14 @@ impl BoardDrawState {
                 [text_x-0.75*scale, y + 4.1*scale],
                 None
             );
-            // Draw plan description (TODO: draw plan on playfield)
+            // Draw plan description
             queue_text(
                 ctx, &text("Plan:", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.8*scale], None
             );
             let mut y = y + 4.8*scale;
             let mut x = text_x-0.75*scale;
+            let mut has_pc = false;
+            let mut has_send = false;
             for (_, lock) in &info.plan {
                 x += 1.3 * scale;
                 if x > text_x+2.25*scale {
@@ -359,8 +361,12 @@ impl BoardDrawState {
                     ctx,
                     &text(
                         if lock.perfect_clear {
+                            has_pc = true;
                             "PC"
                         } else {
+                            if lock.placement_kind.is_hard() && lock.placement_kind.is_clear() {
+                                has_send = true;
+                            }
                             lock.placement_kind.short_name()
                         },
                         scale*0.66, 0.0
@@ -368,6 +374,37 @@ impl BoardDrawState {
                     [x, y],
                     None
                 )
+            }
+            // Draw plan visualization
+            if has_send || has_pc {
+                let mut y_map = [0; 40];
+                for i in 0..40 {
+                    y_map[i] = i as i32;
+                }
+                for (placement, lock) in &info.plan {
+                    for (x, y, d) in placement.location.cells() {
+                        let (tx, ty) = dir_to_tile(d);
+                        sprites.add(draw_tile(
+                            x+3, y_map[y as usize],
+                            tx, ty,
+                            cell_color_to_color(placement.location.kind.0.color())
+                        ));
+                    }
+                    let mut new_map = [0; 40];
+                    let mut j = 0;
+                    for i in 0..40 {
+                        if !lock.cleared_lines.contains(&i) {
+                            new_map[j] = y_map[i as usize];
+                            j += 1;
+                        }
+                    }
+                    y_map = new_map;
+
+                    if !has_pc && lock.placement_kind.is_hard() && lock.placement_kind.is_clear()
+                            || lock.perfect_clear {
+                        break
+                    }
+                }
             }
         }
         // Draw clear info stuff
@@ -435,6 +472,7 @@ fn draw_piece_preview(sprites: &mut SpriteBatch, x: i32, y: i32, piece: Piece) {
     };
     let color = cell_color_to_color(piece.color());
     for dx in 0..3 {
+        if dx != 1 && piece == Piece::O { continue }
         sprites.add(draw_tile(x+dx, y, dx, ty, color));
     }
 }
@@ -448,3 +486,39 @@ fn draw_tile(x: i32, y: i32, tx: i32, ty: i32, color: Color) -> DrawParam {
 }
 
 const SPRITE_SCALE: f32 = 1.0/83.0;
+
+fn dir_to_tile(dir: enumset::EnumSet<libtetris::Direction>) -> (i32, i32) {
+    use libtetris::Direction::*;
+    use enumset::EnumSet;
+    if dir == EnumSet::only(Up) {
+        (2, 10)
+    } else if dir == EnumSet::only(Down) {
+        (2, 8)
+    } else if dir == EnumSet::only(Left) {
+        (2, 11)
+    } else if dir == EnumSet::only(Right) {
+        (0, 11)
+    } else if dir == Left | Right {
+        (1, 11)
+    } else if dir == Up | Down {
+        (2, 9)
+    } else if dir == Left | Up {
+        (1, 10)
+    } else if dir == Left | Down {
+        (1, 9)
+    } else if dir == Right | Up {
+        (0, 10)
+    } else if dir == Right | Down {
+        (0, 9)
+    } else if dir == Left | Right | Up {
+        (0, 8)
+    } else if dir == Left | Right | Down {
+        (1, 8)
+    } else if dir == Up | Down | Left {
+        (2, 2)
+    } else if dir == Up | Down | Right {
+        (0, 2)
+    } else {
+        (2, 0)
+    }
+}

@@ -6,11 +6,14 @@ use crate::interface::{ Gui, setup_graphics, text };
 use crate::Resources;
 use battle::{ Battle, Controller, Replay };
 use std::collections::VecDeque;
+use serde::{ Serialize, Deserialize };
 
 pub struct ReplayGame<'a, P> {
     gui: Gui,
     battle: Battle,
     updates: VecDeque<(Controller, Controller)>,
+    p1_info_updates: VecDeque<Option<bot::Info>>,
+    p2_info_updates: VecDeque<Option<bot::Info>>,
     start_delay: u32,
     resources: &'a mut Resources,
     file: P
@@ -18,7 +21,9 @@ pub struct ReplayGame<'a, P> {
 
 impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
     pub fn new(resources: &'a mut Resources, file: P) -> Self {
-        let replay: Replay = serde_json::from_reader(
+        let InfoReplay {
+            replay, p1_info_updates, p2_info_updates
+        } = serde_json::from_reader(
             std::io::BufReader::new(std::fs::File::open(file.clone()).unwrap())
         ).unwrap();
         let battle = Battle::new(
@@ -28,6 +33,8 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
             gui: Gui::new(&battle, replay.p1_name, replay.p2_name),
             battle,
             updates: replay.updates,
+            p1_info_updates: p1_info_updates,
+            p2_info_updates: p2_info_updates,
             start_delay: 180,
             resources,
             file
@@ -43,9 +50,14 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     (p1_controller, p2_controller)
                 ) = self.updates.pop_front() {
                     let update = self.battle.update(p1_controller, p2_controller);
-                    self.gui.update(update, None, None, self.resources)?;
+                    self.gui.update(
+                        update,
+                        self.p1_info_updates.pop_front().and_then(|x| x),
+                        self.p2_info_updates.pop_front().and_then(|x| x),
+                        self.resources
+                    )?;
                 } else {
-                    let replay: Replay;
+                    let replay;
                     loop {
                         match std::fs::File::open(self.file.clone()) {
                             Ok(f) => {
@@ -60,12 +72,15 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                             Err(_) => {}
                         }
                     }
+                    let InfoReplay { replay, p1_info_updates, p2_info_updates } = replay;
                     let battle = Battle::new(
                         replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
                     );
                     self.gui = Gui::new(&battle, replay.p1_name, replay.p2_name);
                     self.battle = battle;
                     self.updates = replay.updates;
+                    self.p1_info_updates = p1_info_updates;
+                    self.p2_info_updates = p2_info_updates;
                     self.start_delay = 180;
                 }
             } else {
@@ -87,4 +102,11 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
         self.gui.draw(ctx, self.resources, scale, center)?;
         graphics::present(ctx)
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InfoReplay {
+    pub replay: Replay,
+    pub p1_info_updates: VecDeque<Option<bot::Info>>,
+    pub p2_info_updates: VecDeque<Option<bot::Info>>
 }

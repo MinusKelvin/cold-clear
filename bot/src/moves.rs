@@ -151,10 +151,10 @@ fn lock_check(
     moves: InputList
 ) {
     let cells = piece.cells();
-    if cells.iter().all(|&(_, y)| y >= 20) {
+    if cells.iter().all(|&(_, y, _)| y >= 20) {
         return
     }
-    match locks.entry((cells, piece.tspin)) {
+    match locks.entry((cells.into_iter().map(|(x,y,_)|(x,y)).collect(), piece.tspin)) {
         Entry::Vacant(entry) => {
             entry.insert(Placement {
                 inputs: moves,
