@@ -93,7 +93,7 @@ impl Evaluator for Standard {
         info
     }
 
-    fn evaluate(&mut self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
+    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
 

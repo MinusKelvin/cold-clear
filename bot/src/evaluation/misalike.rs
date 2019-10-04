@@ -24,7 +24,7 @@ impl Evaluator for Misalike {
         s
     }
 
-    fn evaluate(&mut self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
+    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
         // Context: We're trying to translate this function from MisaMino:
         // https://github.com/misakamm/MisaMino/blob/master/tetris_ai/tetris_ai.cpp#L45
         // Note: the board is y-down; high y = low on the board, low y = high on the board

@@ -18,6 +18,7 @@ pub struct Options {
     pub speculate: bool,
     pub min_nodes: usize,
     pub max_nodes: usize,
+    pub gamma: (i32, i32)
 }
 
 impl Default for Options {
@@ -27,7 +28,8 @@ impl Default for Options {
             use_hold: true,
             speculate: true,
             min_nodes: 0,
-            max_nodes: std::usize::MAX
+            max_nodes: std::usize::MAX,
+            gamma: (1, 1)
         }
     }
 }
@@ -179,24 +181,121 @@ enum BotResult {
     Info(Info)
 }
 
+pub struct BotState<E: Evaluator> {
+    tree: Tree,
+    options: Options,
+    cycles: u32,
+    dead: bool,
+    eval: E,
+}
+
+impl<E: Evaluator> BotState<E> {
+    pub fn new(board: Board, options: Options, eval: E) -> Self {
+        BotState {
+            cycles: 0,
+            dead: false,
+            tree: Tree::new(board, &Default::default(), 0, &eval),
+            options,
+            eval
+        }
+    }
+
+    /// Perform a thinking cycle.
+    /// 
+    /// Returns true if a thinking cycle was performed. If a thinking cycle was not performed,
+    /// calling this function again will not perform a thinking cycle either.
+    pub fn think(&mut self) -> bool {
+        if self.tree.child_nodes < self.options.max_nodes &&
+                self.tree.board.next_queue().count() > 0 &&
+                !self.dead {
+            self.cycles += 1;
+            if self.tree.extend(self.options, &self.eval) {
+                self.dead = true;
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.dead
+    }
+
+    /// Adds a new piece to the queue.
+    pub fn add_next_piece(&mut self, piece: Piece) {
+        if self.tree.add_next_piece(piece, self.options) {
+            self.dead = true;
+        }
+    }
+
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
+        let mut board = Board::new();
+        std::mem::swap(&mut board, &mut self.tree.board);
+        board.set_field(field);
+        board.combo = combo;
+        board.b2b_bonus = b2b;
+        self.tree = Tree::new(board, &Default::default(), 0, &self.eval);
+        self.cycles = 0;
+    }
+
+    pub fn min_thinking_reached(&self) -> bool {
+        self.tree.child_nodes > self.options.min_nodes
+    }
+
+    pub fn next_move(&mut self) -> Option<(Move, Info)> {
+        if !self.min_thinking_reached() {
+            return None;
+        }
+
+        let moves_considered = self.tree.child_nodes;
+        let mut tree = Tree::empty();
+        std::mem::swap(&mut tree, &mut self.tree);
+        match tree.into_best_child() {
+            Ok(child) => {
+                let mut plan = vec![(child.mv.clone(), child.lock.clone())];
+                child.tree.get_plan(&mut plan);
+                let info = Info {
+                    evaluation: child.tree.evaluation,
+                    nodes: moves_considered,
+                    depth: child.tree.depth,
+                    cycles: self.cycles,
+                    plan
+                };
+                let mv = Move {
+                    hold: child.hold,
+                    inputs: child.mv.inputs.movements,
+                    expected_location: child.mv.location
+                };
+                self.tree = child.tree;
+                self.cycles = 0;
+                Some((mv, info))
+            }
+            Err(t) => {
+                self.tree = t;
+                None
+            }
+        }
+    }
+
+    pub fn get_possible_next_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
+        self.tree.get_moves_and_evaluations()
+    }
+}
+
 fn run(
     recv: Receiver<BotMsg>,
     send: Sender<BotResult>,
     board: Board,
-    mut evaluator: impl Evaluator,
+    evaluator: impl Evaluator,
     options: Options
 ) {
-    let mut tree = Tree::new(
-        board,
-        &Default::default(),
-        0,
-        &mut evaluator
-    );
+    let mut bot = BotState::new(board, options, evaluator);
 
     let mut do_move = false;
-    let mut cycles = 0;
-    loop {
-        let result = if tree.child_nodes < options.max_nodes {
+    let mut can_think = true;
+    while !bot.is_dead() {
+        let result = if can_think {
             recv.try_recv()
         } else {
             recv.recv().map_err(|_| TryRecvError::Disconnected)
@@ -204,65 +303,25 @@ fn run(
         match result {
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => break,
-            Ok(BotMsg::NewPiece(piece)) => if tree.add_next_piece(piece) {
-                // Only death is possible
-                break
-            }
-            Ok(BotMsg::Reset {
-                field, b2b, combo
-            }) => {
-                let mut board = tree.board;
-                board.set_field(field);
-                board.combo = combo;
-                board.b2b_bonus = b2b;
-                tree = Tree::new(
-                    board,
-                    &Default::default(),
-                    0,
-                    &mut evaluator
-                );
-                cycles = 0;
-            }
+            Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
+            Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
             Ok(BotMsg::NextMove) => do_move = true,
             Ok(BotMsg::PrepareNextMove) => {}
         }
 
-        if do_move && tree.child_nodes > options.min_nodes {
-            let moves_considered = tree.child_nodes;
-            match tree.into_best_child() {
-                Ok(child) => {
-                    do_move = false;
-                    let mut plan = vec![(child.mv.clone(), child.lock.clone())];
-                    if send.send(BotResult::Move(Move {
-                        hold: child.hold,
-                        inputs: child.mv.inputs.movements,
-                        expected_location: child.mv.location
-                    })).is_err() {
-                        return
-                    }
-                    child.tree.get_plan(&mut plan);
-                    if send.send(BotResult::Info(Info {
-                        evaluation: child.tree.evaluation,
-                        nodes: moves_considered,
-                        depth: child.tree.depth,
-                        cycles: cycles,
-                        plan
-                    })).is_err() {
-                        return
-                    }
-                    tree = child.tree;
-                    cycles = 0;
+        if do_move && bot.min_thinking_reached() {
+            if let Some((mv, info)) = bot.next_move() {
+                do_move = false;
+                if send.send(BotResult::Move(mv)).is_err() {
+                    return
                 }
-                Err(t) => tree = t
+                if send.send(BotResult::Info(info)).is_err() {
+                    return
+                }
             }
         }
 
-        if tree.child_nodes < options.max_nodes && tree.board.next_queue().count() > 0 {
-            cycles += 1;
-            if tree.extend(options, &mut evaluator) {
-                break
-            }
-        }
+        can_think = bot.think();
     }
 }
 

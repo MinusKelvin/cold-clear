@@ -31,11 +31,19 @@ pub struct Child {
 }
 
 impl Tree {
+    pub fn empty() -> Self {
+        Tree {
+            board: Board::new(),
+            raw_eval: Evaluation { accumulated: 0, transient: 0 },
+            evaluation: 0, depth: 0, child_nodes: 0, kind: None
+        }
+    }
+
     pub fn new(
         board: Board,
         lock: &LockResult,
         move_time: u32,
-        evaluator: &mut impl Evaluator
+        evaluator: &impl Evaluator
     ) -> Self {
         let raw_eval = evaluator.evaluate(lock, &board, move_time);
         Tree {
@@ -68,14 +76,23 @@ impl Tree {
         }
     }
 
+    pub fn get_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
+        if let Some(ref tk) = self.kind {
+            tk.get_moves_and_evaluations()
+        } else {
+            vec![]
+        }
+    }
+
     /// Returns is_death
-    pub fn add_next_piece(&mut self, piece: Piece) -> bool {
+    pub fn add_next_piece(&mut self, piece: Piece, options: Options) -> bool {
         self.board.add_next_piece(piece);
         if let Some(ref mut k) = self.kind {
-            if k.add_next_piece(piece) {
+            if k.add_next_piece(piece, options) {
                 true
             } else {
-                self.evaluation = k.evaluation() + self.raw_eval.accumulated;
+                self.evaluation = self.raw_eval.accumulated
+                    + k.evaluation() * options.gamma.0 / options.gamma.1;
                 false
             }
         } else {
@@ -85,13 +102,13 @@ impl Tree {
 
     /// Does an iteration of MCTS. Returns true if only death is possible from this position.
     pub fn extend(
-        &mut self, opts: Options, evaluator: &mut impl Evaluator
+        &mut self, opts: Options, evaluator: &impl Evaluator
     ) -> bool {
         self.expand(opts, evaluator).is_death
     }
 
     fn expand(
-        &mut self, opts: Options, evaluator: &mut impl Evaluator
+        &mut self, opts: Options, evaluator: &impl Evaluator
     ) -> ExpandResult {
         match self.kind {
             // TODO: refactor the unexpanded case into TreeKind, and remove the board field
@@ -99,7 +116,8 @@ impl Tree {
                 let er = tk.expand(opts, evaluator);
                 if !er.is_death {
                     // Update this node's information
-                    self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
+                    self.evaluation = self.raw_eval.accumulated
+                        + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
                     self.depth = self.depth.max(er.depth);
                     self.child_nodes += er.new_nodes;
                 }
@@ -127,7 +145,8 @@ impl Tree {
                             self.depth = 1;
                             self.child_nodes = children.len();
                             let tk = TreeKind::Known(children);
-                            self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
+                            self.evaluation = self.raw_eval.accumulated
+                                + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
                             self.kind = Some(tk);
                             ExpandResult {
                                 is_death: false,
@@ -152,7 +171,7 @@ impl Tree {
     fn speculate(
         &mut self,
         opts: Options,
-        evaluator: &mut impl Evaluator
+        evaluator: &impl Evaluator
     ) -> ExpandResult {
         if !opts.speculate {
             return ExpandResult {
@@ -188,7 +207,8 @@ impl Tree {
             }
         } else {
             let tk = TreeKind::Unknown(speculation);
-            self.evaluation = tk.evaluation() + self.raw_eval.accumulated;
+            self.evaluation = self.raw_eval.accumulated
+                + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
             self.kind = Some(tk);
             self.depth = 1;
             ExpandResult {
@@ -205,7 +225,7 @@ impl Tree {
 fn new_children(
     mut board: Board,
     opts: Options,
-    evaluator: &mut impl Evaluator
+    evaluator: &impl Evaluator
 ) -> Vec<Child> {
     let mut children = vec![];
     let next = board.advance_queue().unwrap();
@@ -280,6 +300,15 @@ impl TreeKind {
         }
     }
 
+    fn get_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
+        match self {
+            TreeKind::Known(children) => children.iter()
+                .map(|c| (c.mv.location, c.tree.evaluation))
+                .collect(),
+            _ => vec![]
+        }
+    }
+
     fn evaluation(&self) -> i32 {
         match self {
             TreeKind::Known(children) => children.first().unwrap().tree.evaluation,
@@ -304,11 +333,11 @@ impl TreeKind {
     }
 
     /// Returns is_death
-    fn add_next_piece(&mut self, piece: Piece) -> bool {
+    fn add_next_piece(&mut self, piece: Piece, opts: Options) -> bool {
         match self {
             TreeKind::Known(children) => {
                 children.retain_mut(|child|
-                    !child.tree.add_next_piece(piece)
+                    !child.tree.add_next_piece(piece, opts)
                 );
                 if children.is_empty() {
                     true
@@ -330,7 +359,7 @@ impl TreeKind {
     fn expand(
         &mut self,
         opts: Options,
-        evaluator: &mut impl Evaluator
+        evaluator: &impl Evaluator
     ) -> ExpandResult {
         let to_expand = match self {
             TreeKind::Known(children) => children,

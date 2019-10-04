@@ -13,5 +13,5 @@ pub struct Evaluation {
 
 pub trait Evaluator {
     fn name(&self) -> String;
-    fn evaluate(&mut self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation;
+    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation;
 }
