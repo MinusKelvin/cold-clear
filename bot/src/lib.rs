@@ -72,8 +72,8 @@ impl Interface {
         }
     }
 
-    /// Returns true if all possible piece placement sequences result in death, or some kind of
-    /// error occured that crashed the bot thread.
+    /// Returns true if all possible piece placement sequences result in death, or the bot thread
+    /// crashed.
     pub fn is_dead(&self) -> bool {
         self.dead
     }
@@ -101,8 +101,8 @@ impl Interface {
     /// For example, in a game with zero piece previews and hold enabled, the bot will never be able
     /// to provide the first move because it cannot know what piece it will be placing if it chooses
     /// to hold. Another example: in a game with zero piece previews and hold disabled, the bot
-    /// will only be able to provide a move after the current piece spawns and you provide the new
-    /// piece information to the bot using `add_next_piece`.
+    /// will only be able to provide a move after the current piece spawns and you provide the piece
+    /// information to the bot using `add_next_piece`.
     /// 
     /// It is recommended that you wait to call this function until after the current piece spawns
     /// and you update the queue using `add_next_piece`, as this will allow speculation to be
@@ -151,10 +151,9 @@ impl Interface {
     /// piece in the correct position for some reason (e.g. 15 move rule), since this forces the
     /// bot to throw away previous computations.
     /// 
-    /// Note: combo is not the same as the displayed combo in guideline games. Here, it is better
-    /// thought of as the number of pieces that have been placed that cleared lines in a row. So,
-    /// generally speaking, if you break your combo, use 0 here; if you just clear a line, use 1
-    /// here; and if "x Combo" appears on the screen, use x+1 here.
+    /// Note: combo is not the same as the displayed combo in guideline games. Here, it is the
+    /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
+    /// on the screen, you need to use x+1 here.
     pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
         if self.send.send(BotMsg::Reset {
             field, b2b: b2b_active, combo
