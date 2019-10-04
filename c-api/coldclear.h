@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct CCAsyncBot CCAsyncBot;
 
@@ -13,6 +14,12 @@ typedef enum CCMovement {
     /* Soft drop all the way down */
     CC_DROP
 } CCMovement;
+
+typedef enum CCMovementMode {
+    CC_0G,
+    CC_20G,
+    CC_HARD_DROP_ONLY
+} CCMovementMode;
 
 typedef struct CCMove {
     /* Whether hold is required */
@@ -32,13 +39,55 @@ typedef struct CCMove {
     int32_t evaluation;
 } CCMove;
 
-/* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag.
+typedef struct CCOptions {
+    CCMovementMode mode;
+    bool use_hold;
+    bool speculate;
+    size_t min_nodes;
+    size_t max_nodes;
+} CCOptions;
+
+typedef struct CCWeights {
+    uint32_t back_to_back;
+    uint32_t bumpiness;
+    uint32_t bumpiness_sq;
+    uint32_t height;
+    uint32_t top_half;
+    uint32_t top_quarter;
+    uint32_t cavity_cells;
+    uint32_t cavity_cells_sq;
+    uint32_t overhang_cells;
+    uint32_t overhang_cells_sq;
+    uint32_t covered_cells;
+    uint32_t covered_cells_sq;
+    uint32_t tslot[3];
+    uint32_t tst_slot[4];
+    uint32_t well_depth;
+    uint32_t max_well_depth;
+
+    uint32_t b2b_clear;
+    uint32_t clear1;
+    uint32_t clear2;
+    uint32_t clear3;
+    uint32_t clear4;
+    uint32_t tspin1;
+    uint32_t tspin2;
+    uint32_t tspin3;
+    uint32_t mini_tspin1;
+    uint32_t mini_tspin2;
+    uint32_t perfect_clear;
+    uint32_t combo_table[12];
+    uint32_t move_time;
+} CCWeights;
+
+/* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag, using the
+ * specified options and weights.
  *
- * De-initialize with `cc_destroy_async`.
+ * You *must* destroy the resulting pointer with `cc_destroy_async` when you are done with it.
  * 
  * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_async`.
  */
-CCAsyncBot *cc_launch_async();
+CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights);
 
 /* Terminates the bot thread and frees the memory associated with the bot.
  */
@@ -103,3 +152,9 @@ bool cc_poll_next_move(CCAsyncBot *bot, CCMove *move);
  * crashed.
  */
 bool cc_is_dead_async(CCAsyncBot *bot);
+
+/* Returns the default options in the options parameter */
+void cc_default_options(CCOptions *options);
+
+/* Returns the default weights in the weights parameter */
+void cc_default_weights(CCWeights *weights);
