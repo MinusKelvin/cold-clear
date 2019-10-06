@@ -4,6 +4,7 @@ mod misalike;
 pub use self::misalike::Misalike;
 mod standard;
 pub use self::standard::Standard;
+pub mod changed;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Evaluation {

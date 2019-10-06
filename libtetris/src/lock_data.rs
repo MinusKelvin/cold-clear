@@ -123,12 +123,12 @@ impl Default for PlacementKind {
 }
 
 pub const COMBO_GARBAGE: [u32; 12] = [
-    0, 0,
-    1, 1,
-    2, 2,
-    3, 3,
-    4, 4,
-    4, 5
+    0, 0,       // 0, 1 combo
+    1, 1,       // 2, 3 combo
+    2, 2,       // 4, 5 combo
+    3, 3,       // 6, 7 combo
+    4, 4, 4,    // 8, 9, 10 combo
+    5           // 11+ combo
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash, Serialize, Deserialize)]
@@ -152,7 +152,7 @@ pub struct Statistics {
     pub max_combo: u64
 }
 
-impl  Statistics {
+impl Statistics {
     pub fn update(&mut self, l: &LockResult) {
         self.attack += l.garbage_sent as u64;
         self.lines += l.cleared_lines.len() as u64;

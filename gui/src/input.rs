@@ -34,6 +34,8 @@ impl InputSource for BotInput {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
                     self.interface.add_next_piece(*new_in_queue);
+                }
+                Event::FrameBeforePieceSpawns => {
                     if self.executing.is_none() {
                         self.interface.request_next_move();
                     }

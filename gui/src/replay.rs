@@ -84,6 +84,9 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     self.start_delay = 180;
                 }
             } else {
+                if self.start_delay == 180 {
+                    while timer::check_update_time(ctx, 60) {}
+                }
                 self.start_delay -= 1;
             }
         }

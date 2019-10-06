@@ -136,9 +136,9 @@ impl Interface {
 
     /// Adds a new piece to the end of the queue.
     /// 
-    /// If speculation is enabled, the piece must be in the bag. For example, if you start a new
-    /// game with starting sequence IJOZT, the first time you call this function you can only
-    /// provide either an L or an S piece.
+    /// If speculation is enabled, the piece *must* be in the bag. For example, if in the current
+    /// bag you've provided the sequence IJOZT, then the next time you call this function you can
+    /// only provide either an L or an S piece.
     pub fn add_next_piece(&mut self, piece: Piece) {
         if self.send.send(BotMsg::NewPiece(piece)).is_err() {
             self.dead = true;
@@ -183,7 +183,6 @@ enum BotResult {
 pub struct BotState<E: Evaluator> {
     tree: Tree,
     options: Options,
-    cycles: u32,
     dead: bool,
     eval: E,
 }
@@ -191,7 +190,6 @@ pub struct BotState<E: Evaluator> {
 impl<E: Evaluator> BotState<E> {
     pub fn new(board: Board, options: Options, eval: E) -> Self {
         BotState {
-            cycles: 0,
             dead: false,
             tree: Tree::new(board, &Default::default(), 0, &eval),
             options,
@@ -207,7 +205,6 @@ impl<E: Evaluator> BotState<E> {
         if self.tree.child_nodes < self.options.max_nodes &&
                 self.tree.board.next_queue().count() > 0 &&
                 !self.dead {
-            self.cycles += 1;
             if self.tree.extend(self.options, &self.eval) {
                 self.dead = true;
             }
@@ -235,7 +232,6 @@ impl<E: Evaluator> BotState<E> {
         board.combo = combo;
         board.b2b_bonus = b2b;
         self.tree = Tree::new(board, &Default::default(), 0, &self.eval);
-        self.cycles = 0;
     }
 
     pub fn min_thinking_reached(&self) -> bool {
@@ -257,8 +253,7 @@ impl<E: Evaluator> BotState<E> {
                 let info = Info {
                     evaluation: child.tree.evaluation,
                     nodes: moves_considered,
-                    depth: child.tree.depth,
-                    cycles: self.cycles,
+                    depth: child.tree.depth+1,
                     plan
                 };
                 let mv = Move {
@@ -267,7 +262,6 @@ impl<E: Evaluator> BotState<E> {
                     expected_location: child.mv.location
                 };
                 self.tree = child.tree;
-                self.cycles = 0;
                 Some((mv, info))
             }
             Err(t) => {
@@ -328,7 +322,6 @@ fn run(
 pub struct Info {
     pub nodes: usize,
     pub depth: usize,
-    pub cycles: u32,
     pub evaluation: i32,
     pub plan: Vec<(Placement, LockResult)>
 }

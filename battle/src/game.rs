@@ -19,6 +19,7 @@ pub struct Game {
 pub enum Event {
     PieceSpawned { new_in_queue: Piece },
     SpawnDelayStart,
+    FrameBeforePieceSpawns,
     PieceMoved,
     PieceRotated,
     PieceTSpined,
@@ -146,11 +147,14 @@ impl Game {
             }
             GameState::SpawnDelay(ref mut delay) => {
                 *delay -= 1;
-                if *delay + 1 == self.config.spawn_delay {
-                    vec![Event::SpawnDelayStart]
-                } else {
-                    vec![]
+                let mut events = vec![];
+                if *delay == 0 {
+                    events.push(Event::FrameBeforePieceSpawns);
                 }
+                if *delay + 1 == self.config.spawn_delay {
+                    events.push(Event::SpawnDelayStart);
+                }
+                events
             }
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);

@@ -103,7 +103,6 @@ fn main() {
                 &mut resources,
                 Box::new(|board| {
                     let evaluator = Standard {
-                        sub_name: Some("No search".to_owned()),
                         ..Standard::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
@@ -118,7 +117,6 @@ fn main() {
                 }),
                 Box::new(|board|{
                     let evaluator = Standard {
-                        sub_name: Some("No Search".to_owned()),
                         ..Standard::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());

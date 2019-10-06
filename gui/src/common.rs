@@ -317,37 +317,28 @@ impl BoardDrawState {
                 None
             );
             queue_text(
-                ctx, &text("Cycles", scale*0.66, 0.0), [text_x-0.75*scale, y + 2.7*scale], None
-            );
-            queue_text(
-                ctx,
-                &text(format!("{}", info.cycles), scale*0.66, -3.5*scale),
-                [text_x-0.75*scale, y + 2.7*scale],
-                None
-            );
-            queue_text(
-                ctx, &text("Nodes", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
+                ctx, &text("Nodes", scale*0.66, 0.0), [text_x-0.75*scale, y + 2.7*scale], None
             );
             queue_text(
                 ctx,
                 &text(format!("{}", info.nodes), scale*0.66, -3.5*scale),
-                [text_x-0.75*scale, y + 3.4*scale],
+                [text_x-0.75*scale, y + 2.7*scale],
                 None
             );
             queue_text(
-                ctx, &text("Eval", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.1*scale], None
+                ctx, &text("Eval", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
             );
             queue_text(
                 ctx,
                 &text(format!("{}", info.evaluation), scale*0.66, -3.5*scale),
-                [text_x-0.75*scale, y + 4.1*scale],
+                [text_x-0.75*scale, y + 3.4*scale],
                 None
             );
             // Draw plan description
             queue_text(
-                ctx, &text("Plan:", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.8*scale], None
+                ctx, &text("Plan:", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.1*scale], None
             );
-            let mut y = y + 4.8*scale;
+            let mut y = y + 4.1*scale;
             let mut x = text_x-0.75*scale;
             let mut has_pc = false;
             let mut has_send = false;
