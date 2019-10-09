@@ -18,7 +18,7 @@ fn main() {
 
     let (send, recv) = std::sync::mpsc::channel();
 
-    for _ in 0..3 {
+    for _ in 0..2 {
         let p1_eval = p1_eval.clone();
         let p2_eval = p2_eval.clone();
         let send = send.clone();
@@ -32,7 +32,9 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    loop {
+    let games = 3000;
+
+    while p1_wins + p2_wins < games {
         match recv.recv() {
             Ok((replay, p1_won)) => {
                 if p1_won {
@@ -40,38 +42,19 @@ fn main() {
                 } else {
                     p2_wins += 1;
                 }
-                let games = p1_wins + p2_wins;
-                println!("{}-{} ({} games)", p1_wins, p2_wins, games);
-                let distr = Binomial::new(0.5, p1_wins + p2_wins).unwrap();
-                if p1_wins > p2_wins {
-                    let p = distr.cdf(p1_wins as f64 - 1.0);
-                    if p > 0.99995 {
-                        println!("P(L > R): >99.99%");
-                    } else {
-                        println!("P(L > R): {:.2}%", p*100.0);
-                    }
-                } else if p2_wins > p1_wins {
-                    let p = distr.cdf(p2_wins as f64 - 1.0);
-                    if p > 0.99995 {
-                        println!("P(L < R): >99.99%");
-                    } else {
-                        println!("P(L < R): {:.2}%", p*100.0);
-                    }
-                } else {
-                    println!();
-                    println!();
-                }
 
                 let f = std::fs::File::create("recent-game.json").unwrap();
-                serde_json::to_writer(f, &replay).unwrap();
+                serde_json::to_writer(std::io::BufWriter::new(f), &replay).unwrap();
+
+                println!("{} of {}", p1_wins + p2_wins, games);
+                println!("{} - {}", p1_wins, p2_wins);
             },
             Err(_) => break
         }
-
-        if std::fs::remove_file("end-request").is_ok() {
-            break
-        }
     }
+    let distr = Binomial::new(0.5, p1_wins + p2_wins).unwrap();
+    let p = distr.cdf(p1_wins as f64);
+    println!("p = {:.4}", p);
 }
 
 fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {

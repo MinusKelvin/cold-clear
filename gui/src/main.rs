@@ -97,13 +97,13 @@ fn main() {
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         None => {
-            use bot::evaluation::*;
+            use bot::evaluation::{ self, Evaluator };
             use crate::input::*;
             let mut local_game = LocalGame::new(
                 &mut resources,
                 Box::new(|board| {
-                    let evaluator = Standard {
-                        ..Standard::default()
+                    let evaluator = evaluation::changed::Standard {
+                        ..Default::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
                     (Box::new(BotInput::new(bot::Interface::launch(
@@ -116,8 +116,8 @@ fn main() {
                     // (Box::new(Keyboard), "Human".to_owned())
                 }),
                 Box::new(|board|{
-                    let evaluator = Standard {
-                        ..Standard::default()
+                    let evaluator = evaluation::Standard {
+                        ..Default::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
                     (Box::new(BotInput::new(bot::Interface::launch(

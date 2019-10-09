@@ -323,40 +323,47 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 /// []..[]    []..[]
 /// ```
 fn tslot(board: &Board) -> Option<usize> {
+    fn filled_check(board: &Board, x: i32, y: i32) -> usize {
+        let mut filled = 0;
+        for cy in y-1..y+1 {
+            for rx in 0..10 {
+                if rx < x-1 || rx > x+1 {
+                    if !board.occupied(rx, cy) {
+                        break
+                    }
+                }
+            }
+            filled += 1;
+        }
+        filled
+    }
+
     let mut best = None;
     for (x, hs) in board.column_heights().windows(2).enumerate() {
         let x = x as i32;
         let (left_h, right_h) = (hs[0], hs[1]);
-        let is_tslot = if left_h > right_h {
+        if left_h > right_h {
             // Look for topleft-open T slot
             // leftmost column is known to match, as is middle column; no need to check
-            board.occupied(x+2, left_h+1) &&
+            let is_tslot =
+                board.occupied(x+2, left_h+1) &&
                 !board.occupied(x+2, left_h) &&
-                board.occupied(x+2, left_h-1)
+                board.occupied(x+2, left_h-1);
+            if is_tslot {
+                best = Some(best.unwrap_or(0).max(filled_check(board, x-1, left_h)));
+            }
         } else if right_h > left_h {
             // Look for topright-open T slot
             // rightmost column is known to match, as is middle column; no need to check
-            board.occupied(x-1, right_h+1) &&
+            let is_tslot =
+                board.occupied(x-1, right_h+1) &&
                 !board.occupied(x-1, right_h) &&
-                board.occupied(x-1, right_h-1)
-        } else {
-            false
-        };
-
-        if is_tslot {
-            let y = left_h.max(right_h) - 1;
-            let mut filled = 0;
-            for cy in y..y+2 {
-                for rx in 0..10 {
-                    if rx < x || rx > x+2 {
-                        if !board.occupied(rx, cy) {
-                            break
-                        }
-                    }
-                }
-                filled += 1;
+                board.occupied(x-1, right_h-1);
+            if is_tslot {
+                best = Some(best.unwrap_or(0).max(filled_check(board, x, right_h)));
             }
-            best = Some(filled.max(best.unwrap_or(0)));
+        } else {
+            continue
         }
     }
     best
