@@ -53,7 +53,7 @@ impl Default for Standard {
             overhang_cells_sq: -10,
             covered_cells: -8,
             covered_cells_sq: -1,
-            tslot: [50, 150, 200, 300],
+            tslot: [20, 150, 200, 400],
             well_depth: 50,
             max_well_depth: 8,
 
@@ -149,6 +149,7 @@ impl Evaluator for Standard {
 
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.top_quarter * (highest_point - 15).max(0);
+        transient_eval += self.top_half * (highest_point - 10).max(0);
 
         let mut board = board.clone();
         loop {
@@ -181,7 +182,6 @@ impl Evaluator for Standard {
 
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.height * highest_point;
-        transient_eval += self.top_half * (highest_point - 10).max(0);
 
         let mut well = 0;
         for x in 1..10 {
