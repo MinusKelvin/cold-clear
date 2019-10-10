@@ -57,7 +57,7 @@ impl<'a> LocalGame<'a> {
             p2_wins: 0,
             p1_info_updates: VecDeque::new(),
             p2_info_updates: VecDeque::new(),
-            state: State::Starting(500),
+            state: State::Starting(180),
             resources,
             config
         }

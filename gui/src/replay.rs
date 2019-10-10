@@ -35,7 +35,7 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
             updates: replay.updates,
             p1_info_updates: p1_info_updates,
             p2_info_updates: p2_info_updates,
-            start_delay: 180,
+            start_delay: 500,
             resources,
             file
         }
