@@ -147,88 +147,33 @@ impl Evaluator for Standard {
             transient_eval += self.back_to_back;
         }
 
-        let mut board = board.clone();
-        for _ in 0..2 {
-            if let Some((x, y)) = tslot(&board) {
-                let tsd_piece = FallingPiece {
-                    kind: PieceState(Piece::T, RotationState::South),
-                    x, y,
-                    tspin: TspinStatus::Full
-                };
-                let mut b = board.clone();
-                let result = b.lock_piece(tsd_piece);
-                match result.placement_kind {
-                    PlacementKind::Tspin2 => {
-                        transient_eval += self.tslot[2];
-                        board = b;
-                    }
-                    PlacementKind::Tspin1 => {
-                        transient_eval += self.tslot[1];
-                        break
-                    }
-                    PlacementKind::Tspin => {
-                        transient_eval += self.tslot[0];
-                        break
-                    }
-                    _ => unreachable!("{:?}", result.placement_kind)
-                }
-            } else if let Some((x, y, left)) = tst_slot(&board) {
-                let left_t = FallingPiece {
-                    kind: PieceState(Piece::T, RotationState::East),
-                    x, y,
-                    tspin: TspinStatus::Full
-                };
-                let right_t = FallingPiece {
-                    kind: PieceState(Piece::T, RotationState::West),
-                    x, y,
-                    tspin: TspinStatus::Full
-                };
-                let (imperial, normal) = if !left {
-                    (right_t, left_t)
-                } else {
-                    (left_t, right_t)
-                };
+        let highest_point = *board.column_heights().iter().max().unwrap() as i32;
+        transient_eval += self.top_quarter * (highest_point - 15).max(0);
 
-                let mut b = board.clone();
-                if !b.obstructed(&imperial) {
-                    let result = b.lock_piece(imperial);
-                    match result.placement_kind {
-                        PlacementKind::Tspin2 => {
-                            transient_eval += self.tslot[2];
-                            board = b;
-                        }
-                        PlacementKind::Tspin1 => {
-                            transient_eval += self.tslot[1];
-                            break
-                        }
-                        PlacementKind::Tspin => {
-                            transient_eval += self.tslot[0];
-                            break
-                        }
-                        _ => unreachable!("{:#?}", (left, result, imperial, normal))
-                    }
+        let mut board = board.clone();
+        loop {
+            let result = if let Some((x, y)) = sky_tslot(&board) {
+                cutout_tslot(board.clone(), x, y, TslotKind::Tsd)
+            } else if let Some(twist) = tst_twist(&board) {
+                let piece = twist.piece();
+                if let Some((x, y)) = cave_tslot(&board, piece) {
+                    cutout_tslot(board.clone(), x, y, TslotKind::Tsd)
+                } else if twist.is_tslot && board.on_stack(&piece) {
+                    let kind = if twist.point_left {
+                        TslotKind::LeftTst
+                    } else {
+                        TslotKind::RightTst
+                    };
+                    cutout_tslot(board.clone(), twist.x, twist.y, kind)
                 } else {
-                    let result = b.lock_piece(normal);
-                    match result.placement_kind {
-                        PlacementKind::Tspin3 => {
-                            transient_eval += self.tslot[3];
-                            board = b;
-                        }
-                        PlacementKind::Tspin2 => {
-                            transient_eval += self.tslot[2];
-                            board = b;
-                        }
-                        PlacementKind::Tspin1 => {
-                            transient_eval += self.tslot[1];
-                            break
-                        }
-                        PlacementKind::Tspin => {
-                            transient_eval += self.tslot[0];
-                            break
-                        }
-                        _ => unreachable!("{:?}", result.placement_kind)
-                    }
+                    break
                 }
+            } else {
+                break
+            };
+            transient_eval += self.tslot[result.lines];
+            if let Some(b) = result.result {
+                board = b;
             } else {
                 break
             }
@@ -237,7 +182,6 @@ impl Evaluator for Standard {
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.height * highest_point;
         transient_eval += self.top_half * (highest_point - 10).max(0);
-        transient_eval += self.top_quarter * (highest_point - 15).max(0);
 
         let mut well = 0;
         for x in 1..10 {
@@ -389,7 +333,6 @@ fn covered_cells(board: &Board) -> (i32, i32) {
     (covered, covered_sq)
 }
 
-
 /// Determines the existence and location of a reachable T slot on the board.
 /// 
 /// That is, it looks for these with sky above:
@@ -401,7 +344,7 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 /// ```
 /// 
 /// If there is more than one, this returns the one with the most lines filled.
-fn tslot(board: &Board) -> Option<(i32, i32)> {
+fn sky_tslot(board: &Board) -> Option<(i32, i32)> {
     fn filledness(board: &Board, x: i32, y: i32) -> usize {
         let mut filled = 0;
         for cy in y-1..y+1 {
@@ -468,38 +411,100 @@ fn tslot(board: &Board) -> Option<(i32, i32)> {
     best.map(|(_,x,y)| (x,y))
 }
 
-/// Determines the existence and location of a reachable TST slot on the board.
+fn cave_tslot(board: &Board, mut starting_point: FallingPiece) -> Option<(i32, i32)> {
+    starting_point.sonic_drop(board);
+    let x = starting_point.x;
+    let y = starting_point.y;
+    match starting_point.kind.1 {
+        RotationState::East => {
+            // Check:
+            // []<>      <>  
+            // ..<><>  []<><>[]
+            // []<>[]    <>....
+            //           []..[]
+            if !board.occupied(x-1, y) &&
+                board.occupied(x-1, y-1) &&
+                board.occupied(x+1, y-1) &&
+                board.occupied(x-1, y+1)
+            {
+                Some((x, y))
+            } else if !board.occupied(x+1, y-1) &&
+                !board.occupied(x+2, y-1) &&
+                !board.occupied(x+1, y-2) &&
+                board.occupied(x-1, y) &&
+                board.occupied(x+2, y) &&
+                board.occupied(x, y-2) &&
+                board.occupied(x+2, y-2)
+            {
+                Some((x+1, y-1))
+            } else {
+                None
+            }
+        }
+        RotationState::West => {
+            // Check:
+            //   <>[]      <>
+            // <><>..  []<><>[]
+            // []<>[]  ....<>
+            //         []..[]
+            if !board.occupied(x+1, y) &&
+                board.occupied(x+1, y+1) &&
+                board.occupied(x+1, y-1) &&
+                board.occupied(x-1, y-1)
+            {
+                Some((x, y))
+            } else if !board.occupied(x-1, y-1) &&
+                !board.occupied(x-2, y-1) &&
+                !board.occupied(x-1, y-2) &&
+                board.occupied(x+1, y) &&
+                board.occupied(x-2, y) &&
+                board.occupied(x-2, y-2) &&
+                board.occupied(x, y-2)
+            {
+                Some((x-1, y-1))
+            } else {
+                None
+            }
+        }
+        _ => None
+    }
+}
+
+struct TstTwist {
+    point_left: bool,
+    is_tslot: bool,
+    x: i32,
+    y: i32,
+}
+
+impl TstTwist {
+    fn piece(&self) -> FallingPiece {
+        let orientation = if self.point_left {
+            RotationState::East
+        } else {
+            RotationState::West
+        };
+        FallingPiece {
+            kind: PieceState(Piece::T, orientation),
+            x: self.x,
+            y: self.y,
+            tspin: if self.is_tslot { TspinStatus::Full } else { TspinStatus::None }
+        }
+    }
+}
+
+/// Determines the existence and location of a reachable TST twist spot on the board.
 /// 
 /// That is, if looks for these with sky above:
 /// 
 /// ```
-///   []....    ....[]
-///   ......    ......
-/// {}..[]        []..{}
-///   ....        ....
-/// {}..{}        {}..{}
+/// []....    ....[]
+/// ......    ......
+/// ..[]        []..
+/// ....        ....
+/// ..            ..
 /// ```
-/// where at least two of the `{}` cells are filled.
-/// 
-/// If there is more than one, this returns the one with the most lines filled.
-fn tst_slot(board: &Board) -> Option<(i32, i32, bool)> {
-    fn filledness(board: &Board, x: i32, y: i32) -> usize {
-        let mut filled = 0;
-        'fillcheckloop:
-        for cy in y..y+3 {
-            for rx in 0..10 {
-                if rx < x-1 || rx > x+1 {
-                    if !board.occupied(rx, cy) {
-                        break 'fillcheckloop
-                    }
-                }
-            }
-            filled += 1;
-        }
-        filled
-    }
-
-    let mut best = None;
+fn tst_twist(board: &Board) -> Option<TstTwist> {
     for (x, hs) in board.column_heights().windows(3).enumerate() {
         let x = x as i32;
         let (left_h, middle_h, right_h) = (hs[0], hs[1], hs[2]);
@@ -512,23 +517,18 @@ fn tst_slot(board: &Board) -> Option<(i32, i32, bool)> {
                 !board.occupied(x, middle_h-1) &&
                 !board.occupied(x, middle_h-2) &&
                 !board.occupied(x+1, middle_h-2) &&
-                !board.occupied(x, middle_h-3) && (
-                    board.occupied(x-1, middle_h-1) as usize +
-                    board.occupied(x-1, middle_h-3) as usize +
-                    board.occupied(x+1, middle_h-3) as usize
-                ) >= 2;
+                !board.occupied(x, middle_h-3);
             if is_tst_slot {
-                best = match best {
-                    None => Some((filledness(board, x, middle_h-3), x, middle_h-2, false)),
-                    Some((f, ox, oy, left)) => {
-                        let fill = filledness(board, x, middle_h-3);
-                        if fill > f {
-                            Some((fill, x, middle_h-2, false))
-                        } else {
-                            Some((f, ox, oy, left))
-                        }
-                    }
-                }
+                return Some(TstTwist {
+                    point_left: false,
+                    x: x,
+                    y: middle_h-2,
+                    is_tslot: (
+                        board.occupied(x-1, middle_h-1) as usize +
+                        board.occupied(x-1, middle_h-3) as usize +
+                        board.occupied(x+1, middle_h-3) as usize
+                    ) >= 2
+                });
             }
         } else if right_h > middle_h && middle_h >= left_h {
             // left-pointing TST slot
@@ -539,25 +539,81 @@ fn tst_slot(board: &Board) -> Option<(i32, i32, bool)> {
                 !board.occupied(x+2, middle_h-1) &&
                 !board.occupied(x+2, middle_h-2) &&
                 !board.occupied(x+1, middle_h-2) &&
-                !board.occupied(x+2, middle_h-3) && (
-                    board.occupied(x+1, middle_h-3) as usize +
-                    board.occupied(x+3, middle_h-1) as usize +
-                    board.occupied(x+3, middle_h-3) as usize
-                ) >= 2;
+                !board.occupied(x+2, middle_h-3);
             if is_tst_slot {
-                best = match best {
-                    None => Some((filledness(board, x+2, middle_h-3), x+2, middle_h-2, true)),
-                    Some((f, ox, oy, left)) => {
-                        let fill = filledness(board, x+2, middle_h-3);
-                        if fill > f {
-                            Some((fill, x+2, middle_h-2, true))
-                        } else {
-                            Some((f, ox, oy, left))
-                        }
-                    }
-                }
+                return Some(TstTwist {
+                    point_left: true,
+                    x: x+2,
+                    y: middle_h-2,
+                    is_tslot: (
+                        board.occupied(x+1, middle_h-3) as usize +
+                        board.occupied(x+3, middle_h-1) as usize +
+                        board.occupied(x+3, middle_h-3) as usize
+                    ) >= 2
+                });
             }
         }
     }
-    best.map(|(_,x,y,left)| (x,y,left))
+    None
+}
+
+struct Cutout {
+    lines: usize,
+    result: Option<Board>
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+enum TslotKind {
+    Tsd,
+    LeftTst,
+    RightTst
+}
+
+fn cutout_tslot(mut board: Board, x: i32, y: i32, kind: TslotKind) -> Cutout {
+    let result = if kind == TslotKind::Tsd {
+        board.lock_piece(FallingPiece {
+            kind: PieceState(Piece::T, RotationState::South),
+            x, y,
+            tspin: TspinStatus::Full
+        })
+    } else {
+        let left = FallingPiece {
+            kind: PieceState(Piece::T, RotationState::East),
+            x, y,
+            tspin: TspinStatus::Full
+        };
+        let right = FallingPiece {
+            kind: PieceState(Piece::T, RotationState::West),
+            x, y,
+            tspin: TspinStatus::Full
+        };
+
+        let (imperial, normal) = if kind == TslotKind::LeftTst {
+            (right, left)
+        } else {
+            (left, right)
+        };
+
+        if !board.obstructed(&imperial) {
+            board.lock_piece(imperial)
+        } else {
+            board.lock_piece(normal)
+        }
+    };
+
+    match result.placement_kind {
+        PlacementKind::Tspin => Cutout {
+            lines: 0, result: None
+        },
+        PlacementKind::Tspin1 => Cutout {
+            lines: 1, result: None
+        },
+        PlacementKind::Tspin2 => Cutout {
+            lines: 2, result: Some(board)
+        },
+        PlacementKind::Tspin3 => Cutout {
+            lines: 3, result: Some(board)
+        },
+        _ => unreachable!()
+    }
 }
