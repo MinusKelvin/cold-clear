@@ -104,9 +104,8 @@ impl Interface {
     /// will only be able to provide a move after the current piece spawns and you provide the piece
     /// information to the bot using `add_next_piece`.
     /// 
-    /// It is recommended that you wait to call this function until after the current piece spawns
-    /// and you update the queue using `add_next_piece`, as this will allow speculation to be
-    /// resolved and at least one thinking cycle to run.
+    /// It is recommended that you call this function the frame before the piece spawns so that the
+    /// bot has time to finish its current thinking cycle and supply the move.
     /// 
     /// Once a move is chosen, the bot will update its internal state to the result of the piece
     /// being placed correctly and the move will become available by calling `poll_next_move`.

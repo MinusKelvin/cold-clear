@@ -125,9 +125,8 @@ void cc_add_next_piece_async(CCAsyncBot *bot, CCPiece piece);
  * will only be able to provide a move after the current piece spawns and you provide the piece
  * information to the bot using `cc_add_next_piece_async`.
  * 
- * It is recommended that you wait to call this function until after the current piece spawns
- * and you update the queue using `cc_add_next_piece_async`, as this will allow speculation to be
- * resolved and at least one thinking cycle to run.
+ * It is recommended that you call this function the frame before the piece spawns so that the
+ * bot has time to finish its current thinking cycle and supply the move.
  * 
  * Once a move is chosen, the bot will update its internal state to the result of the piece
  * being placed correctly and the move will become available by calling `cc_poll_next_move`.
@@ -144,7 +143,7 @@ void cc_request_next_move(CCAsyncBot *bot);
  * reset the game field, back-to-back status, and combo values.
  * 
  * If the move has been provided, this function will return true and the move will be returned in
- * the move parameter. Otherwise, the function returns false.
+ * the move parameter. Otherwise, this function returns false.
  */
 bool cc_poll_next_move(CCAsyncBot *bot, CCMove *move);
 

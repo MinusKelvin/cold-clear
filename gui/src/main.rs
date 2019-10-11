@@ -102,7 +102,7 @@ fn main() {
             let mut local_game = LocalGame::new(
                 &mut resources,
                 Box::new(|board| {
-                    let evaluator = evaluation::changed::Standard {
+                    let evaluator = evaluation::Standard {
                         ..Default::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
@@ -116,7 +116,7 @@ fn main() {
                     // (Box::new(Keyboard), "Human".to_owned())
                 }),
                 Box::new(|board|{
-                    let evaluator = evaluation::Standard {
+                    let evaluator = evaluation::changed::Standard {
                         ..Default::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
