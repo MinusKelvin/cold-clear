@@ -51,8 +51,7 @@ impl BoardDrawState {
         }
     }
 
-    pub fn update(&mut self, update: PlayerUpdate, info_update: Option<bot::Info>, time: u32) {
-        self.garbage_queue = update.garbage_queue;
+    pub fn update(&mut self, update: &[Event], info_update: Option<bot::Info>, time: u32) {
         self.info = info_update.or(self.info.take());
         self.game_time = time;
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
@@ -91,7 +90,7 @@ impl BoardDrawState {
                 }
             }
         }
-        for event in &update.events {
+        for event in update {
             match event {
                 Event::PiecePlaced { piece, locked, hard_drop_distance } => {
                     self.statistics.update(&locked);

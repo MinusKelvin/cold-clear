@@ -239,11 +239,13 @@ fn new_children(
         let mut board = board.clone();
         let lock = board.lock_piece(mv.location);
         if !lock.locked_out {
-            children.push(Child {
-                tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
-                hold: false,
-                mv, lock
-            })
+            if !lock.placement_kind.is_clear() || lock.placement_kind == libtetris::PlacementKind::Tspin2 {
+                children.push(Child {
+                    tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
+                    hold: false,
+                    mv, lock
+                })
+            }
         }
     }
 
@@ -257,11 +259,13 @@ fn new_children(
                     let mut board = board.clone();
                     let lock = board.lock_piece(mv.location);
                     if !lock.locked_out {
-                        children.push(Child {
-                            tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
-                            hold: true,
-                            mv, lock
-                        })
+                        if !lock.placement_kind.is_clear() || lock.placement_kind == libtetris::PlacementKind::Tspin2 {
+                            children.push(Child {
+                                tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
+                                hold: true,
+                                mv, lock
+                            })
+                        }
                     }
                 }
             }

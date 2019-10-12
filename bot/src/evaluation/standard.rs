@@ -54,7 +54,7 @@ impl Default for Standard {
             covered_cells: -8,
             covered_cells_sq: -1,
             tslot: [20, 150, 200, 400],
-            well_depth: 50,
+            well_depth: 0,
             max_well_depth: 8,
 
             move_time: -1,

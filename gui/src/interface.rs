@@ -3,35 +3,30 @@ use crate::Resources;
 use ggez::{ Context, GameResult };
 use ggez::audio::SoundSource;
 use ggez::graphics::*;
-use battle::{ BattleUpdate, Battle };
+use battle::{ Event, Game };
 
 pub struct Gui {
     player_1_graphics: BoardDrawState,
-    player_2_graphics: BoardDrawState,
     time: u32,
-    multiplier: f32,
     move_sound_play: u32
 }
 
 impl Gui {
-    pub fn new(battle: &Battle, p1_name: String, p2_name: String) -> Self {
+    pub fn new(game: &Game, p1_name: String) -> Self {
         Gui {
-            player_1_graphics: BoardDrawState::new(battle.player_1.board.next_queue(), p1_name),
-            player_2_graphics: BoardDrawState::new(battle.player_2.board.next_queue(), p2_name),
+            player_1_graphics: BoardDrawState::new(game.board.next_queue(), p1_name),
             time: 0,
-            multiplier: 1.0,
             move_sound_play: 0
         }
     }
 
     pub fn update(
         &mut self,
-        update: BattleUpdate,
+        update: &[Event], time: u32,
         p1_info_update: Option<bot::Info>,
-        p2_info_update: Option<bot::Info>,
         res: &mut Resources
     ) -> GameResult {
-        for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
+        for event in update {
             use battle::Event::*;
             match event {
                 PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
@@ -61,10 +56,8 @@ impl Gui {
             self.move_sound_play -= 1;
         }
 
-        self.player_1_graphics.update(update.player_1, p1_info_update, update.time);
-        self.player_2_graphics.update(update.player_2, p2_info_update, update.time);
-        self.time = update.time;
-        self.multiplier = update.attack_multiplier;
+        self.player_1_graphics.update(update, p1_info_update, time);
+        self.time = time;
 
         Ok(())
     }
@@ -74,29 +67,13 @@ impl Gui {
     ) -> GameResult<()> {
         push_transform(ctx, Some(DrawParam::new()
             .scale([scale, scale])
-            .dest([center - 17.5 * scale, 0.0])
+            .dest([center - 8.0 * scale, 0.0])
             .to_matrix()));
         apply_transformations(ctx)?;
 
         res.sprites.clear();
         let mut mesh = MeshBuilder::new();
-        self.player_1_graphics.draw(ctx, &mut res.sprites, &mut mesh, center - 17.5*scale, scale)?;
-        draw(ctx, &res.sprites, DrawParam::default())?;
-        if let Ok(mesh) = mesh.build(ctx) {
-            draw(ctx, &mesh, DrawParam::default())?;
-        }
-
-        pop_transform(ctx);
-
-        push_transform(ctx, Some(DrawParam::new()
-            .scale([scale, scale])
-            .dest([center + 1.5*scale, 0.0])
-            .to_matrix()));
-        apply_transformations(ctx)?;
-
-        let mut mesh = MeshBuilder::new();
-        res.sprites.clear();
-        self.player_2_graphics.draw(ctx, &mut res.sprites, &mut mesh, center+1.5*scale, scale)?;
+        self.player_1_graphics.draw(ctx, &mut res.sprites, &mut mesh, center - 8.0*scale, scale)?;
         draw(ctx, &res.sprites, DrawParam::default())?;
         if let Ok(mesh) = mesh.build(ctx) {
             draw(ctx, &mesh, DrawParam::default())?;
@@ -110,17 +87,9 @@ impl Gui {
                 format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
                 scale*1.5, 8.0*scale
             ),
-            [center-4.0*scale, 20.6*scale],
+            [center+8.0*scale, 20.6*scale],
             None
         );
-        if self.multiplier != 1.0 {
-            queue_text(
-                ctx,
-                &text(format!("Margin Time: x{:.1}", self.multiplier), scale*1.0, 8.0*scale),
-                [center-4.0*scale, 21.9*scale],
-                None
-            );
-        }
 
         apply_transformations(ctx)?;
         draw_queued_text(

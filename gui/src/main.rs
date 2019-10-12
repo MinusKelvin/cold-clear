@@ -9,10 +9,8 @@ mod common;
 mod local;
 mod input;
 mod interface;
-mod replay;
 
 use local::LocalGame;
-use replay::ReplayGame;
 
 pub struct Resources {
     sprites: SpriteBatch,
@@ -93,8 +91,8 @@ fn main() {
 
     match replay_file {
         Some(file) => {
-            let mut replay_game = ReplayGame::new(&mut resources, file);
-            event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
+            // let mut replay_game = ReplayGame::new(&mut resources, file);
+            // event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         None => {
             use bot::evaluation::{ self, Evaluator };
@@ -114,19 +112,6 @@ fn main() {
                         evaluator
                     ))), name)
                     // (Box::new(Keyboard), "Human".to_owned())
-                }),
-                Box::new(|board|{
-                    let evaluator = evaluation::changed::Standard {
-                        ..Default::default()
-                    };
-                    let name = format!("Cold Clear\n{}", evaluator.name());
-                    (Box::new(BotInput::new(bot::Interface::launch(
-                        board,
-                        bot::Options {
-                            ..Default::default()
-                        },
-                        evaluator
-                    ))), name)
                 }),
                 GameConfig {
                     next_queue_size: 6,
