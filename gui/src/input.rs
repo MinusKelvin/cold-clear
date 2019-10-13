@@ -46,6 +46,7 @@ impl InputSource for BotInput {
                 _ => {}
             }
         }
+        let mut info = None;
         if let Some((expected, ref mut executor)) = self.executing {
             if let Some(loc) = executor.update(&mut self.controller, board, events) {
                 if loc != expected {
@@ -53,13 +54,14 @@ impl InputSource for BotInput {
                 }
                 self.executing = None;
             }
-        } else if let Some(mv) = self.interface.poll_next_move() {
+        } else if let Some((mv, i)) = self.interface.poll_next_move() {
+            info = Some(i);
             self.executing = Some((
                 mv.expected_location,
                 PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
             ));
         }
-        self.interface.poll_info()
+        info
     }
 }
 
