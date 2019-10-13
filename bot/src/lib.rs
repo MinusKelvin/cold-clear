@@ -2,7 +2,7 @@ use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
 use serde::{ Serialize, Deserialize };
 
 pub mod evaluation;
-mod misa;
+// mod misa;
 pub mod moves;
 mod tree;
 
@@ -36,10 +36,9 @@ impl Default for Options {
 
 pub struct Interface {
     send: Sender<BotMsg>,
-    recv: Receiver<BotResult>,
+    recv: Receiver<(Move, Info)>,
     dead: bool,
-    mv: Option<Move>,
-    info: Option<Info>
+    mv: Option<(Move, Info)>
 }
 
 impl Interface {
@@ -52,19 +51,19 @@ impl Interface {
         std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
 
         Interface {
-            send, recv, dead: false, mv: None, info: None
+            send, recv, dead: false, mv: None
         }
     }
 
-    pub fn misa_glue(board: Board) -> Self {
-        let (bot_send, recv) = channel();
-        let (send, bot_recv) = channel();
-        std::thread::spawn(move || misa::glue(bot_recv, bot_send, board));
+    // pub fn misa_glue(board: Board) -> Self {
+    //     let (bot_send, recv) = channel();
+    //     let (send, bot_recv) = channel();
+    //     std::thread::spawn(move || misa::glue(bot_recv, bot_send, board));
 
-        Interface {
-            send, recv, dead: false, mv: None, info: None
-        }
-    }
+    //     Interface {
+    //         send, recv, dead: false, mv: None
+    //     }
+    // }
 
     pub fn misa_prepare_next_move(&mut self) {
         if self.send.send(BotMsg::PrepareNextMove).is_err() {
@@ -81,8 +80,7 @@ impl Interface {
     fn poll_bot(&mut self) {
         loop {
             match self.recv.try_recv() {
-                Ok(BotResult::Move(mv)) => self.mv = Some(mv),
-                Ok(BotResult::Info(info)) => self.info = Some(info),
+                Ok(mv) => self.mv = Some(mv),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     self.dead = true;
@@ -123,14 +121,9 @@ impl Interface {
     /// 
     /// If the piece couldn't be placed in the expected location, you must call `reset` to reset the
     /// game field, back-to-back status, and combo values.
-    pub fn poll_next_move(&mut self) -> Option<Move> {
+    pub fn poll_next_move(&mut self) -> Option<(Move, Info)> {
         self.poll_bot();
         self.mv.take()
-    }
-
-    pub fn poll_info(&mut self) -> Option<Info> {
-        self.poll_bot();
-        self.info.take()
     }
 
     /// Adds a new piece to the end of the queue.
@@ -171,12 +164,6 @@ enum BotMsg {
     NewPiece(Piece),
     NextMove,
     PrepareNextMove
-}
-
-#[derive(Debug)]
-enum BotResult {
-    Move(Move),
-    Info(Info)
 }
 
 pub struct BotState<E: Evaluator> {
@@ -277,7 +264,7 @@ impl<E: Evaluator> BotState<E> {
 
 fn run(
     recv: Receiver<BotMsg>,
-    send: Sender<BotResult>,
+    send: Sender<(Move, Info)>,
     board: Board,
     evaluator: impl Evaluator,
     options: Options
@@ -304,10 +291,7 @@ fn run(
         if do_move && bot.min_thinking_reached() {
             if let Some((mv, info)) = bot.next_move() {
                 do_move = false;
-                if send.send(BotResult::Move(mv)).is_err() {
-                    return
-                }
-                if send.send(BotResult::Info(info)).is_err() {
+                if send.send((mv, info)).is_err() {
                     return
                 }
             }

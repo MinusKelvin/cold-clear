@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bot = { path = "../bot" }
+libtetris = { path = "../libtetris" }

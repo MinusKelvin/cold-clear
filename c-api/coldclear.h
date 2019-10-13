@@ -35,7 +35,6 @@ typedef struct CCMove {
     /* Bot Info */
     uint32_t nodes;
     uint32_t depth;
-    uint32_t cycles;
     int32_t evaluation;
 } CCMove;
 
@@ -48,42 +47,41 @@ typedef struct CCOptions {
 } CCOptions;
 
 typedef struct CCWeights {
-    uint32_t back_to_back;
-    uint32_t bumpiness;
-    uint32_t bumpiness_sq;
-    uint32_t height;
-    uint32_t top_half;
-    uint32_t top_quarter;
-    uint32_t cavity_cells;
-    uint32_t cavity_cells_sq;
-    uint32_t overhang_cells;
-    uint32_t overhang_cells_sq;
-    uint32_t covered_cells;
-    uint32_t covered_cells_sq;
-    uint32_t tslot[3];
-    uint32_t tst_slot[4];
-    uint32_t well_depth;
-    uint32_t max_well_depth;
+    int32_t back_to_back;
+    int32_t bumpiness;
+    int32_t bumpiness_sq;
+    int32_t height;
+    int32_t top_half;
+    int32_t top_quarter;
+    int32_t cavity_cells;
+    int32_t cavity_cells_sq;
+    int32_t overhang_cells;
+    int32_t overhang_cells_sq;
+    int32_t covered_cells;
+    int32_t covered_cells_sq;
+    int32_t tslot[4];
+    int32_t well_depth;
+    int32_t max_well_depth;
 
-    uint32_t b2b_clear;
-    uint32_t clear1;
-    uint32_t clear2;
-    uint32_t clear3;
-    uint32_t clear4;
-    uint32_t tspin1;
-    uint32_t tspin2;
-    uint32_t tspin3;
-    uint32_t mini_tspin1;
-    uint32_t mini_tspin2;
-    uint32_t perfect_clear;
-    uint32_t combo_table[12];
-    uint32_t move_time;
+    int32_t b2b_clear;
+    int32_t clear1;
+    int32_t clear2;
+    int32_t clear3;
+    int32_t clear4;
+    int32_t tspin1;
+    int32_t tspin2;
+    int32_t tspin3;
+    int32_t mini_tspin1;
+    int32_t mini_tspin2;
+    int32_t perfect_clear;
+    int32_t combo_table[12];
+    int32_t move_time;
 } CCWeights;
 
 /* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag, using the
  * specified options and weights.
  *
- * You *must* destroy the resulting pointer with `cc_destroy_async` when you are done with it.
+ * You pass the returned pointer with `cc_destroy_async` when you are done with the bot instance.
  * 
  * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_async`.
  */
@@ -102,6 +100,9 @@ void cc_destroy_async(CCAsyncBot *bot);
  * Note: combo is not the same as the displayed combo in guideline games. Here, it is the
  * number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
  * on the screen, you need to use x+1 here.
+ * 
+ * The field parameter is a pointer to the start of an array of 400 booleans in row major order,
+ * with index 0 being the bottom-left cell.
  */
 void cc_reset_async(CCAsyncBot *bot, bool *field, bool b2b, uint32_t combo);
 
