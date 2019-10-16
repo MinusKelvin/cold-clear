@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use ggez::ContextBuilder;
 use ggez::event;
 use ggez::graphics::{ Image };
@@ -106,14 +108,14 @@ fn main() {
                         ..Default::default()
                     };
                     let name = format!("Cold Clear\n{}", evaluator.name());
-                    (Box::new(BotInput::new(bot::Interface::launch(
-                        board,
-                        bot::Options {
-                            ..Default::default()
-                        },
-                        evaluator
-                    ))), name)
-                    // (Box::new(Keyboard), "Human".to_owned())
+                    // (Box::new(BotInput::new(bot::Interface::launch(
+                    //     board,
+                    //     bot::Options {
+                    //         ..Default::default()
+                    //     },
+                    //     evaluator
+                    // ))), name)
+                    (Box::new(Keyboard), "Human".to_owned())
                 }),
                 Box::new(|board|{
                     let evaluator = evaluation::changed::Standard {
