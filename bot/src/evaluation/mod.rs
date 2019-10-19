@@ -43,7 +43,7 @@ impl Eval {
         } else if height >= options.defensive_height {
             self.defensive
         } else {
-            let range_size = options.aggressive_height - options.defensive_height;
+            let range_size = options.defensive_height - options.aggressive_height;
             let t = height - options.aggressive_height;
             (self.defensive * t + self.aggressive * (range_size - t)) / range_size
         }
