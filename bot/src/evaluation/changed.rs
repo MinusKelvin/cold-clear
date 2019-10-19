@@ -5,13 +5,12 @@ use libtetris::*;
 use super::*;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Standard {
+pub struct Weights {
     pub back_to_back: i32,
     pub bumpiness: i32,
     pub bumpiness_sq: i32,
-    pub height: i32,
-    pub top_half: i32,
-    pub top_quarter: i32,
+    pub height_before: i32,
+    pub height_after: i32,
     pub cavity_cells: i32,
     pub cavity_cells_sq: i32,
     pub overhang_cells: i32,
@@ -20,7 +19,6 @@ pub struct Standard {
     pub covered_cells_sq: i32,
     pub tslot: [i32; 4],
     pub well_depth: i32,
-    pub max_well_depth: i32,
 
     pub b2b_clear: i32,
     pub clear1: i32,
@@ -35,52 +33,90 @@ pub struct Standard {
     pub perfect_clear: i32,
     pub combo_table: [i32; 12],
     pub move_time: i32,
+}
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Standard {
+    pub aggressive: Weights,
+    pub defensive: Weights,
     pub search_options: SearchOptions,
-
     pub sub_name: Option<String>
 }
 
 impl Default for Standard {
     fn default() -> Self {
         Standard {
-            back_to_back: 50,
-            bumpiness: -10,
-            bumpiness_sq: -5,
-            height: -40,
-            top_half: -150,
-            top_quarter: -500,
-            cavity_cells: -150,
-            cavity_cells_sq: -10,
-            overhang_cells: -50,
-            overhang_cells_sq: -10,
-            covered_cells: -8,
-            covered_cells_sq: -1,
-            tslot: [20, 150, 200, 400],
-            well_depth: 50,
-            max_well_depth: 8,
+            aggressive: Weights {
+                back_to_back: 50,
+                bumpiness: -10,
+                bumpiness_sq: -5,
+                height_before: -10,
+                height_after: -40,
+                cavity_cells: -150,
+                cavity_cells_sq: -10,
+                overhang_cells: -50,
+                overhang_cells_sq: -10,
+                covered_cells: -8,
+                covered_cells_sq: -1,
+                tslot: [20, 150, 200, 400],
+                well_depth: 50,
 
-            move_time: -1,
-            b2b_clear: 100,
-            clear1: -150,
-            clear2: -100,
-            clear3: -50,
-            clear4: 400,
-            tspin1: 130,
-            tspin2: 400,
-            tspin3: 600,
-            mini_tspin1: -150,
-            mini_tspin2: -100,
-            perfect_clear: 1000,
-            combo_table: libtetris::COMBO_GARBAGE.iter()
-                .map(|&v| v as i32 * 100)
-                .collect::<ArrayVec<[_; 12]>>()
-                .into_inner()
-                .unwrap(),
+                move_time: -1,
+                b2b_clear: 100,
+                clear1: -150,
+                clear2: -100,
+                clear3: -50,
+                clear4: 400,
+                tspin1: 130,
+                tspin2: 400,
+                tspin3: 600,
+                mini_tspin1: -150,
+                mini_tspin2: -100,
+                perfect_clear: 1000,
+                combo_table: libtetris::COMBO_GARBAGE.iter()
+                    .map(|&v| v as i32 * 100)
+                    .collect::<ArrayVec<[_; 12]>>()
+                    .into_inner()
+                    .unwrap(),
+            },
+
+            defensive: Weights {
+                back_to_back: 50,
+                bumpiness: -10,
+                bumpiness_sq: -5,
+                height_before: -70,
+                height_after: -70,
+                cavity_cells: -150,
+                cavity_cells_sq: -10,
+                overhang_cells: -50,
+                overhang_cells_sq: -10,
+                covered_cells: -8,
+                covered_cells_sq: -1,
+                tslot: [0, 150, 200, 400],
+                well_depth: 30,
+
+                move_time: -1,
+                b2b_clear: 100,
+                clear1: -100,
+                clear2: -100,
+                clear3: -50,
+                clear4: 400,
+                tspin1: 130,
+                tspin2: 400,
+                tspin3: 600,
+                mini_tspin1: -150,
+                mini_tspin2: -100,
+                perfect_clear: 1000,
+                combo_table: libtetris::COMBO_GARBAGE.iter()
+                    .map(|&v| v as i32 * 100)
+                    .collect::<ArrayVec<[_; 12]>>()
+                    .into_inner()
+                    .unwrap(),
+            },
 
             search_options: SearchOptions {
-                aggressive_height: 10,
-                defensive_height: 10,
+                aggressive_height: 6,
+                defensive_height: 14,
                 gamma: (1, 1)
             },
 
@@ -106,65 +142,84 @@ impl Evaluator for Standard {
     fn evaluate(
         &self, lock: &LockResult, board: &Board, move_time: u32, _: Piece
     ) -> Evaluation {
-        let mut transient_eval = 0;
-        let mut acc_eval = 0;
+        let mut eval = Evaluation {
+            aggressive_accumulated: 0,
+            aggressive_transient: 0,
+            defensive_accumulated: 0,
+            defensive_transient: 0
+        };
 
         if lock.perfect_clear {
-            acc_eval += self.perfect_clear;
+            eval.aggressive_accumulated += self.aggressive.perfect_clear;
+            eval.aggressive_accumulated += self.defensive.perfect_clear;
         } else {
             if lock.b2b {
-                acc_eval += self.b2b_clear;
+                eval.aggressive_accumulated += self.aggressive.b2b_clear;
+                eval.defensive_accumulated += self.defensive.b2b_clear;
             }
             if let Some(combo) = lock.combo {
                 let combo = combo.min(11) as usize;
-                acc_eval += self.combo_table[combo];
+                eval.aggressive_accumulated += self.aggressive.combo_table[combo];
+                eval.defensive_accumulated += self.defensive.combo_table[combo];
             }
             match lock.placement_kind {
                 PlacementKind::Clear1 => {
-                    acc_eval += self.clear1;
+                    eval.aggressive_accumulated += self.aggressive.clear1;
+                    eval.defensive_accumulated += self.defensive.clear1;
                 }
                 PlacementKind::Clear2 => {
-                    acc_eval += self.clear2;
+                    eval.aggressive_accumulated += self.aggressive.clear2;
+                    eval.defensive_accumulated += self.defensive.clear2;
                 }
                 PlacementKind::Clear3 => {
-                    acc_eval += self.clear3;
+                    eval.aggressive_accumulated += self.aggressive.clear3;
+                    eval.defensive_accumulated += self.defensive.clear3;
                 }
                 PlacementKind::Clear4 => {
-                    acc_eval += self.clear4;
+                    eval.aggressive_accumulated += self.aggressive.clear4;
+                    eval.defensive_accumulated += self.defensive.clear4;
                 }
                 PlacementKind::Tspin1 => {
-                    acc_eval += self.tspin1;
+                    eval.aggressive_accumulated += self.aggressive.tspin1;
+                    eval.defensive_accumulated += self.defensive.tspin1;
                 }
                 PlacementKind::Tspin2 => {
-                    acc_eval += self.tspin2;
+                    eval.aggressive_accumulated += self.aggressive.tspin2;
+                    eval.defensive_accumulated += self.defensive.tspin2;
                 }
                 PlacementKind::Tspin3 => {
-                    acc_eval += self.tspin3;
+                    eval.aggressive_accumulated += self.aggressive.tspin3;
+                    eval.defensive_accumulated += self.defensive.tspin3;
                 }
                 PlacementKind::MiniTspin1 => {
-                    acc_eval += self.mini_tspin1;
+                    eval.aggressive_accumulated += self.aggressive.mini_tspin1;
+                    eval.defensive_accumulated += self.defensive.mini_tspin1;
                 }
                 PlacementKind::MiniTspin2 => {
-                    acc_eval += self.mini_tspin2;
+                    eval.aggressive_accumulated += self.aggressive.mini_tspin2;
+                    eval.defensive_accumulated += self.defensive.mini_tspin2;
                 }
                 _ => {}
             }
         }
 
         // magic approximations of spawn delay and line clear delay
-        acc_eval += if lock.placement_kind.is_clear() {
-            self.move_time * (move_time + 10 + 45) as i32
+        if lock.placement_kind.is_clear() {
+            eval.aggressive_accumulated += self.aggressive.move_time * (move_time + 10 + 45) as i32;
+            eval.defensive_accumulated += self.defensive.move_time * (move_time + 10 + 45) as i32;
          } else {
-            self.move_time * (move_time + 10) as i32
-         };
-
-        if board.b2b_bonus {
-            transient_eval += self.back_to_back;
+            eval.aggressive_accumulated += self.aggressive.move_time * (move_time + 10) as i32;
+            eval.defensive_accumulated += self.defensive.move_time * (move_time + 10) as i32;
         }
 
-        let highest_point = *board.column_heights().iter().max().unwrap() as i32;
-        transient_eval += self.top_quarter * (highest_point - 15).max(0);
-        transient_eval += self.top_half * (highest_point - 10).max(0);
+        if board.b2b_bonus {
+            eval.aggressive_transient += self.aggressive.back_to_back;
+            eval.defensive_transient += self.defensive.back_to_back;
+        }
+
+        let h = board.column_heights().iter().cloned().max().unwrap();
+        eval.aggressive_transient += self.aggressive.height_before * h;
+        eval.defensive_transient += self.defensive.height_before * h;
 
         let mut board = board.clone();
         loop {
@@ -187,7 +242,8 @@ impl Evaluator for Standard {
             } else {
                 break
             };
-            transient_eval += self.tslot[result.lines];
+            eval.aggressive_transient += self.aggressive.tslot[result.lines];
+            eval.defensive_transient += self.defensive.tslot[result.lines];
             if let Some(b) = result.result {
                 board = b;
             } else {
@@ -195,8 +251,9 @@ impl Evaluator for Standard {
             }
         }
 
-        let highest_point = *board.column_heights().iter().max().unwrap() as i32;
-        transient_eval += self.height * highest_point;
+        let h = board.column_heights().iter().cloned().max().unwrap();
+        eval.aggressive_transient += self.aggressive.height_after * h;
+        eval.defensive_transient += self.defensive.height_after * h;
 
         let mut well = 0;
         for x in 1..10 {
@@ -214,36 +271,33 @@ impl Evaluator for Standard {
                 depth += 1;
             }
         }
-        let depth = depth.min(self.max_well_depth);
-        transient_eval += self.well_depth * depth;
+        let depth = depth.min(8);
+        eval.aggressive_transient += self.aggressive.well_depth * depth;
+        eval.defensive_transient += self.defensive.well_depth * depth;
 
-        if self.bumpiness | self.bumpiness_sq != 0 {
-            let (bump, bump_sq) = bumpiness(&board, well);
-            transient_eval += bump * self.bumpiness;
-            transient_eval += bump_sq * self.bumpiness_sq;
-        }
+        let (bump, bump_sq) = bumpiness(&board, well);
+        eval.aggressive_transient += self.aggressive.bumpiness * bump;
+        eval.defensive_transient += self.defensive.bumpiness * bump;
+        eval.aggressive_transient += self.aggressive.bumpiness_sq * bump_sq;
+        eval.defensive_transient += self.defensive.bumpiness_sq * bump_sq;
 
-        if self.cavity_cells | self.cavity_cells_sq |
-                self.overhang_cells | self.overhang_cells_sq != 0 {
-            let (cavity_cells, overhang_cells) = cavities_and_overhangs(&board);
-            transient_eval += self.cavity_cells * cavity_cells;
-            transient_eval += self.cavity_cells_sq * cavity_cells * cavity_cells;
-            transient_eval += self.overhang_cells * overhang_cells;
-            transient_eval += self.overhang_cells_sq * overhang_cells * overhang_cells;
-        }
+        let (cavity_cells, overhang_cells) = cavities_and_overhangs(&board);
+        eval.aggressive_transient += self.aggressive.cavity_cells * cavity_cells;
+        eval.defensive_transient += self.defensive.cavity_cells * cavity_cells;
+        eval.aggressive_transient += self.aggressive.cavity_cells_sq * cavity_cells * cavity_cells;
+        eval.defensive_transient += self.defensive.cavity_cells_sq * cavity_cells * cavity_cells;
+        eval.aggressive_transient += self.aggressive.overhang_cells * overhang_cells;
+        eval.defensive_transient += self.defensive.overhang_cells * overhang_cells;
+        eval.aggressive_transient += self.aggressive.overhang_cells_sq * overhang_cells * overhang_cells;
+        eval.defensive_transient += self.defensive.overhang_cells_sq * overhang_cells * overhang_cells;
 
-        if self.covered_cells | self.covered_cells_sq != 0 {
-            let (covered_cells, covered_cells_sq) = covered_cells(&board);
-            transient_eval += self.covered_cells * covered_cells;
-            transient_eval += self.covered_cells_sq * covered_cells_sq;
-        }
+        let (covered_cells, covered_cells_sq) = covered_cells(&board);
+        eval.aggressive_transient += self.aggressive.covered_cells * covered_cells;
+        eval.defensive_transient += self.defensive.covered_cells * covered_cells;
+        eval.aggressive_transient += self.aggressive.covered_cells_sq * covered_cells_sq;
+        eval.defensive_transient += self.defensive.covered_cells_sq * covered_cells_sq;
 
-        Evaluation {
-            aggressive_accumulated: acc_eval,
-            aggressive_transient: transient_eval,
-            defensive_accumulated: acc_eval,
-            defensive_transient: transient_eval
-        }
+        eval
     }
 }
 

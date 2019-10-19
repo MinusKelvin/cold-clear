@@ -230,7 +230,7 @@ impl<E: Evaluator> BotState<E> {
         let moves_considered = self.tree.child_nodes;
         let mut tree = Tree::starting_board(Board::new());
         std::mem::swap(&mut tree, &mut self.tree);
-        match tree.into_best_child() {
+        match tree.into_best_child(self.eval.search_options()) {
             Ok(child) => {
                 let mut plan = vec![(child.mv.clone(), child.lock.clone())];
                 child.tree.get_plan(&mut plan);

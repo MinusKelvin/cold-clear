@@ -57,11 +57,11 @@ impl Tree {
         }
     }
 
-    pub fn into_best_child(mut self) -> Result<Child, Tree> {
+    pub fn into_best_child(mut self, opts: SearchOptions) -> Result<Child, Tree> {
         match self.kind {
             None => Err(self),
             Some(tk) => {
-                match tk.into_best_child() {
+                match tk.into_best_child(opts) {
                     Ok(c) => Ok(c),
                     Err(tk) => {
                         self.kind = Some(tk);
@@ -283,12 +283,25 @@ struct ExpandResult {
 }
 
 impl TreeKind {
-    fn into_best_child(self) -> Result<Child, TreeKind> {
+    fn into_best_child(self, opts: SearchOptions) -> Result<Child, TreeKind> {
         match self {
-            TreeKind::Known(children) => if children.is_empty() {
+            TreeKind::Known(mut children) => if children.is_empty() {
                 Err(TreeKind::Known(children))
             } else {
-                Ok(children.into_iter().next().unwrap())
+                let mut best = {
+                    let c = children.pop().unwrap();
+                    let h = *c.tree.board.column_heights()[3..7].iter().max().unwrap();
+                    let v = c.tree.evaluation.value(h, opts);
+                    (c, v)
+                };
+                for c in children {
+                    let h = *c.tree.board.column_heights()[3..7].iter().max().unwrap();
+                    let v = c.tree.evaluation.value(h, opts);
+                    if v > best.1 {
+                        best = (c, v);
+                    }
+                }
+                Ok(best.0)
             },
             TreeKind::Unknown(_) => Err(self),
         }
@@ -385,20 +398,20 @@ impl TreeKind {
         }
 
         to_expand.sort_by_key(|c| {
-            let h = c.tree.board.column_heights().iter().sum::<i32>() / 10;
+            let h = *c.tree.board.column_heights()[3..7].iter().max().unwrap();
             -c.tree.evaluation.value(h, evaluator.search_options())
         });
 
         let min = {
             let t = &to_expand.last().unwrap().tree;
-            let h = t.board.column_heights().iter().sum::<i32>() / 10;
+            let h = *t.board.column_heights()[3..7].iter().max().unwrap();
             t.evaluation.value(h, evaluator.search_options())
         };
 
         let weights = to_expand.iter()
             .enumerate()
             .map(|(i, c)| {
-                let h = c.tree.board.column_heights().iter().sum::<i32>() / 10;
+                let h = *c.tree.board.column_heights()[3..7].iter().max().unwrap();
                 let e = (c.tree.evaluation.value(h, evaluator.search_options()) - min) as i64;
                 e * e / (i + 1) as i64 + 1
             });
