@@ -4,13 +4,13 @@ use arrayvec::ArrayVec;
 use odds::vec::VecExt;
 use libtetris::{ Board, LockResult, Piece, FallingPiece };
 use crate::moves::Placement;
-use crate::evaluation::{ Evaluator, Evaluation };
+use crate::evaluation::{ Evaluator, Evaluation, Eval, SearchOptions };
 use crate::Options;
 
 pub struct Tree {
     pub board: Board,
     pub raw_eval: Evaluation,
-    pub evaluation: i32,
+    pub evaluation: Eval,
     pub depth: usize,
     pub child_nodes: usize,
     kind: Option<TreeKind>
@@ -31,11 +31,12 @@ pub struct Child {
 }
 
 impl Tree {
-    pub fn empty() -> Self {
+    pub fn starting_board(board: Board) -> Self {
         Tree {
-            board: Board::new(),
-            raw_eval: Evaluation { accumulated: 0, transient: 0 },
-            evaluation: 0, depth: 0, child_nodes: 0, kind: None
+            board,
+            raw_eval: Default::default(),
+            evaluation: Default::default(),
+            depth: 0, child_nodes: 0, kind: None
         }
     }
 
@@ -43,12 +44,13 @@ impl Tree {
         board: Board,
         lock: &LockResult,
         move_time: u32,
+        piece: Piece,
         evaluator: &impl Evaluator
     ) -> Self {
-        let raw_eval = evaluator.evaluate(lock, &board, move_time);
+        let raw_eval = evaluator.evaluate(lock, &board, move_time, piece);
         Tree {
             raw_eval, board,
-            evaluation: raw_eval.accumulated + raw_eval.transient,
+            evaluation: raw_eval.into(),
             depth: 0,
             child_nodes: 0,
             kind: None
@@ -76,7 +78,7 @@ impl Tree {
         }
     }
 
-    pub fn get_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
+    pub fn get_moves_and_evaluations(&self) -> Vec<(FallingPiece, Eval)> {
         if let Some(ref tk) = self.kind {
             tk.get_moves_and_evaluations()
         } else {
@@ -85,14 +87,14 @@ impl Tree {
     }
 
     /// Returns is_death
-    pub fn add_next_piece(&mut self, piece: Piece, options: Options) -> bool {
+    pub fn add_next_piece(&mut self, piece: Piece, options: SearchOptions) -> bool {
         self.board.add_next_piece(piece);
         if let Some(ref mut k) = self.kind {
             if k.add_next_piece(piece, options) {
                 true
             } else {
-                self.evaluation = self.raw_eval.accumulated
-                    + k.evaluation() * options.gamma.0 / options.gamma.1;
+                self.evaluation = k.evaluation() * options.gamma.0 / options.gamma.1
+                    + self.raw_eval;
                 false
             }
         } else {
@@ -111,13 +113,14 @@ impl Tree {
         &mut self, opts: Options, evaluator: &impl Evaluator
     ) -> ExpandResult {
         match self.kind {
-            // TODO: refactor the unexpanded case into TreeKind, and remove the board field
+            // TODO: refactor the unexpanded case into TreeKind
             Some(ref mut tk) => {
                 let er = tk.expand(opts, evaluator);
                 if !er.is_death {
                     // Update this node's information
-                    self.evaluation = self.raw_eval.accumulated
-                        + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
+                    let opts = evaluator.search_options();
+                    self.evaluation = tk.evaluation() * opts.gamma.0 / opts.gamma.1
+                        + self.raw_eval;
                     self.depth = self.depth.max(er.depth);
                     self.child_nodes += er.new_nodes;
                 }
@@ -145,8 +148,9 @@ impl Tree {
                             self.depth = 1;
                             self.child_nodes = children.len();
                             let tk = TreeKind::Known(children);
-                            self.evaluation = self.raw_eval.accumulated
-                                + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
+                            let opts = evaluator.search_options();
+                            self.evaluation = tk.evaluation() * opts.gamma.0 / opts.gamma.1
+                                + self.raw_eval;
                             self.kind = Some(tk);
                             ExpandResult {
                                 is_death: false,
@@ -207,8 +211,9 @@ impl Tree {
             }
         } else {
             let tk = TreeKind::Unknown(speculation);
-            self.evaluation = self.raw_eval.accumulated
-                + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
+            let opts = evaluator.search_options();
+            self.evaluation = tk.evaluation() * opts.gamma.0 / opts.gamma.1
+                + self.raw_eval;
             self.kind = Some(tk);
             self.depth = 1;
             ExpandResult {
@@ -240,7 +245,7 @@ fn new_children(
         let lock = board.lock_piece(mv.location);
         if !lock.locked_out {
             children.push(Child {
-                tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
+                tree: Tree::new(board, &lock, mv.inputs.time, next, evaluator),
                 hold: false,
                 mv, lock
             })
@@ -258,7 +263,7 @@ fn new_children(
                     let lock = board.lock_piece(mv.location);
                     if !lock.locked_out {
                         children.push(Child {
-                            tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
+                            tree: Tree::new(board, &lock, mv.inputs.time, hold, evaluator),
                             hold: true,
                             mv, lock
                         })
@@ -268,7 +273,6 @@ fn new_children(
         }
     }
 
-    children.sort_by_key(|child| -child.tree.evaluation);
     children
 }
 
@@ -300,7 +304,7 @@ impl TreeKind {
         }
     }
 
-    fn get_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
+    fn get_moves_and_evaluations(&self) -> Vec<(FallingPiece, Eval)> {
         match self {
             TreeKind::Known(children) => children.iter()
                 .map(|c| (c.mv.location, c.tree.evaluation))
@@ -309,42 +313,39 @@ impl TreeKind {
         }
     }
 
-    fn evaluation(&self) -> i32 {
+    fn evaluation(&self) -> Eval {
         match self {
-            TreeKind::Known(children) => children.first().unwrap().tree.evaluation,
+            TreeKind::Known(children) => best_eval(children).unwrap(),
             TreeKind::Unknown(speculation) => {
-                let mut sum = 0;
+                let mut sum = Eval { aggressive: 0, defensive: 0 };
                 let mut n = 0;
                 let mut deaths = 0;
                 for children in speculation.iter().filter_map(|(_, c)| c.as_ref()) {
-                    match children.first() {
-                        Some(c) => {
+                    match best_eval(children) {
+                        Some(v) => {
                             n += 1;
-                            sum += c.tree.evaluation;
+                            sum.aggressive += v.aggressive;
+                            sum.defensive += v.defensive;
                         }
                         None => deaths += 1,
                     }
                 }
                 let avg_value = sum / n;
-                sum += (avg_value - 1000) * deaths;
+                sum.aggressive += (avg_value.aggressive - 1000) * deaths;
+                sum.defensive += (avg_value.defensive - 1000) * deaths;
                 sum / (n + deaths)
             }
         }
     }
 
     /// Returns is_death
-    fn add_next_piece(&mut self, piece: Piece, opts: Options) -> bool {
+    fn add_next_piece(&mut self, piece: Piece, opts: SearchOptions) -> bool {
         match self {
             TreeKind::Known(children) => {
                 children.retain_mut(|child|
                     !child.tree.add_next_piece(piece, opts)
                 );
-                if children.is_empty() {
-                    true
-                } else {
-                    children.sort_by_key(|child| -child.tree.evaluation);
-                    false
-                }
+                children.is_empty()
             }
             TreeKind::Unknown(speculation) => {
                 let mut now_known = vec![];
@@ -383,11 +384,22 @@ impl TreeKind {
             }
         }
 
-        let min = to_expand.last().unwrap().tree.evaluation;
+        to_expand.sort_by_key(|c| {
+            let h = c.tree.board.column_heights().iter().sum::<i32>() / 10;
+            -c.tree.evaluation.value(h, evaluator.search_options())
+        });
+
+        let min = {
+            let t = &to_expand.last().unwrap().tree;
+            let h = t.board.column_heights().iter().sum::<i32>() / 10;
+            t.evaluation.value(h, evaluator.search_options())
+        };
+
         let weights = to_expand.iter()
             .enumerate()
             .map(|(i, c)| {
-                let e = (c.tree.evaluation - min) as i64;
+                let h = c.tree.board.column_heights().iter().sum::<i32>() / 10;
+                let e = (c.tree.evaluation.value(h, evaluator.search_options()) - min) as i64;
                 e * e / (i + 1) as i64 + 1
             });
         let sampler = rand::distributions::WeightedIndex::new(weights).unwrap();
@@ -419,11 +431,26 @@ impl TreeKind {
                 ..result
             }
         } else {
-            to_expand.sort_by_key(|c| -c.tree.evaluation);
             ExpandResult {
                 depth: result.depth + 1,
                 ..result
             }
         }
+    }
+}
+
+fn best_eval(children: &[Child]) -> Option<Eval> {
+    if let Some(first) = children.first() {
+        Some(children[1..].iter().fold(
+            first.tree.evaluation,
+            |acc, c| {
+                Eval {
+                    aggressive: acc.aggressive.max(c.tree.evaluation.aggressive),
+                    defensive: acc.defensive.max(c.tree.evaluation.defensive),
+                }
+            }
+        ))
+    } else {
+        None
     }
 }

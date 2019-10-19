@@ -2,9 +2,10 @@ use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use super::*;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Misalike {
     pub sub_name: Option<String>,
+    pub search_options: SearchOptions,
 
     pub in_row_transitions: i32,
     pub t_piece_in_hold: i32,
@@ -24,7 +25,13 @@ impl Evaluator for Misalike {
         s
     }
 
-    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
+    fn search_options(&self) -> SearchOptions {
+        self.search_options
+    }
+
+    fn evaluate(
+        &self, lock: &LockResult, board: &Board, move_time: u32, piece: Piece
+    ) -> Evaluation {
         // Context: We're trying to translate this function from MisaMino:
         // https://github.com/misakamm/MisaMino/blob/master/tetris_ai/tetris_ai.cpp#L45
         // Note: the board is y-down; high y = low on the board, low y = high on the board

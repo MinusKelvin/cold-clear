@@ -325,18 +325,11 @@ impl BoardDrawState {
                 [text_x-0.75*scale, y + 2.7*scale],
                 None
             );
-            queue_text(
-                ctx, &text("Eval", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
-            );
-            queue_text(
-                ctx,
-                &text(format!("{}", info.evaluation), scale*0.66, -3.5*scale),
-                [text_x-0.75*scale, y + 3.4*scale],
-                None
-            );
             // Draw plan description
             queue_text(
-                ctx, &text("Plan:", scale*0.66, 0.0), [text_x-0.75*scale, y + 4.1*scale], None
+                ctx, &text(format!(
+                    "Plan: send {}", info.planned_attack(),
+                ), scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
             );
             let mut y = y + 4.1*scale;
             let mut x = text_x-0.75*scale;

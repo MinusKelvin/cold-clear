@@ -9,7 +9,7 @@ mod tree;
 use libtetris::*;
 use crate::tree::Tree;
 use crate::moves::{ Move, Placement };
-use crate::evaluation::Evaluator;
+use crate::evaluation::{ Evaluator, Eval };
 
 #[derive(Copy, Clone, Debug)]
 pub struct Options {
@@ -18,7 +18,6 @@ pub struct Options {
     pub speculate: bool,
     pub min_nodes: usize,
     pub max_nodes: usize,
-    pub gamma: (i32, i32)
 }
 
 impl Default for Options {
@@ -29,7 +28,6 @@ impl Default for Options {
             speculate: true,
             min_nodes: 0,
             max_nodes: std::usize::MAX,
-            gamma: (1, 1)
         }
     }
 }
@@ -177,7 +175,7 @@ impl<E: Evaluator> BotState<E> {
     pub fn new(board: Board, options: Options, eval: E) -> Self {
         BotState {
             dead: false,
-            tree: Tree::new(board, &Default::default(), 0, &eval),
+            tree: Tree::starting_board(board),
             options,
             eval
         }
@@ -206,7 +204,7 @@ impl<E: Evaluator> BotState<E> {
 
     /// Adds a new piece to the queue.
     pub fn add_next_piece(&mut self, piece: Piece) {
-        if self.tree.add_next_piece(piece, self.options) {
+        if self.tree.add_next_piece(piece, self.eval.search_options()) {
             self.dead = true;
         }
     }
@@ -217,7 +215,7 @@ impl<E: Evaluator> BotState<E> {
         board.set_field(field);
         board.combo = combo;
         board.b2b_bonus = b2b;
-        self.tree = Tree::new(board, &Default::default(), 0, &self.eval);
+        self.tree = Tree::starting_board(board);
     }
 
     pub fn min_thinking_reached(&self) -> bool {
@@ -230,14 +228,13 @@ impl<E: Evaluator> BotState<E> {
         }
 
         let moves_considered = self.tree.child_nodes;
-        let mut tree = Tree::empty();
+        let mut tree = Tree::starting_board(Board::new());
         std::mem::swap(&mut tree, &mut self.tree);
         match tree.into_best_child() {
             Ok(child) => {
                 let mut plan = vec![(child.mv.clone(), child.lock.clone())];
                 child.tree.get_plan(&mut plan);
                 let info = Info {
-                    evaluation: child.tree.evaluation,
                     nodes: moves_considered,
                     depth: child.tree.depth+1,
                     plan
@@ -257,7 +254,7 @@ impl<E: Evaluator> BotState<E> {
         }
     }
 
-    pub fn get_possible_next_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
+    pub fn get_possible_next_moves_and_evaluations(&self) -> Vec<(FallingPiece, Eval)> {
         self.tree.get_moves_and_evaluations()
     }
 }
@@ -305,6 +302,30 @@ fn run(
 pub struct Info {
     pub nodes: usize,
     pub depth: usize,
-    pub evaluation: i32,
     pub plan: Vec<(Placement, LockResult)>
+}
+
+impl Info {
+    pub fn planned_attack(&self) -> u32 {
+        self.plan.iter().map(|(_, lock)| lock.garbage_sent).sum()
+    }
+
+    /// Returns a list of pairs of times and attack values.
+    /// 
+    /// The time is the expected time the piece that will make the attack spawns.
+    pub fn attack_plan(&self) -> Vec<(u32, u32)> {
+        let mut atk_plan = vec![];
+        let mut t = 0;
+        for (placement, lock) in &self.plan {
+            if lock.garbage_sent != 0 {
+                atk_plan.push((t, lock.garbage_sent))
+            }
+            t += placement.inputs.time;
+            if lock.placement_kind.is_clear() {
+                t += 45;
+            }
+            t += 8;
+        }
+        atk_plan
+    }
 }

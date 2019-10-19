@@ -1,9 +1,10 @@
+use serde::{ Serialize, Deserialize };
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
 use libtetris::*;
 use super::*;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Standard {
     pub back_to_back: i32,
     pub bumpiness: i32,
@@ -34,6 +35,8 @@ pub struct Standard {
     pub perfect_clear: i32,
     pub combo_table: [i32; 12],
     pub move_time: i32,
+
+    pub search_options: SearchOptions,
 
     pub sub_name: Option<String>
 }
@@ -75,6 +78,12 @@ impl Default for Standard {
                 .into_inner()
                 .unwrap(),
 
+            search_options: SearchOptions {
+                aggressive_height: 10,
+                defensive_height: 10,
+                gamma: (1, 1)
+            },
+
             sub_name: None
         }
     }
@@ -90,7 +99,13 @@ impl Evaluator for Standard {
         info
     }
 
-    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
+    fn search_options(&self) -> SearchOptions {
+        self.search_options
+    }
+
+    fn evaluate(
+        &self, lock: &LockResult, board: &Board, move_time: u32, _: Piece
+    ) -> Evaluation {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
 
@@ -224,8 +239,10 @@ impl Evaluator for Standard {
         }
 
         Evaluation {
-            accumulated: acc_eval,
-            transient: transient_eval
+            aggressive_accumulated: acc_eval,
+            aggressive_transient: transient_eval,
+            defensive_accumulated: acc_eval,
+            defensive_transient: transient_eval
         }
     }
 }
