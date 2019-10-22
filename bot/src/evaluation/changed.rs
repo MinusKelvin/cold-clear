@@ -70,7 +70,7 @@ impl Default for Standard {
             mini_tspin2: -100,
             perfect_clear: 1000,
             combo_table: libtetris::COMBO_GARBAGE.iter()
-                .map(|&v| v as i32 * 100)
+                .map(|&v| v as i32 * 150)
                 .collect::<ArrayVec<[_; 12]>>()
                 .into_inner()
                 .unwrap(),
@@ -154,18 +154,21 @@ impl Evaluator for Standard {
         let mut board = board.clone();
         loop {
             let result = if let Some((x, y)) = sky_tslot(&board) {
-                cutout_tslot(board.clone(), x, y, TslotKind::Tsd)
+                cutout_tslot(board.clone(), FallingPiece {
+                    x, y,
+                    kind: PieceState(Piece::T, RotationState::South),
+                    tspin: TspinStatus::Full
+                })
             } else if let Some(twist) = tst_twist(&board) {
                 let piece = twist.piece();
                 if let Some((x, y)) = cave_tslot(&board, piece) {
-                    cutout_tslot(board.clone(), x, y, TslotKind::Tsd)
-                } else if twist.is_tslot && board.on_stack(&piece) {
-                    let kind = if twist.point_left {
-                        TslotKind::LeftTst
-                    } else {
-                        TslotKind::RightTst
-                    };
-                    cutout_tslot(board.clone(), twist.x, twist.y, kind)
+                    cutout_tslot(board.clone(), FallingPiece {
+                        x, y,
+                        kind: PieceState(Piece::T, RotationState::South),
+                        tspin: TspinStatus::Full
+                    })
+                } else if twist.is_tslot {
+                    cutout_tslot(board.clone(), piece)
                 } else {
                     break
                 }
@@ -470,6 +473,7 @@ fn cave_tslot(board: &Board, mut starting_point: FallingPiece) -> Option<(i32, i
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 struct TstTwist {
     point_left: bool,
     is_tslot: bool,
@@ -480,9 +484,9 @@ struct TstTwist {
 impl TstTwist {
     fn piece(&self) -> FallingPiece {
         let orientation = if self.point_left {
-            RotationState::East
-        } else {
             RotationState::West
+        } else {
+            RotationState::East
         };
         FallingPiece {
             kind: PieceState(Piece::T, orientation),
@@ -569,35 +573,26 @@ enum TslotKind {
     RightTst
 }
 
-fn cutout_tslot(mut board: Board, x: i32, y: i32, kind: TslotKind) -> Cutout {
-    let result = if kind == TslotKind::Tsd {
-        board.lock_piece(FallingPiece {
-            kind: PieceState(Piece::T, RotationState::South),
-            x, y,
-            tspin: TspinStatus::Full
-        })
+fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
+    let result = if piece.kind.1 == RotationState::South {
+        board.lock_piece(piece)
     } else {
-        let left = FallingPiece {
-            kind: PieceState(Piece::T, RotationState::East),
-            x, y,
-            tspin: TspinStatus::Full
+        let imperial = FallingPiece {
+            kind: PieceState(Piece::T, if piece.kind.1 == RotationState::East {
+                RotationState::West
+            } else {
+                RotationState::East
+            }),
+            ..piece
         };
-        let right = FallingPiece {
-            kind: PieceState(Piece::T, RotationState::West),
-            x, y,
-            tspin: TspinStatus::Full
-        };
-
-        let (imperial, normal) = if kind == TslotKind::LeftTst {
-            (right, left)
-        } else {
-            (left, right)
-        };
-
-        if !board.obstructed(&imperial) {
+        if !board.obstructed(&imperial) && board.on_stack(&imperial) {
             board.lock_piece(imperial)
+        } else if board.on_stack(&piece) {
+            board.lock_piece(piece)
         } else {
-            board.lock_piece(normal)
+            return Cutout {
+                lines: 0, result: None
+            };
         }
     };
 
