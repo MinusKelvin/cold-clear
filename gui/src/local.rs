@@ -42,11 +42,13 @@ impl<'a> LocalGame<'a> {
         p2: Box<InputFactory>,
         config: GameConfig
     ) -> Self {
-        let battle = Battle::new(
+        let mut battle = Battle::new(
             config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
         let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
         let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
+        battle.replay.p1_name = p1_name.clone();
+        battle.replay.p2_name = p2_name.clone();
         LocalGame {
             p1_input, p2_input,
             p1_input_factory: p1,
