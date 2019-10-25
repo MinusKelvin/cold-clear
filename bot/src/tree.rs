@@ -157,11 +157,13 @@ impl Tree {
                     }
                 } else {
                     // Speculate - hold should be known, but next piece isn't
-                    assert!(
-                        opts.use_hold && self.board.hold_piece().is_some(),
-                        "Neither hold piece or next piece are known - what the heck happened?\n\
-                         get_next_piece: {:?}", self.board.get_next_piece()
-                    );
+                    if opts.use_hold {
+                        assert!(
+                            self.board.hold_piece().is_some(),
+                            "Neither hold piece or next piece are known - what the heck happened?\n\
+                            get_next_piece: {:?}", self.board.get_next_piece()
+                        );
+                    }
                     self.speculate(opts, evaluator)
                 }
             }
