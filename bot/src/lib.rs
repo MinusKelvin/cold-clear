@@ -224,6 +224,31 @@ impl<E: Evaluator> BotState<E> {
         self.tree.child_nodes > self.options.min_nodes
     }
 
+    pub fn peek_next_move(&self) -> Option<(Move, Info)> {
+        if !self.min_thinking_reached() {
+            return None;
+        }
+
+        if let Some(child) = self.tree.get_best_child() {
+            let mut plan = vec![];
+            self.tree.get_plan(&mut plan);
+            let info = Info {
+                nodes: self.tree.child_nodes,
+                evaluation: child.tree.evaluation,
+                depth: child.tree.depth + 1,
+                plan
+            };
+            let mv = Move {
+                hold: child.hold,
+                inputs: child.mv.inputs.movements.clone(),
+                expected_location: child.mv.location
+            };
+            Some((mv, info))
+        } else {
+            None
+        }
+    }
+
     pub fn next_move(&mut self) -> Option<(Move, Info)> {
         if !self.min_thinking_reached() {
             return None;
@@ -289,11 +314,12 @@ fn run(
         }
 
         if do_move && bot.min_thinking_reached() {
-            if let Some((mv, info)) = bot.next_move() {
+            if let Some((mv, info)) = bot.peek_next_move() {
                 do_move = false;
                 if send.send((mv, info)).is_err() {
                     return
                 }
+                bot.next_move();
             }
         }
 

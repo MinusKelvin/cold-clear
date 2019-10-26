@@ -71,6 +71,10 @@ impl Tree {
         }
     }
 
+    pub fn get_best_child(&self) -> Option<&Child> {
+        self.kind.as_ref().and_then(|tk| tk.get_best_child())
+    }
+
     pub fn get_plan(&self, into: &mut Vec<(Placement, LockResult)>) {
         if let Some(ref tk) = self.kind {
             tk.get_plan(into);
@@ -290,6 +294,13 @@ impl TreeKind {
                 Ok(children.into_iter().next().unwrap())
             },
             TreeKind::Unknown(_) => Err(self),
+        }
+    }
+
+    fn get_best_child(&self) -> Option<&Child> {
+        match self {
+            TreeKind::Known(children) => children.first(),
+            TreeKind::Unknown(_) => None
         }
     }
 
