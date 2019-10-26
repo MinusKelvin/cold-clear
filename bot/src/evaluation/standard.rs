@@ -34,6 +34,7 @@ pub struct Standard {
     pub perfect_clear: i32,
     pub combo_table: [i32; 12],
     pub move_time: i32,
+    pub wasted_t: i32,
 
     pub sub_name: Option<String>
 }
@@ -58,6 +59,7 @@ impl Default for Standard {
             max_well_depth: 8,
 
             move_time: -1,
+            wasted_t: -150,
             b2b_clear: 100,
             clear1: -150,
             clear2: -100,
@@ -90,7 +92,9 @@ impl Evaluator for Standard {
         info
     }
 
-    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
+    fn evaluate(
+        &self, lock: &LockResult, board: &Board, move_time: u32, placed: Piece
+    ) -> Evaluation {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
 
@@ -133,6 +137,13 @@ impl Evaluator for Standard {
                     acc_eval += self.mini_tspin2;
                 }
                 _ => {}
+            }
+        }
+
+        if placed == Piece::T {
+            match lock.placement_kind {
+                PlacementKind::Tspin1 | PlacementKind::Tspin2 | PlacementKind::Tspin3 => {}
+                _ => acc_eval += self.wasted_t
             }
         }
 

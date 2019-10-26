@@ -177,7 +177,7 @@ impl<E: Evaluator> BotState<E> {
     pub fn new(board: Board, options: Options, eval: E) -> Self {
         BotState {
             dead: false,
-            tree: Tree::new(board, &Default::default(), 0, &eval),
+            tree: Tree::starting(board),
             options,
             eval
         }
@@ -217,7 +217,7 @@ impl<E: Evaluator> BotState<E> {
         board.set_field(field);
         board.combo = combo;
         board.b2b_bonus = b2b;
-        self.tree = Tree::new(board, &Default::default(), 0, &self.eval);
+        self.tree = Tree::starting(board);
     }
 
     pub fn min_thinking_reached(&self) -> bool {
@@ -230,7 +230,7 @@ impl<E: Evaluator> BotState<E> {
         }
 
         let moves_considered = self.tree.child_nodes;
-        let mut tree = Tree::empty();
+        let mut tree = Tree::starting(Board::new());
         std::mem::swap(&mut tree, &mut self.tree);
         match tree.into_best_child() {
             Ok(child) => {

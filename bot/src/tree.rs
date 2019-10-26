@@ -31,9 +31,9 @@ pub struct Child {
 }
 
 impl Tree {
-    pub fn empty() -> Self {
+    pub fn starting(board: Board) -> Self {
         Tree {
-            board: Board::new(),
+            board,
             raw_eval: Evaluation { accumulated: 0, transient: 0 },
             evaluation: 0, depth: 0, child_nodes: 0, kind: None
         }
@@ -43,9 +43,10 @@ impl Tree {
         board: Board,
         lock: &LockResult,
         move_time: u32,
+        piece: Piece,
         evaluator: &impl Evaluator
     ) -> Self {
-        let raw_eval = evaluator.evaluate(lock, &board, move_time);
+        let raw_eval = evaluator.evaluate(lock, &board, move_time, piece);
         Tree {
             raw_eval, board,
             evaluation: raw_eval.accumulated + raw_eval.transient,
@@ -242,7 +243,7 @@ fn new_children(
         let lock = board.lock_piece(mv.location);
         if !lock.locked_out {
             children.push(Child {
-                tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
+                tree: Tree::new(board, &lock, mv.inputs.time, next, evaluator),
                 hold: false,
                 mv, lock
             })
@@ -260,7 +261,7 @@ fn new_children(
                     let lock = board.lock_piece(mv.location);
                     if !lock.locked_out {
                         children.push(Child {
-                            tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
+                            tree: Tree::new(board, &lock, mv.inputs.time, hold, evaluator),
                             hold: true,
                             mv, lock
                         })
