@@ -92,8 +92,7 @@ impl Tree {
             if k.add_next_piece(piece, options) {
                 true
             } else {
-                self.evaluation = self.raw_eval.accumulated
-                    + k.evaluation() * options.gamma.0 / options.gamma.1;
+                self.evaluation = self.raw_eval.accumulated + k.evaluation();
                 false
             }
         } else {
@@ -117,8 +116,7 @@ impl Tree {
                 let er = tk.expand(opts, evaluator);
                 if !er.is_death {
                     // Update this node's information
-                    self.evaluation = self.raw_eval.accumulated
-                        + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
+                    self.evaluation = self.raw_eval.accumulated + tk.evaluation();
                     self.depth = self.depth.max(er.depth);
                     self.child_nodes += er.new_nodes;
                 }
@@ -146,8 +144,7 @@ impl Tree {
                             self.depth = 1;
                             self.child_nodes = children.len();
                             let tk = TreeKind::Known(children);
-                            self.evaluation = self.raw_eval.accumulated
-                                + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
+                            self.evaluation = self.raw_eval.accumulated + tk.evaluation();
                             self.kind = Some(tk);
                             ExpandResult {
                                 is_death: false,
@@ -210,8 +207,7 @@ impl Tree {
             }
         } else {
             let tk = TreeKind::Unknown(speculation);
-            self.evaluation = self.raw_eval.accumulated
-                + tk.evaluation() * opts.gamma.0 / opts.gamma.1;
+            self.evaluation = self.raw_eval.accumulated + tk.evaluation();
             self.kind = Some(tk);
             self.depth = 1;
             ExpandResult {
