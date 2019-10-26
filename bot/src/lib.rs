@@ -2,6 +2,7 @@ use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
 use serde::{ Serialize, Deserialize };
 
 pub mod evaluation;
+// mod misa;
 pub mod moves;
 mod tree;
 
@@ -16,7 +17,8 @@ pub struct Options {
     pub use_hold: bool,
     pub speculate: bool,
     pub min_nodes: usize,
-    pub max_nodes: usize
+    pub max_nodes: usize,
+    pub gamma: (i32, i32)
 }
 
 impl Default for Options {
@@ -26,7 +28,8 @@ impl Default for Options {
             use_hold: true,
             speculate: true,
             min_nodes: 0,
-            max_nodes: std::usize::MAX
+            max_nodes: std::usize::MAX,
+            gamma: (1, 1)
         }
     }
 }
@@ -34,28 +37,57 @@ impl Default for Options {
 pub struct Interface {
     send: Sender<BotMsg>,
     recv: Receiver<(Move, Info)>,
-    has_game: bool,
+    dead: bool,
     mv: Option<(Move, Info)>
 }
 
 impl Interface {
-    /// Launches a bot thread with the specified options and evaluator.
-    pub fn launch(options: Options, evaluator: impl Evaluator + Clone + Send + 'static) -> Self {
+    /// Launches a bot thread with the specified starting board and options.
+    pub fn launch(
+        board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
+    ) -> Self {
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
-        std::thread::spawn(move || run(bot_recv, bot_send, evaluator, options));
+        std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
 
         Interface {
-            send, recv, has_game: false, mv: None
+            send, recv, dead: false, mv: None
         }
     }
 
-    /// Identifies whether the bot thread has a game to compute.
-    /// 
-    /// This will change from true to false if the bot determines that all possible piece placement
-    /// sequences result in death.
-    pub fn has_game(&self) -> bool {
-        self.has_game
+    // pub fn misa_glue(board: Board) -> Self {
+    //     let (bot_send, recv) = channel();
+    //     let (send, bot_recv) = channel();
+    //     std::thread::spawn(move || misa::glue(bot_recv, bot_send, board));
+
+    //     Interface {
+    //         send, recv, dead: false, mv: None
+    //     }
+    // }
+
+    pub fn misa_prepare_next_move(&mut self) {
+        if self.send.send(BotMsg::PrepareNextMove).is_err() {
+            self.dead = true;
+        }
+    }
+
+    /// Returns true if all possible piece placement sequences result in death, or the bot thread
+    /// crashed.
+    pub fn is_dead(&self) -> bool {
+        self.dead
+    }
+
+    fn poll_bot(&mut self) {
+        loop {
+            match self.recv.try_recv() {
+                Ok(mv) => self.mv = Some(mv),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    self.dead = true;
+                    break
+                }
+            }
+        }
     }
 
     /// Request the bot to provide a move as soon as possible.
@@ -75,8 +107,10 @@ impl Interface {
     /// 
     /// Once a move is chosen, the bot will update its internal state to the result of the piece
     /// being placed correctly and the move will become available by calling `poll_next_move`.
-    pub fn request_next_move(&self) {
-        self.send.send(BotMsg::NextMove).ok();
+    pub fn request_next_move(&mut self) {
+        if self.send.send(BotMsg::NextMove).is_err() {
+            self.dead = true;
+        }
     }
 
     /// Checks to see if the bot has provided the previously requested move yet.
@@ -87,12 +121,9 @@ impl Interface {
     /// 
     /// If the piece couldn't be placed in the expected location, you must call `reset` to reset the
     /// game field, back-to-back status, and combo values.
-    pub fn poll_next_move(&self) -> Option<(Move, Info)> {
-        match self.recv.try_recv() {
-            Ok(mv) => Some(mv),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => panic!("Bot thread crashed")
-        }
+    pub fn poll_next_move(&mut self) -> Option<(Move, Info)> {
+        self.poll_bot();
+        self.mv.take()
     }
 
     /// Adds a new piece to the end of the queue.
@@ -100,8 +131,10 @@ impl Interface {
     /// If speculation is enabled, the piece *must* be in the bag. For example, if in the current
     /// bag you've provided the sequence IJOZT, then the next time you call this function you can
     /// only provide either an L or an S piece.
-    pub fn add_next_piece(&self, piece: Piece) {
-        self.send.send(BotMsg::NewPiece(piece)).ok();
+    pub fn add_next_piece(&mut self, piece: Piece) {
+        if self.send.send(BotMsg::NewPiece(piece)).is_err() {
+            self.dead = true;
+        }
     }
 
     /// Resets the playfield, back-to-back status, and combo count.
@@ -113,18 +146,12 @@ impl Interface {
     /// Note: combo is not the same as the displayed combo in guideline games. Here, it is the
     /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
     /// on the screen, you need to use x+1 here.
-    pub fn reset(&self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
-        self.send.send(BotMsg::Reset {
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
+        if self.send.send(BotMsg::Reset {
             field, b2b: b2b_active, combo
-        }).ok();
-    }
-
-    pub fn end_game(&self) {
-        self.send.send(BotMsg::EndGame).ok();
-    }
-
-    pub fn new_game(&self) {
-        self.send.send(BotMsg::NewGame).ok();
+        }).is_err() {
+            self.dead = true;
+        }
     }
 }
 
@@ -136,8 +163,7 @@ enum BotMsg {
     },
     NewPiece(Piece),
     NextMove,
-    EndGame,
-    NewGame
+    PrepareNextMove
 }
 
 pub struct BotState<E: Evaluator> {
@@ -239,51 +265,39 @@ impl<E: Evaluator> BotState<E> {
 fn run(
     recv: Receiver<BotMsg>,
     send: Sender<(Move, Info)>,
-    evaluator: impl Evaluator + Clone,
+    board: Board,
+    evaluator: impl Evaluator,
     options: Options
 ) {
-    loop {
-        loop {
-            match recv.recv() {
-                Err(_) => return,
-                Ok(BotMsg::NewGame) => break,
-                Ok(_) => eprintln!("warning: bot thread received a command without a game")
-            }
+    let mut bot = BotState::new(board, options, evaluator);
+
+    let mut do_move = false;
+    let mut can_think = true;
+    while !bot.is_dead() {
+        let result = if can_think {
+            recv.try_recv()
+        } else {
+            recv.recv().map_err(|_| TryRecvError::Disconnected)
+        };
+        match result {
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => break,
+            Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
+            Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
+            Ok(BotMsg::NextMove) => do_move = true,
+            Ok(BotMsg::PrepareNextMove) => {}
         }
 
-        let mut bot = BotState::new(Board::new(), options, evaluator.clone());
-
-        let mut do_move = false;
-        let mut can_think = true;
-        while !bot.is_dead() {
-            let result = if can_think {
-                recv.try_recv()
-            } else {
-                recv.recv().map_err(|_| TryRecvError::Disconnected)
-            };
-            match result {
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => return,
-                Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
-                Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
-                Ok(BotMsg::NextMove) => do_move = true,
-                Ok(BotMsg::NewGame) => eprintln!(
-                    "warning: bot thread received new game but it has a game"
-                ),
-                Ok(BotMsg::EndGame) => break
-            }
-
-            if do_move && bot.min_thinking_reached() {
-                if let Some((mv, info)) = bot.next_move() {
-                    do_move = false;
-                    if send.send((mv, info)).is_err() {
-                        return
-                    }
+        if do_move && bot.min_thinking_reached() {
+            if let Some((mv, info)) = bot.next_move() {
+                do_move = false;
+                if send.send((mv, info)).is_err() {
+                    return
                 }
             }
-
-            can_think = bot.think();
         }
+
+        can_think = bot.think();
     }
 }
 
