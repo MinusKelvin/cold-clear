@@ -350,6 +350,18 @@ impl TreeKind {
             }
             TreeKind::Unknown(speculation) => {
                 let mut now_known = vec![];
+                if speculation[piece].is_none() {
+                    let mut error = format!(
+                        "Invalid next piece added: {}, expected one of ", piece.to_char()
+                    );
+                    for (p, v) in speculation.iter() {
+                        if v.is_some() {
+                            error.push(p.to_char());
+                            error.push_str(", ");
+                        }
+                    }
+                    panic!("{}", error);
+                }
                 std::mem::swap(speculation[piece].as_mut().unwrap(), &mut now_known);
                 let is_death = now_known.is_empty();
                 *self = TreeKind::Known(now_known);
