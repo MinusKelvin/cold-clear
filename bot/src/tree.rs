@@ -243,17 +243,7 @@ fn new_children(
 
     // Placements for next piece
     for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
-        let mut board = board.clone();
-        let can_be_hd = board.above_stack(&mv.location) &&
-                board.column_heights().iter().all(|&y| y < 18);
-        let lock = board.lock_piece(mv.location);
-        if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
-            children.push(Child {
-                tree: Tree::new(board, &lock, mv.inputs.time, next, evaluator),
-                hold: false,
-                mv, lock
-            })
-        }
+        add_child(&mut children, &board, false, mv, evaluator);
     }
 
     if opts.use_hold {
@@ -263,15 +253,7 @@ fn new_children(
             if let Some(spawned) = FallingPiece::spawn(hold, &board) {
                 // Placements for hold piece
                 for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
-                    let mut board = board.clone();
-                    let lock = board.lock_piece(mv.location);
-                    if !lock.locked_out {
-                        children.push(Child {
-                            tree: Tree::new(board, &lock, mv.inputs.time, hold, evaluator),
-                            hold: true,
-                            mv, lock
-                        })
-                    }
+                    add_child(&mut children, &board, true, mv, evaluator);
                 }
             }
         }
@@ -279,6 +261,22 @@ fn new_children(
 
     children.sort_by_key(|child| -child.tree.evaluation);
     children
+}
+
+fn add_child(
+    children: &mut Vec<Child>, board: &Board, hold: bool, mv: Placement, evaluator: &impl Evaluator
+) {
+    let mut board = board.clone();
+    let can_be_hd = board.above_stack(&mv.location) &&
+            board.column_heights().iter().all(|&y| y < 18);
+    let lock = board.lock_piece(mv.location);
+    if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
+        children.push(Child {
+            tree: Tree::new(board, &lock, mv.inputs.time, mv.location.kind.0, evaluator),
+            hold,
+            mv, lock
+        })
+    }
 }
 
 struct ExpandResult {
