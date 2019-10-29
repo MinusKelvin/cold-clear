@@ -2,6 +2,7 @@ use ggez::Context;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use libtetris::*;
 use battle::{ Controller, Event, PieceMoveExecutor };
+use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {
     fn controller(&mut self, ctx: &mut Context) -> Controller;
@@ -65,19 +66,41 @@ impl InputSource for BotInput {
     }
 }
 
-#[derive(Default, Copy, Clone)]
-pub struct Keyboard;
+#[derive(Copy, Clone, Serialize, Deserialize)]
+pub struct Keyboard {
+    left: KeyCode,
+    right: KeyCode,
+    rotate_left: KeyCode,
+    rotate_right: KeyCode,
+    hard_drop: KeyCode,
+    soft_drop: KeyCode,
+    hold: KeyCode
+}
+
+impl Default for Keyboard {
+    fn default() -> Self {
+        Keyboard {
+            left: KeyCode::Left,
+            right: KeyCode::Right,
+            rotate_left: KeyCode::Z,
+            rotate_right: KeyCode::X,
+            hard_drop: KeyCode::Space,
+            soft_drop: KeyCode::Down,
+            hold: KeyCode::C,
+        }
+    }
+}
 
 impl InputSource for Keyboard {
     fn controller(&mut self, ctx: &mut Context) -> Controller {
         Controller {
-            left: is_key_pressed(ctx, KeyCode::Left),
-            right: is_key_pressed(ctx, KeyCode::Right),
-            rotate_left: is_key_pressed(ctx, KeyCode::Z),
-            rotate_right: is_key_pressed(ctx, KeyCode::X),
-            hard_drop: is_key_pressed(ctx, KeyCode::Space),
-            soft_drop: is_key_pressed(ctx, KeyCode::Down),
-            hold: is_key_pressed(ctx, KeyCode::C),
+            left: is_key_pressed(ctx, self.left),
+            right: is_key_pressed(ctx, self.right),
+            rotate_left: is_key_pressed(ctx, self.rotate_left),
+            rotate_right: is_key_pressed(ctx, self.rotate_right),
+            hard_drop: is_key_pressed(ctx, self.hard_drop),
+            soft_drop: is_key_pressed(ctx, self.soft_drop),
+            hold: is_key_pressed(ctx, self.hold),
         }
     }
 

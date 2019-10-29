@@ -71,10 +71,9 @@ impl EventHandler for LocalGame<'_> {
         while timer::check_update_time(ctx, 60) {
             let do_update = match self.state {
                 State::GameOver(0) => {
-                    let t = std::time::Instant::now();
                     serde_json::to_writer(
                         std::io::BufWriter::new(
-                            std::fs::File::create("test-replay.json"
+                            std::fs::File::create("replay.json"
                         ).unwrap()),
                         &InfoReplay {
                             replay: self.battle.replay.clone(),
@@ -82,7 +81,6 @@ impl EventHandler for LocalGame<'_> {
                             p2_info_updates: self.p2_info_updates.clone()
                         }
                     ).unwrap();
-                    println!("Took {:?} to save replay", t.elapsed());
 
                     // Don't catch up after pause due to replay saving
                     while timer::check_update_time(ctx, 60) {}
