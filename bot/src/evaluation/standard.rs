@@ -577,13 +577,6 @@ struct Cutout {
     result: Option<Board>
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-enum TslotKind {
-    Tsd,
-    LeftTst,
-    RightTst
-}
-
 fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
     let result = if piece.kind.1 == RotationState::South {
         board.lock_piece(piece)

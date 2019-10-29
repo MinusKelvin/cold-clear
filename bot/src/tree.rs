@@ -2,7 +2,7 @@ use rand::prelude::*;
 use enum_map::EnumMap;
 use arrayvec::ArrayVec;
 use odds::vec::VecExt;
-use libtetris::{ Board, LockResult, Piece, FallingPiece };
+use libtetris::{ Board, LockResult, Piece, FallingPiece, PlacementKind };
 use crate::moves::Placement;
 use crate::evaluation::{ Evaluator, Evaluation };
 use crate::Options;
@@ -244,8 +244,10 @@ fn new_children(
     // Placements for next piece
     for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
         let mut board = board.clone();
+        let can_be_hd = board.above_stack(&mv.location) &&
+                board.column_heights().iter().all(|&y| y < 18);
         let lock = board.lock_piece(mv.location);
-        if !lock.locked_out {
+        if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
             children.push(Child {
                 tree: Tree::new(board, &lock, mv.inputs.time, next, evaluator),
                 hold: false,
