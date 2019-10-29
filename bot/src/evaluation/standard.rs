@@ -20,6 +20,7 @@ pub struct Standard {
     pub tslot: [i32; 4],
     pub well_depth: i32,
     pub max_well_depth: i32,
+    pub well_column: [i32; 10],
 
     pub b2b_clear: i32,
     pub clear1: i32,
@@ -57,6 +58,7 @@ impl Default for Standard {
             tslot: [20, 150, 200, 400],
             well_depth: 50,
             max_well_depth: 8,
+            well_column: [30, 0, 10, 50, 40, 40, 60, 10, 0, 30],
 
             move_time: -1,
             wasted_t: -150,
@@ -199,7 +201,7 @@ impl Evaluator for Standard {
 
         let mut well = 0;
         for x in 1..10 {
-            if board.column_heights()[x] < board.column_heights()[well] {
+            if board.column_heights()[x] <= board.column_heights()[well] {
                 well = x;
             }
         }
@@ -210,11 +212,14 @@ impl Evaluator for Standard {
                 if x as usize != well && !board.occupied(x, y) {
                     break 'yloop;
                 }
-                depth += 1;
             }
+            depth += 1;
         }
         let depth = depth.min(self.max_well_depth);
         transient_eval += self.well_depth * depth;
+        if depth != 0 {
+            transient_eval += self.well_column[well];
+        }
 
         if self.bumpiness | self.bumpiness_sq != 0 {
             let (bump, bump_sq) = bumpiness(&board, well);
