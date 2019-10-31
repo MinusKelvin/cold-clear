@@ -199,22 +199,8 @@ impl Evaluator for Standard {
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.height * highest_point;
 
-        let mut well = 0;
-        for x in 1..10 {
-            if board.column_heights()[x] <= board.column_heights()[well] {
-                well = x;
-            }
-        }
+        let (well, depth) = well_column_and_depth(&board);
 
-        let mut depth = 0;
-        'yloop: for y in board.column_heights()[well] .. 20 {
-            for x in 0..10 {
-                if x as usize != well && !board.occupied(x, y) {
-                    break 'yloop;
-                }
-            }
-            depth += 1;
-        }
         let depth = depth.min(self.max_well_depth);
         transient_eval += self.well_depth * depth;
         if depth != 0 {
@@ -350,6 +336,27 @@ fn covered_cells(board: &Board) -> (i32, i32) {
     }
 
     (covered, covered_sq)
+}
+
+fn well_column_and_depth(board: &Board) -> (usize, i32) {
+    let mut well = 0;
+    for x in 1..10 {
+        if board.column_heights()[x] <= board.column_heights()[well] {
+            well = x;
+        }
+    }
+
+    let mut depth = 0;
+    'yloop: for y in board.column_heights()[well] .. 20 {
+        for x in 0..10 {
+            if x as usize != well && !board.occupied(x, y) {
+                break 'yloop;
+            }
+        }
+        depth += 1;
+    }
+
+    (well, depth)
 }
 
 /// Determines the existence and location of a reachable T slot on the board.
@@ -620,4 +627,50 @@ fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
         },
         _ => unreachable!()
     }
+}
+
+pub fn has_attack_soon(board: &Board) -> bool {
+    if board.next_queue().take(3).any(|p| p == Piece::T) {
+        // check for simple tsd
+        if let Some((x, y)) = sky_tslot(board) {
+            let mut b = board.clone();
+            let result = b.lock_piece(FallingPiece {
+                x, y,
+                kind: PieceState(Piece::T, RotationState::South),
+                tspin: TspinStatus::Full
+            });
+            if result.garbage_sent >= 4 {
+                return true
+            }
+        }
+        if let Some(twist) = tst_twist(board) {
+            let piece = twist.piece();
+            // check cave tsd
+            if let Some((x, y)) = cave_tslot(board, piece) {
+                let mut b = board.clone();
+                let result = b.lock_piece(FallingPiece {
+                    x, y,
+                    kind: PieceState(Piece::T, RotationState::South),
+                    tspin: TspinStatus::Full
+                });
+                if result.garbage_sent >= 4 {
+                    return true
+                }
+            }
+
+            // check tst
+            let mut b = board.clone();
+            let result = b.lock_piece(piece);
+            if result.garbage_sent >= 4 {
+                return true
+            }
+        }
+    }
+
+    if board.next_queue().take(3).any(|p| p == Piece::I) {
+        if well_column_and_depth(board).1 >= 4 {
+            return true
+        }
+    }
+    false
 }

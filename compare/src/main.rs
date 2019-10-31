@@ -18,7 +18,7 @@ fn main() {
 
     let (send, recv) = std::sync::mpsc::channel();
 
-    for _ in 0..2 {
+    for _ in 0..12 {
         let p1_eval = p1_eval.clone();
         let p2_eval = p2_eval.clone();
         let send = send.clone();
@@ -32,7 +32,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 3000;
+    let games = 5000;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
@@ -57,7 +57,7 @@ fn main() {
     println!("p = {:.4}", p);
 }
 
-fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
+fn do_battle(p1: impl Evaluator + Clone, p2: impl Evaluator + Clone) -> (InfoReplay, bool) {
     let mut battle = Battle::new(
         Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
@@ -65,8 +65,12 @@ fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
     battle.replay.p1_name = format!("Cold Clear\n{}", p1.name());
     battle.replay.p2_name = format!("Cold Clear\n{}", p2.name());
 
-    let mut p1 = BotInput::new(battle.player_1.board.to_compressed(), p1);
-    let mut p2 = BotInput::new(battle.player_2.board.to_compressed(), p2);
+    let mut p1 = BotInput::new(
+        battle.player_1.board.to_compressed(), battle.player_2.board.to_compressed(), p1
+    );
+    let mut p2 = BotInput::new(
+        battle.player_2.board.to_compressed(), battle.player_1.board.to_compressed(), p2
+    );
 
     let mut p1_info_updates = VecDeque::new();
     let mut p2_info_updates = VecDeque::new();
@@ -74,8 +78,18 @@ fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
     let p1_won;
     'battle: loop {
         let update = battle.update(p1.controller, p2.controller);
-        p1_info_updates.push_back(p1.update(&battle.player_1.board, &update.player_1.events));
-        p2_info_updates.push_back(p2.update(&battle.player_2.board, &update.player_2.events));
+        p1_info_updates.push_back(p1.update(
+            &battle.player_1.board,
+            /*&battle.player_2.board*/ None,
+            &update.player_1.events,
+            update.player_1.garbage_queue
+        ));
+        p2_info_updates.push_back(p2.update(
+            &battle.player_2.board,
+            Some((&battle.player_1.board, &update.player_1.events)),
+            &update.player_2.events,
+            update.player_2.garbage_queue
+        ));
 
         for event in &update.player_1.events {
             use battle::Event::*;

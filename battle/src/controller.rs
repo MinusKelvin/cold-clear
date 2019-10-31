@@ -54,19 +54,25 @@ impl<'de> Deserialize<'de> for Controller {
 
 pub struct PieceMoveExecutor {
     needs_hold: bool,
+    stall_for: u32,
     executing: VecDeque<PieceMovement>
 }
 
 impl PieceMoveExecutor {
-    pub fn new(hold: bool, to_do: VecDeque<PieceMovement>) -> Self {
+    pub fn new(hold: bool, stall_for: u32, to_do: VecDeque<PieceMovement>) -> Self {
         PieceMoveExecutor {
             needs_hold: hold,
+            stall_for,
             executing: to_do
         }
     }
 
     pub fn update<R: Row>(
-        &mut self, controller: &mut Controller, board: &Board<R>, events: &[Event]
+        &mut self,
+        controller: &mut Controller,
+        board: &Board<R>,
+        events: &[Event],
+        garbage_queue: u32
     ) -> Option<FallingPiece> {
         for event in events {
             match event {
@@ -82,7 +88,7 @@ impl PieceMoveExecutor {
                         match self.executing.front() {
                             None => {
                                 *controller = Default::default();
-                                controller.hard_drop = true;
+                                controller.hard_drop = self.stall_for <= garbage_queue;
                             }
                             Some(PieceMovement::SonicDrop) => {
                                 controller.right = false;
@@ -90,7 +96,7 @@ impl PieceMoveExecutor {
                                 controller.rotate_right = false;
                                 controller.left = false;
 
-                                controller.soft_drop = true;
+                                controller.soft_drop = self.stall_for <= garbage_queue;
                                 if board.on_stack(piece) {
                                     self.executing.pop_front();
                                 }

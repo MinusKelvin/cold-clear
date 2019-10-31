@@ -11,7 +11,7 @@ use crate::input::InputSource;
 use crate::replay::InfoReplay;
 use std::collections::VecDeque;
 
-type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
+type InputFactory = dyn Fn(Board, Board) -> (Box<dyn InputSource>, String);
 
 pub struct LocalGame<'a> {
     gui: Gui,
@@ -45,8 +45,12 @@ impl<'a> LocalGame<'a> {
         let mut battle = Battle::new(
             config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
-        let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
-        let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
+        let (p1_input, p1_name) = p1(
+            battle.player_1.board.to_compressed(), battle.player_2.board.to_compressed()
+        );
+        let (p2_input, p2_name) = p2(
+            battle.player_2.board.to_compressed(), battle.player_1.board.to_compressed()
+        );
         battle.replay.p1_name = p1_name.clone();
         battle.replay.p2_name = p2_name.clone();
         LocalGame {
@@ -91,10 +95,12 @@ impl EventHandler for LocalGame<'_> {
                     );
 
                     let (p1_input, p1_name) = (self.p1_input_factory)(
-                        self.battle.player_1.board.to_compressed()
+                        self.battle.player_1.board.to_compressed(),
+                        self.battle.player_2.board.to_compressed()
                     );
                     let (p2_input, p2_name) = (self.p2_input_factory)(
-                        self.battle.player_2.board.to_compressed()
+                        self.battle.player_2.board.to_compressed(),
+                        self.battle.player_1.board.to_compressed()
                     );
 
                     self.gui = Gui::new(&self.battle, p1_name.clone(), p2_name.clone());
@@ -131,10 +137,16 @@ impl EventHandler for LocalGame<'_> {
                 let update = self.battle.update(p1_controller, p2_controller);
 
                 let p1_info_update = self.p1_input.update(
-                    &self.battle.player_1.board, &update.player_1.events
+                    &self.battle.player_1.board,
+                    &update.player_1.events,
+                    None,
+                    update.player_1.garbage_queue
                 );
                 let p2_info_update = self.p2_input.update(
-                    &self.battle.player_2.board, &update.player_2.events
+                    &self.battle.player_2.board,
+                    &update.player_2.events,
+                    Some((&self.battle.player_1.board, &update.player_1.events)),
+                    update.player_2.garbage_queue
                 );
 
                 self.p1_info_updates.push_back(p1_info_update.clone());

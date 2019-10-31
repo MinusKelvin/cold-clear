@@ -36,6 +36,7 @@ impl Default for Options {
 
 pub struct Interface {
     send: Sender<BotMsg>,
+    opponent_send: Option<Sender<OpponentUpdate>>,
     recv: Receiver<(Move, Info)>,
     dead: bool,
     mv: Option<(Move, Info)>
@@ -43,15 +44,45 @@ pub struct Interface {
 
 impl Interface {
     /// Launches a bot thread with the specified starting board and options.
-    pub fn launch(
-        board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
+    pub fn launch_versus(
+        board: Board,
+        opponent_board: Board,
+        options: Options,
+        evaluator: impl Evaluator + Clone + Send + 'static
     ) -> Self {
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
-        std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
+        let (opponent_send, opp_recv) = channel();
+        let (opponent_plan_send, opponent_plan_recv) = channel();
+        let eval = evaluator.clone();
+        std::thread::spawn(
+            move || run(bot_recv, Some(opponent_plan_recv), bot_send, board, evaluator, options)
+        );
+        std::thread::spawn(
+            move || opponent_run(opp_recv, opponent_plan_send, opponent_board, eval, options)
+        );
 
         Interface {
-            send, recv, dead: false, mv: None
+            send, recv, dead: false, mv: None,
+            opponent_send: Some(opponent_send)
+        }
+    }
+
+    /// Launches a bot thread with the specified starting board and options.
+    pub fn launch_singleplayer(
+        board: Board,
+        options: Options,
+        evaluator: impl Evaluator + Send + 'static
+    ) -> Self {
+        let (bot_send, recv) = channel();
+        let (send, bot_recv) = channel();
+        std::thread::spawn(
+            move || run(bot_recv, None, bot_send, board, evaluator, options)
+        );
+
+        Interface {
+            send, recv, dead: false, mv: None,
+            opponent_send: None
         }
     }
 
@@ -84,6 +115,7 @@ impl Interface {
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     self.dead = true;
+                    self.opponent_send = None;
                     break
                 }
             }
@@ -110,6 +142,7 @@ impl Interface {
     pub fn request_next_move(&mut self) {
         if self.send.send(BotMsg::NextMove).is_err() {
             self.dead = true;
+            self.opponent_send = None;
         }
     }
 
@@ -134,6 +167,7 @@ impl Interface {
     pub fn add_next_piece(&mut self, piece: Piece) {
         if self.send.send(BotMsg::NewPiece(piece)).is_err() {
             self.dead = true;
+            self.opponent_send = None;
         }
     }
 
@@ -146,11 +180,28 @@ impl Interface {
     /// Note: combo is not the same as the displayed combo in guideline games. Here, it is the
     /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
     /// on the screen, you need to use x+1 here.
-    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
-        if self.send.send(BotMsg::Reset {
-            field, b2b: b2b_active, combo
-        }).is_err() {
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
+        if self.send.send(BotMsg::Reset { field, b2b, combo }).is_err() {
             self.dead = true;
+            self.opponent_send = None;
+        }
+    }
+
+    pub fn opponent_add_next_piece(&mut self, piece: Piece) {
+        if let Some(ref send) = self.opponent_send {
+            send.send(OpponentUpdate::NewPiece(piece)).ok();
+        }
+    }
+
+    pub fn opponent_place_piece(&mut self, position: FallingPiece) {
+        if let Some(ref send) = self.opponent_send {
+            send.send(OpponentUpdate::PiecePlaced(position)).ok();
+        }
+    }
+
+    pub fn opponent_reset_board(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
+        if let Some(ref send) = self.opponent_send {
+            send.send(OpponentUpdate::Reset { field, b2b, combo }).ok();
         }
     }
 }
@@ -164,6 +215,16 @@ enum BotMsg {
     NewPiece(Piece),
     NextMove,
     PrepareNextMove
+}
+
+enum OpponentUpdate {
+    NewPiece(Piece),
+    PiecePlaced(FallingPiece),
+    Reset {
+        field: [[bool; 10]; 40],
+        b2b: bool,
+        combo: u32
+    }
 }
 
 pub struct BotState<E: Evaluator> {
@@ -224,7 +285,9 @@ impl<E: Evaluator> BotState<E> {
         self.tree.child_nodes > self.options.min_nodes
     }
 
-    pub fn peek_next_move(&self) -> Option<(Move, Info)> {
+    pub fn peek_next_move(
+        &self, opponent_analysis: Option<&[(Placement, LockResult)]>
+    ) -> Option<(Move, Info)> {
         if !self.min_thinking_reached() {
             return None;
         }
@@ -241,7 +304,12 @@ impl<E: Evaluator> BotState<E> {
             let mv = Move {
                 hold: child.hold,
                 inputs: child.mv.inputs.movements.clone(),
-                expected_location: child.mv.location
+                expected_location: child.mv.location,
+                stall_for: match opponent_analysis {
+                    Some(analysis) =>
+                        stall_heuristic(&info.plan, &child.tree.board, analysis),
+                    None => 0
+                }
             };
             Some((mv, info))
         } else {
@@ -249,7 +317,9 @@ impl<E: Evaluator> BotState<E> {
         }
     }
 
-    pub fn next_move(&mut self) -> Option<(Move, Info)> {
+    pub fn next_move(
+        &mut self, opponent_analysis: Option<&[(Placement, LockResult)]>
+    ) -> Option<(Move, Info)> {
         if !self.min_thinking_reached() {
             return None;
         }
@@ -270,7 +340,12 @@ impl<E: Evaluator> BotState<E> {
                 let mv = Move {
                     hold: child.hold,
                     inputs: child.mv.inputs.movements,
-                    expected_location: child.mv.location
+                    expected_location: child.mv.location,
+                    stall_for: match opponent_analysis {
+                        Some(analysis) =>
+                            stall_heuristic(&info.plan, &child.tree.board, analysis),
+                        None => 0
+                    }
                 };
                 self.tree = child.tree;
                 Some((mv, info))
@@ -282,13 +357,53 @@ impl<E: Evaluator> BotState<E> {
         }
     }
 
+    pub fn do_move(&mut self, position: FallingPiece) {
+        let mut b = self.tree.board.clone();
+        b.lock_piece(position);
+        self.tree = Tree::starting(b);
+    }
+
     pub fn get_possible_next_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
         self.tree.get_moves_and_evaluations()
     }
 }
 
+fn stall_heuristic(
+    plan: &[(Placement, LockResult)],
+    board: &Board,
+    opponent_analysis: &[(Placement, LockResult)]
+) -> u32 {
+    let we_attack_now = plan.get(0)
+        .map(|(_, lock)| lock.garbage_sent >= 4)
+        .unwrap_or(false);
+
+    let mut time = 0;
+    let their_fast_attacks: u32 = opponent_analysis.iter()
+        .take_while(|(placement, lock)| {
+            if time > 90 { // 1.5 seconds
+                return false
+            }
+            time += placement.inputs.time + 5;
+            if lock.placement_kind.is_clear() {
+                time += 45;
+            }
+            true
+        })
+        .map(|(_, lock)| (lock.garbage_sent >= 4) as u32)
+        .sum();
+
+    let our_height = *board.column_heights().iter().max().unwrap();
+
+    if our_height >= 12 && their_fast_attacks > 0 && we_attack_now {
+        2
+    } else {
+        0
+    }
+}
+
 fn run(
     recv: Receiver<BotMsg>,
+    opponent_recv: Option<Receiver<Vec<(Placement, LockResult)>>>,
     send: Sender<(Move, Info)>,
     board: Board,
     evaluator: impl Evaluator,
@@ -298,6 +413,7 @@ fn run(
 
     let mut do_move = false;
     let mut can_think = true;
+    let mut opponent_analysis = None;
     while !bot.is_dead() {
         let result = if can_think {
             recv.try_recv()
@@ -313,17 +429,66 @@ fn run(
             Ok(BotMsg::PrepareNextMove) => {}
         }
 
+        if let Some(ref opponent_recv) = opponent_recv {
+            for update in opponent_recv.try_iter() {
+                opponent_analysis = Some(update);
+            }
+        }
+
         if do_move && bot.min_thinking_reached() {
-            if let Some((mv, info)) = bot.peek_next_move() {
-                do_move = false;
+            let opponent_analysis = opponent_analysis.as_ref().map(|x| &**x);
+            if let Some((mv, info)) = bot.peek_next_move(opponent_analysis) {
                 if send.send((mv, info)).is_err() {
                     return
                 }
-                bot.next_move();
+                bot.next_move(opponent_analysis);
+                do_move = false;
             }
         }
 
         can_think = bot.think();
+    }
+}
+
+fn opponent_run(
+    recv: Receiver<OpponentUpdate>,
+    send: Sender<Vec<(Placement, LockResult)>>,
+    board: Board,
+    evaluator: impl Evaluator,
+    options: Options
+) {
+    let mut bot = BotState::new(board, options, evaluator);
+
+    let mut can_think = true;
+    let mut cycles = 0;
+    while !bot.is_dead() {
+        let result = if can_think {
+            recv.try_recv()
+        } else {
+            recv.recv().map_err(|_| TryRecvError::Disconnected)
+        };
+        match result {
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => break,
+            Ok(OpponentUpdate::NewPiece(piece)) => bot.add_next_piece(piece),
+            Ok(OpponentUpdate::PiecePlaced(position)) => bot.do_move(position),
+            Ok(OpponentUpdate::Reset { field, b2b, combo }) => {
+                bot.reset(field, b2b, combo);
+                cycles = 0;
+            }
+        }
+
+        if cycles == 250 {
+            cycles = 0;
+            if let Some((_, info)) = bot.peek_next_move(None) {
+                if send.send(info.plan).is_err() {
+                    break
+                }
+            }
+        }
+
+        can_think = bot.think();
+        cycles += 1;
     }
 }
 

@@ -19,7 +19,8 @@ pub struct Placement {
 pub struct Move {
     pub inputs: ArrayVec<[PieceMovement; 32]>,
     pub expected_location: FallingPiece,
-    pub hold: bool
+    pub hold: bool,
+    pub stall_for: u32
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]

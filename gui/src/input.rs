@@ -6,7 +6,13 @@ use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {
     fn controller(&mut self, ctx: &mut Context) -> Controller;
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info>;
+    fn update(
+        &mut self,
+        board: &Board<ColoredRow>,
+        events: &[Event],
+        opponent: Option<(&Board<ColoredRow>, &[Event])>,
+        garbage_queue: u32
+    ) -> Option<bot::Info>;
 }
 
 pub struct BotInput {
@@ -30,7 +36,13 @@ impl InputSource for BotInput {
         self.controller
     }
 
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+    fn update(
+        &mut self,
+        board: &Board<ColoredRow>,
+        events: &[Event],
+        opponent: Option<(&Board<ColoredRow>, &[Event])>,
+        garbage_queue: u32
+    ) -> Option<bot::Info> {
         for event in events {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
@@ -47,9 +59,23 @@ impl InputSource for BotInput {
                 _ => {}
             }
         }
+        if let Some((opponent_board, opponent_events)) = opponent {
+            for event in opponent_events {
+                match event {
+                    Event::PieceSpawned { new_in_queue } =>
+                        self.interface.opponent_add_next_piece(*new_in_queue),
+                    Event::GarbageAdded(_) => self.interface.opponent_reset_board(
+                        opponent_board.get_field(), opponent_board.b2b_bonus, opponent_board.combo
+                    ),
+                    Event::PiecePlaced { piece, .. } =>
+                        self.interface.opponent_place_piece(*piece),
+                    _ => {}
+                }
+            }
+        }
         let mut info = None;
         if let Some((expected, ref mut executor)) = self.executing {
-            if let Some(loc) = executor.update(&mut self.controller, board, events) {
+            if let Some(loc) = executor.update(&mut self.controller, board, events, garbage_queue) {
                 if loc != expected {
                     self.interface.reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
@@ -59,7 +85,7 @@ impl InputSource for BotInput {
             info = Some(i);
             self.executing = Some((
                 mv.expected_location,
-                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
+                PieceMoveExecutor::new(mv.hold, mv.stall_for, mv.inputs.into_iter().collect())
             ));
         }
         info
@@ -104,7 +130,13 @@ impl InputSource for Keyboard {
         }
     }
 
-    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<bot::Info> {
+    fn update(
+        &mut self,
+        _: &Board<ColoredRow>,
+        _: &[Event],
+        _: Option<(&Board<ColoredRow>, &[Event])>,
+        _: u32
+    ) -> Option<bot::Info> {
         None
     }
 }
