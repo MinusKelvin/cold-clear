@@ -2,7 +2,6 @@ use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
 use serde::{ Serialize, Deserialize };
 
 pub mod evaluation;
-// mod misa;
 pub mod moves;
 mod tree;
 
@@ -52,22 +51,6 @@ impl Interface {
 
         Interface {
             send, recv, dead: false, mv: None
-        }
-    }
-
-    // pub fn misa_glue(board: Board) -> Self {
-    //     let (bot_send, recv) = channel();
-    //     let (send, bot_recv) = channel();
-    //     std::thread::spawn(move || misa::glue(bot_recv, bot_send, board));
-
-    //     Interface {
-    //         send, recv, dead: false, mv: None
-    //     }
-    // }
-
-    pub fn misa_prepare_next_move(&mut self) {
-        if self.send.send(BotMsg::PrepareNextMove).is_err() {
-            self.dead = true;
         }
     }
 
