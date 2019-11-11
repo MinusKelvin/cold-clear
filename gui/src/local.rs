@@ -68,7 +68,12 @@ impl<'a> LocalGame<'a> {
 
 impl EventHandler for LocalGame<'_> {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
+        let mut count = 0;
         while timer::check_update_time(ctx, 60) {
+            count += 1;
+            if count == 3 {
+                while timer::check_update_time(ctx, 60) {}
+            }
             let do_update = match self.state {
                 State::GameOver(0) => {
                     serde_json::to_writer(

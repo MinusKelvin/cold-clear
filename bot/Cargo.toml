@@ -14,3 +14,4 @@ libtetris = { path = "../libtetris" }
 enum-map = "0.6.0"
 odds = { version = "0.3.1", features = ["std-vec"] }
 serde = { version = "1", features = ["derive"] }
+lazy_static = "1.4.0"

@@ -3,6 +3,7 @@ use serde::{ Serialize, Deserialize };
 
 pub mod evaluation;
 pub mod moves;
+pub mod opener_book;
 mod tree;
 
 use libtetris::*;
@@ -45,6 +46,8 @@ impl Interface {
     pub fn launch(
         board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
     ) -> Self {
+        opener_book::get(&Board::new());
+
         let (bot_send, recv) = channel();
         let (send, bot_recv) = channel();
         std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));

@@ -2,6 +2,7 @@ use arrayvec::ArrayVec;
 use std::collections::VecDeque;
 use libtetris::*;
 use super::*;
+use crate::opener_book::Opener;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Standard {
@@ -158,6 +159,15 @@ impl Evaluator for Standard {
 
         if board.b2b_bonus {
             transient_eval += self.back_to_back;
+        }
+
+        // Opener book
+        if let Some((opener, encouragement)) = crate::opener_book::get(board) {
+            transient_eval += match opener {
+                Opener::Pco => 600,
+                Opener::Viper => 1000,
+            };
+            acc_eval += encouragement;
         }
 
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;

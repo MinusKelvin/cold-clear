@@ -114,18 +114,18 @@ fn main() {
             let mut local_game = LocalGame::new(
                 &mut resources,
                 Box::new(move |board| {
-                    // let evaluator = evaluation::changed::Standard {
-                    //     ..Default::default()
-                    // };
-                    // let name = format!("Cold Clear\n{}", evaluator.name());
-                    // (Box::new(BotInput::new(bot::Interface::launch(
-                    //     board,
-                    //     bot::Options {
-                    //         ..Default::default()
-                    //     },
-                    //     evaluator
-                    // ))), name)
-                    (Box::new(input), "Human".to_owned())
+                    let evaluator = evaluation::changed::Standard {
+                        ..Default::default()
+                    };
+                    let name = format!("Cold Clear\n{}", evaluator.name());
+                    (Box::new(BotInput::new(bot::Interface::launch(
+                        board,
+                        bot::Options {
+                            ..Default::default()
+                        },
+                        evaluator
+                    ))), name)
+                    // (Box::new(input), "Human".to_owned())
                 }),
                 Box::new(|board|{
                     let evaluator = evaluation::Standard {

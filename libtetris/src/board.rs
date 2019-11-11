@@ -202,7 +202,7 @@ impl<R: Row> Board<R> {
         self.hold_piece
     }
 
-    pub fn next_queue<'a>(&'a self) -> impl Iterator<Item=Piece> + 'a {
+    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item=Piece> + 'a {
         self.next_pieces.iter().copied()
     }
 
@@ -273,6 +273,10 @@ impl<R: Row> Board<R> {
             }
         }
         field
+    }
+
+    pub fn get_bag(&self) -> EnumSet<Piece> {
+        self.bag
     }
 }
 
