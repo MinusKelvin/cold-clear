@@ -1,9 +1,10 @@
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
 use libtetris::*;
+use serde::{ Serialize, Deserialize };
 use super::*;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Standard {
     pub back_to_back: i32,
     pub bumpiness: i32,
@@ -33,7 +34,7 @@ pub struct Standard {
     pub mini_tspin1: i32,
     pub mini_tspin2: i32,
     pub perfect_clear: i32,
-    pub combo_table: [i32; 12],
+    pub combo_garbage: i32,
     pub move_time: i32,
     pub wasted_t: i32,
 
@@ -73,11 +74,7 @@ impl Default for Standard {
             mini_tspin1: -150,
             mini_tspin2: -100,
             perfect_clear: 1000,
-            combo_table: libtetris::COMBO_GARBAGE.iter()
-                .map(|&v| v as i32 * 150)
-                .collect::<ArrayVec<[_; 12]>>()
-                .into_inner()
-                .unwrap(),
+            combo_garbage: 150,
 
             sub_name: None
         }
@@ -108,7 +105,7 @@ impl Evaluator for Standard {
             }
             if let Some(combo) = lock.combo {
                 let combo = combo.min(11) as usize;
-                acc_eval += self.combo_table[combo];
+                acc_eval += self.combo_garbage * libtetris::COMBO_GARBAGE[combo] as i32;
             }
             match lock.placement_kind {
                 PlacementKind::Clear1 => {
