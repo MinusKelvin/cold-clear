@@ -92,42 +92,16 @@ impl FallingPiece {
             self.x = initial.x + dx;
             self.y = initial.y + dy;
             if !board.obstructed(self) {
-                if target.0 == Piece::T && self.tspin != TspinStatus::PersistentFull {
-                    let mut mini_corners = 0;
-                    for (dx, dy) in target.1.mini_tspin_corners() {
-                        if board.occupied(self.x + dx, self.y + dy) {
-                            mini_corners += 1;
-                        }
-                    }
-
-                    let mut non_mini_corners = 0;
-                    for (dx, dy) in target.1.non_mini_tspin_corners() {
-                        if board.occupied(self.x + dx, self.y + dy) {
-                            non_mini_corners += 1;
-                        }
-                    }
-
-                    if non_mini_corners + mini_corners >= 3 {
-                        if i == 4 {
-                            // Rotation point 5 is never a Mini T-Spin
-
-                            // The leaked 2009 guideline says that rotations made after using the
-                            // TST twist stay as full tspins, not minis. Example:
-                            // http://harddrop.com/fumen/?v115@4gB8IeA8CeE8AeH8CeG8BeD8JeVBnvhC9rflrBAAA
-                            // That guideline contains no examples of this, and this isn't the case
-                            // in recent guideline games such as Puyo Puyo Tetris.
-                            // For now, we won't implement it.
-                            
-                            // self.tspin = TspinStatus::PersistentFull;
-                            self.tspin = TspinStatus::Full;
-                        } else if mini_corners == 2 {
-                            self.tspin = TspinStatus::Full;
-                        } else {
-                            self.tspin = TspinStatus::Mini;
-                        }
-                    } else {
-                        self.tspin = TspinStatus::None;
-                    }
+                if !board.obstructed(&FallingPiece { x: self.x+1, ..*self }) {
+                    self.tspin = TspinStatus::None;
+                } else if !board.obstructed(&FallingPiece { x: self.x-1, ..*self }) {
+                    self.tspin = TspinStatus::None;
+                } else if !board.obstructed(&FallingPiece { y: self.y-1, ..*self }) {
+                    self.tspin = TspinStatus::None;
+                } else if !board.obstructed(&FallingPiece { y: self.y+1, ..*self }) {
+                    self.tspin = TspinStatus::None;
+                } else {
+                    self.tspin = TspinStatus::Full;
                 }
                 return true
             }
@@ -198,26 +172,6 @@ impl RotationState {
             South => *self = East,
             East  => *self = North
         }
-    }
-
-    pub fn mini_tspin_corners(self) -> ArrayVec<[(i32, i32); 2]> {
-        use RotationState::*;
-        match self {
-            North => [(-1, 1),  (1, 1)],
-            East  => [(1, 1),   (1, -1)],
-            South => [(1, -1),  (-1, -1)],
-            West  => [(-1, -1), (-1, 1)]
-        }.into()
-    }
-
-    pub fn non_mini_tspin_corners(self) -> ArrayVec<[(i32, i32); 2]> {
-        use RotationState::*;
-        match self {
-            South => [(-1, 1),  (1, 1)],
-            West  => [(1, 1),   (1, -1)],
-            North => [(1, -1),  (-1, -1)],
-            East  => [(-1, -1), (-1, 1)]
-        }.into()
     }
 }
 
