@@ -11,7 +11,7 @@ pub struct BotInput<E: Evaluator> {
     bot: bot::BotState<E>
 }
 
-const THINK_AMOUNT: usize = 5;
+const THINK_AMOUNT: usize = 10;
 
 impl<E: Evaluator> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {

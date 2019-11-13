@@ -7,7 +7,7 @@ mod mutate;
 
 use mutate::Mutateable;
 
-const BATTLES: usize = 2;
+const BATTLES: usize = 4;
 
 fn main() {
     let mut population = match std::fs::File::open("pop.json") {
@@ -44,6 +44,7 @@ fn main() {
             }
         });
     }
+    drop(replay_saver);
 
     loop {
         let mut count = 0;
@@ -68,7 +69,9 @@ fn main() {
             if let Some(winner) = game_results.recv().unwrap() {
                 results[winner].1 += 1;
             }
-            println!("Completed game {} of {}", i, count);
+            if (i+1) % 10 == 0 {
+                println!("Completed game {} of {}", i+1, count);
+            }
         }
 
         results.sort_by_key(|(_, score)| -score);
@@ -118,7 +121,7 @@ fn main() {
         population = new_population;
     }
 
-    drop(replay_saver);
+    drop(matchups);
     replay_save_thread.join().ok();
 }
 
