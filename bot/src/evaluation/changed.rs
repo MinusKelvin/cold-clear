@@ -142,13 +142,6 @@ impl Evaluator for Standard {
             }
         }
 
-        if placed == Piece::T {
-            match lock.placement_kind {
-                PlacementKind::Tspin1 | PlacementKind::Tspin2 | PlacementKind::Tspin3 => {}
-                _ => acc_eval += self.wasted_t
-            }
-        }
-
         // magic approximations of spawn delay and line clear delay
         acc_eval += if lock.placement_kind.is_clear() {
             self.move_time * (move_time + 10 + 45) as i32
@@ -166,12 +159,8 @@ impl Evaluator for Standard {
 
         let mut board = board.clone();
         loop {
-            let result = if let Some((x, y)) = sky_tslot(&board) {
-                cutout_tslot(board.clone(), FallingPiece {
-                    x, y,
-                    kind: PieceState(Piece::T, RotationState::South),
-                    tspin: TspinStatus::Full
-                })
+            let result = if let Some(piece) = sky_tslot(&board) {
+                cutout_tslot(board.clone(), piece)
             } else if let Some(twist) = tst_twist(&board) {
                 let piece = twist.piece();
                 if let Some((x, y)) = cave_tslot(&board, piece) {
@@ -352,26 +341,19 @@ fn covered_cells(board: &Board) -> (i32, i32) {
     (covered, covered_sq)
 }
 
-/// Determines the existence and location of a reachable T slot on the board.
-/// 
-/// That is, it looks for these with sky above:
-/// 
-/// ```
-/// []....    ....[]
-/// ......    ......
-/// []..[]    []..[]
-/// ```
+/// Determines the existence and location of a reachable spin slot on the board.
 /// 
 /// If there is more than one, this returns the one with the most lines filled.
-fn sky_tslot(board: &Board) -> Option<(i32, i32)> {
-    fn filledness(board: &Board, x: i32, y: i32) -> usize {
+fn sky_tslot(board: &Board) -> Option<FallingPiece> {
+    fn filledness(board: &Board, p: FallingPiece) -> usize {
+        let cells = p.cells().into_iter().map(|(x,y,_)| (x,y)).collect::<ArrayVec<[_; 4]>>();
+        let low = cells.iter().map(|&(_,y)| y).min().unwrap();
+        let high = cells.iter().map(|&(_,y)| y).max().unwrap();
         let mut filled = 0;
-        for cy in y-1..y+1 {
+        'row: for cy in low..=high {
             for rx in 0..10 {
-                if rx < x-1 || rx > x+1 {
-                    if !board.occupied(rx, cy) {
-                        break
-                    }
+                if !board.occupied(rx, cy) && !cells.contains(&(rx, cy)) {
+                    continue 'row;
                 }
             }
             filled += 1;
@@ -379,55 +361,55 @@ fn sky_tslot(board: &Board) -> Option<(i32, i32)> {
         filled
     }
 
+    const CASES: &[PieceState] = &[
+        PieceState(Piece::S, RotationState::North),
+        PieceState(Piece::Z, RotationState::North),
+        PieceState(Piece::T, RotationState::East),
+        PieceState(Piece::T, RotationState::West),
+        PieceState(Piece::L, RotationState::East),
+        PieceState(Piece::L, RotationState::West),
+        PieceState(Piece::J, RotationState::East),
+        PieceState(Piece::J, RotationState::West),
+    ];
+
     let mut best = None;
-    for (x, hs) in board.column_heights().windows(2).enumerate() {
-        let x = x as i32;
-        let (left_h, right_h) = (hs[0], hs[1]);
-        if left_h > right_h {
-            // Look for topleft-open T slot
-            // leftmost column is known to match, as is middle column; no need to check
-            let is_tslot =
-                board.occupied(x+2, left_h+1) &&
-                !board.occupied(x+2, left_h) &&
-                board.occupied(x+2, left_h-1);
-            if is_tslot {
-                best = match best {
-                    None => Some((filledness(board, x+1, left_h), x+1, left_h)),
-                    Some((f, ox, oy)) => {
-                        let fill = filledness(board, x+1, left_h);
-                        if fill > f {
-                            Some((fill, x+1, left_h))
-                        } else {
-                            Some((f, ox, oy))
-                        }
-                    }
+    for x in 0..10 {
+        for &case in CASES {
+            let mut testing = FallingPiece {
+                x, y: 40, kind: case, tspin: TspinStatus::None
+            };
+            if board.obstructed(&testing){
+                continue;
+            }
+            testing.sonic_drop(board);
+            testing.cw(board);
+            if testing.tspin == TspinStatus::Full {
+                let filled = filledness(board, testing);
+                if filled == 3 { return Some(testing) }
+                match best {
+                    Some((f, _)) if f < filled => best = Some((filled, testing)),
+                    Some(_) => {}
+                    None => best = Some((filled, testing))
                 }
             }
-        } else if right_h > left_h {
-            // Look for topright-open T slot
-            // rightmost column is known to match, as is middle column; no need to check
-            let is_tslot =
-                board.occupied(x-1, right_h+1) &&
-                !board.occupied(x-1, right_h) &&
-                board.occupied(x-1, right_h-1);
-            if is_tslot {
-                best = match best {
-                    None => Some((filledness(board, x, right_h), x, right_h)),
-                    Some((f, ox, oy)) => {
-                        let fill = filledness(board, x, right_h);
-                        if fill > f {
-                            Some((fill, x, right_h))
-                        } else {
-                            Some((f, ox, oy))
-                        }
-                    }
+
+            let mut testing = FallingPiece {
+                x, y: 40, kind: case, tspin: TspinStatus::None
+            };
+            testing.sonic_drop(board);
+            testing.ccw(board);
+            if testing.tspin == TspinStatus::Full {
+                let filled = filledness(board, testing);
+                if filled == 3 { return Some(testing) }
+                match best {
+                    Some((f, _)) if f < filled => best = Some((filled, testing)),
+                    Some(_) => {}
+                    None => best = Some((filled, testing))
                 }
             }
-        } else {
-            continue
         }
     }
-    best.map(|(_,x,y)| (x,y))
+    best.map(|(_,p)| p)
 }
 
 fn cave_tslot(board: &Board, mut starting_point: FallingPiece) -> Option<(i32, i32)> {
@@ -583,27 +565,7 @@ struct Cutout {
 }
 
 fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
-    let result = if piece.kind.1 == RotationState::South {
-        board.lock_piece(piece)
-    } else {
-        let imperial = FallingPiece {
-            kind: PieceState(Piece::T, if piece.kind.1 == RotationState::East {
-                RotationState::West
-            } else {
-                RotationState::East
-            }),
-            ..piece
-        };
-        if !board.obstructed(&imperial) && board.on_stack(&imperial) {
-            board.lock_piece(imperial)
-        } else if board.on_stack(&piece) {
-            board.lock_piece(piece)
-        } else {
-            return Cutout {
-                lines: 0, result: None
-            };
-        }
-    };
+    let result = board.lock_piece(piece);
 
     match result.placement_kind {
         PlacementKind::Tspin => Cutout {
