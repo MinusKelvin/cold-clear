@@ -20,6 +20,7 @@ pub struct Standard {
     pub tslot: [i32; 4],
     pub well_depth: i32,
     pub max_well_depth: i32,
+    pub well_column: [i32; 10],
 
     pub b2b_clear: i32,
     pub clear1: i32,
@@ -34,6 +35,7 @@ pub struct Standard {
     pub perfect_clear: i32,
     pub combo_table: [i32; 12],
     pub move_time: i32,
+    pub wasted_t: i32,
 
     pub sub_name: Option<String>
 }
@@ -56,8 +58,10 @@ impl Default for Standard {
             tslot: [20, 150, 200, 400],
             well_depth: 50,
             max_well_depth: 8,
+            well_column: [30, 0, 10, 50, 40, 40, 60, 10, 0, 30],
 
             move_time: -1,
+            wasted_t: -150,
             b2b_clear: 100,
             clear1: -150,
             clear2: -100,
@@ -70,7 +74,7 @@ impl Default for Standard {
             mini_tspin2: -100,
             perfect_clear: 1000,
             combo_table: libtetris::COMBO_GARBAGE.iter()
-                .map(|&v| v as i32 * 100)
+                .map(|&v| v as i32 * 150)
                 .collect::<ArrayVec<[_; 12]>>()
                 .into_inner()
                 .unwrap(),
@@ -90,7 +94,9 @@ impl Evaluator for Standard {
         info
     }
 
-    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32) -> Evaluation {
+    fn evaluate(
+        &self, lock: &LockResult, board: &Board, move_time: u32, placed: Piece
+    ) -> Evaluation {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
 
@@ -136,6 +142,13 @@ impl Evaluator for Standard {
             }
         }
 
+        if placed == Piece::T {
+            match lock.placement_kind {
+                PlacementKind::Tspin1 | PlacementKind::Tspin2 | PlacementKind::Tspin3 => {}
+                _ => acc_eval += self.wasted_t
+            }
+        }
+
         // magic approximations of spawn delay and line clear delay
         acc_eval += if lock.placement_kind.is_clear() {
             self.move_time * (move_time + 10 + 45) as i32
@@ -154,18 +167,21 @@ impl Evaluator for Standard {
         let mut board = board.clone();
         loop {
             let result = if let Some((x, y)) = sky_tslot(&board) {
-                cutout_tslot(board.clone(), x, y, TslotKind::Tsd)
+                cutout_tslot(board.clone(), FallingPiece {
+                    x, y,
+                    kind: PieceState(Piece::T, RotationState::South),
+                    tspin: TspinStatus::Full
+                })
             } else if let Some(twist) = tst_twist(&board) {
                 let piece = twist.piece();
                 if let Some((x, y)) = cave_tslot(&board, piece) {
-                    cutout_tslot(board.clone(), x, y, TslotKind::Tsd)
-                } else if twist.is_tslot && board.on_stack(&piece) {
-                    let kind = if twist.point_left {
-                        TslotKind::LeftTst
-                    } else {
-                        TslotKind::RightTst
-                    };
-                    cutout_tslot(board.clone(), twist.x, twist.y, kind)
+                    cutout_tslot(board.clone(), FallingPiece {
+                        x, y,
+                        kind: PieceState(Piece::T, RotationState::South),
+                        tspin: TspinStatus::Full
+                    })
+                } else if twist.is_tslot {
+                    cutout_tslot(board.clone(), piece)
                 } else {
                     break
                 }
@@ -185,7 +201,7 @@ impl Evaluator for Standard {
 
         let mut well = 0;
         for x in 1..10 {
-            if board.column_heights()[x] < board.column_heights()[well] {
+            if board.column_heights()[x] <= board.column_heights()[well] {
                 well = x;
             }
         }
@@ -196,11 +212,14 @@ impl Evaluator for Standard {
                 if x as usize != well && !board.occupied(x, y) {
                     break 'yloop;
                 }
-                depth += 1;
             }
+            depth += 1;
         }
         let depth = depth.min(self.max_well_depth);
         transient_eval += self.well_depth * depth;
+        if depth != 0 {
+            transient_eval += self.well_column[well];
+        }
 
         if self.bumpiness | self.bumpiness_sq != 0 {
             let (bump, bump_sq) = bumpiness(&board, well);
@@ -470,6 +489,7 @@ fn cave_tslot(board: &Board, mut starting_point: FallingPiece) -> Option<(i32, i
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 struct TstTwist {
     point_left: bool,
     is_tslot: bool,
@@ -480,9 +500,9 @@ struct TstTwist {
 impl TstTwist {
     fn piece(&self) -> FallingPiece {
         let orientation = if self.point_left {
-            RotationState::East
-        } else {
             RotationState::West
+        } else {
+            RotationState::East
         };
         FallingPiece {
             kind: PieceState(Piece::T, orientation),
@@ -562,42 +582,26 @@ struct Cutout {
     result: Option<Board>
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-enum TslotKind {
-    Tsd,
-    LeftTst,
-    RightTst
-}
-
-fn cutout_tslot(mut board: Board, x: i32, y: i32, kind: TslotKind) -> Cutout {
-    let result = if kind == TslotKind::Tsd {
-        board.lock_piece(FallingPiece {
-            kind: PieceState(Piece::T, RotationState::South),
-            x, y,
-            tspin: TspinStatus::Full
-        })
+fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
+    let result = if piece.kind.1 == RotationState::South {
+        board.lock_piece(piece)
     } else {
-        let left = FallingPiece {
-            kind: PieceState(Piece::T, RotationState::East),
-            x, y,
-            tspin: TspinStatus::Full
+        let imperial = FallingPiece {
+            kind: PieceState(Piece::T, if piece.kind.1 == RotationState::East {
+                RotationState::West
+            } else {
+                RotationState::East
+            }),
+            ..piece
         };
-        let right = FallingPiece {
-            kind: PieceState(Piece::T, RotationState::West),
-            x, y,
-            tspin: TspinStatus::Full
-        };
-
-        let (imperial, normal) = if kind == TslotKind::LeftTst {
-            (right, left)
-        } else {
-            (left, right)
-        };
-
-        if !board.obstructed(&imperial) {
+        if !board.obstructed(&imperial) && board.on_stack(&imperial) {
             board.lock_piece(imperial)
+        } else if board.on_stack(&piece) {
+            board.lock_piece(piece)
         } else {
-            board.lock_piece(normal)
+            return Cutout {
+                lines: 0, result: None
+            };
         }
     };
 

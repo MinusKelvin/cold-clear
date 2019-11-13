@@ -2,7 +2,7 @@ use rand::prelude::*;
 use enum_map::EnumMap;
 use arrayvec::ArrayVec;
 use odds::vec::VecExt;
-use libtetris::{ Board, LockResult, Piece, FallingPiece };
+use libtetris::{ Board, LockResult, Piece, FallingPiece, PlacementKind };
 use crate::moves::Placement;
 use crate::evaluation::{ Evaluator, Evaluation };
 use crate::Options;
@@ -31,9 +31,9 @@ pub struct Child {
 }
 
 impl Tree {
-    pub fn empty() -> Self {
+    pub fn starting(board: Board) -> Self {
         Tree {
-            board: Board::new(),
+            board,
             raw_eval: Evaluation { accumulated: 0, transient: 0 },
             evaluation: 0, depth: 0, child_nodes: 0, kind: None
         }
@@ -43,9 +43,10 @@ impl Tree {
         board: Board,
         lock: &LockResult,
         move_time: u32,
+        piece: Piece,
         evaluator: &impl Evaluator
     ) -> Self {
-        let raw_eval = evaluator.evaluate(lock, &board, move_time);
+        let raw_eval = evaluator.evaluate(lock, &board, move_time, piece);
         Tree {
             raw_eval, board,
             evaluation: raw_eval.accumulated + raw_eval.transient,
@@ -68,6 +69,10 @@ impl Tree {
                 }
             }
         }
+    }
+
+    pub fn get_best_child(&self) -> Option<&Child> {
+        self.kind.as_ref().and_then(|tk| tk.get_best_child())
     }
 
     pub fn get_plan(&self, into: &mut Vec<(Placement, LockResult)>) {
@@ -157,11 +162,13 @@ impl Tree {
                     }
                 } else {
                     // Speculate - hold should be known, but next piece isn't
-                    assert!(
-                        opts.use_hold && self.board.hold_piece().is_some(),
-                        "Neither hold piece or next piece are known - what the heck happened?\n\
-                         get_next_piece: {:?}", self.board.get_next_piece()
-                    );
+                    if opts.use_hold {
+                        assert!(
+                            self.board.hold_piece().is_some(),
+                            "Neither hold piece or next piece are known - what the heck happened?\n\
+                            get_next_piece: {:?}", self.board.get_next_piece()
+                        );
+                    }
                     self.speculate(opts, evaluator)
                 }
             }
@@ -236,17 +243,7 @@ fn new_children(
 
     // Placements for next piece
     for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
-        let mut board = board.clone();
-        let lock = board.lock_piece(mv.location);
-        if !lock.locked_out {
-            if !lock.placement_kind.is_clear() || lock.placement_kind == libtetris::PlacementKind::Tspin2 {
-                children.push(Child {
-                    tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
-                    hold: false,
-                    mv, lock
-                })
-            }
-        }
+        add_child(&mut children, &board, false, mv, evaluator);
     }
 
     if opts.use_hold {
@@ -256,17 +253,7 @@ fn new_children(
             if let Some(spawned) = FallingPiece::spawn(hold, &board) {
                 // Placements for hold piece
                 for mv in crate::moves::find_moves(&board, spawned, opts.mode) {
-                    let mut board = board.clone();
-                    let lock = board.lock_piece(mv.location);
-                    if !lock.locked_out {
-                        if !lock.placement_kind.is_clear() || lock.placement_kind == libtetris::PlacementKind::Tspin2 {
-                            children.push(Child {
-                                tree: Tree::new(board, &lock, mv.inputs.time, evaluator),
-                                hold: true,
-                                mv, lock
-                            })
-                        }
-                    }
+                    add_child(&mut children, &board, true, mv, evaluator);
                 }
             }
         }
@@ -274,6 +261,24 @@ fn new_children(
 
     children.sort_by_key(|child| -child.tree.evaluation);
     children
+}
+
+fn add_child(
+    children: &mut Vec<Child>, board: &Board, hold: bool, mv: Placement, evaluator: &impl Evaluator
+) {
+    let mut board = board.clone();
+    let can_be_hd = board.above_stack(&mv.location) &&
+            board.column_heights().iter().all(|&y| y < 18);
+    let lock = board.lock_piece(mv.location);
+    if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
+        if !lock.placement_kind.is_clear() || lock.placement_kind == PlacementKind::Tspin2 {
+            children.push(Child {
+                tree: Tree::new(board, &lock, mv.inputs.time, mv.location.kind.0, evaluator),
+                hold,
+                mv, lock
+            })
+        }
+    }
 }
 
 struct ExpandResult {
@@ -291,6 +296,13 @@ impl TreeKind {
                 Ok(children.into_iter().next().unwrap())
             },
             TreeKind::Unknown(_) => Err(self),
+        }
+    }
+
+    fn get_best_child(&self) -> Option<&Child> {
+        match self {
+            TreeKind::Known(children) => children.first(),
+            TreeKind::Unknown(_) => None
         }
     }
 
@@ -352,6 +364,18 @@ impl TreeKind {
             }
             TreeKind::Unknown(speculation) => {
                 let mut now_known = vec![];
+                if speculation[piece].is_none() {
+                    let mut error = format!(
+                        "Invalid next piece added: {}, expected one of ", piece.to_char()
+                    );
+                    for (p, v) in speculation.iter() {
+                        if v.is_some() {
+                            error.push(p.to_char());
+                            error.push_str(", ");
+                        }
+                    }
+                    panic!("{}", error);
+                }
                 std::mem::swap(speculation[piece].as_mut().unwrap(), &mut now_known);
                 let is_death = now_known.is_empty();
                 *self = TreeKind::Known(now_known);

@@ -1,89 +1,66 @@
 use arrayvec::ArrayVec;
 use std::collections::VecDeque;
 use libtetris::*;
-use serde::{ Serialize, Deserialize };
 use super::*;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct Standard {
-    pub back_to_back: i32,
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct PatternBuilder {
     pub bumpiness: i32,
     pub bumpiness_sq: i32,
     pub height: i32,
-    pub top_half: i32,
-    pub top_quarter: i32,
     pub cavity_cells: i32,
-    pub cavity_cells_sq: i32,
     pub overhang_cells: i32,
-    pub overhang_cells_sq: i32,
-    pub covered_cells: i32,
-    pub covered_cells_sq: i32,
-    pub tslot: [i32; 4],
-    pub well_depth: i32,
-    pub max_well_depth: i32,
-    pub well_column: [i32; 10],
 
-    pub b2b_clear: i32,
-    pub clear1: i32,
-    pub clear2: i32,
-    pub clear3: i32,
-    pub clear4: i32,
-    pub tspin1: i32,
-    pub tspin2: i32,
-    pub tspin3: i32,
-    pub mini_tspin1: i32,
-    pub mini_tspin2: i32,
-    pub perfect_clear: i32,
-    pub combo_garbage: i32,
     pub move_time: i32,
-    pub wasted_t: i32,
+
+    pub pattern: ArrayVec<[u16; 19]>,
+    pub pattern_row: i32,
 
     pub sub_name: Option<String>
 }
 
-impl Default for Standard {
+impl Default for PatternBuilder {
     fn default() -> Self {
-        Standard {
-            back_to_back: 50,
+        PatternBuilder {
             bumpiness: -10,
             bumpiness_sq: -5,
             height: -40,
-            top_half: 0,
-            top_quarter: 0,
             cavity_cells: -150,
-            cavity_cells_sq: 0,
             overhang_cells: -50,
-            overhang_cells_sq: 0,
-            covered_cells: 0,
-            covered_cells_sq: 0,
-            tslot: [20, 150, 200, -400],
-            well_depth: 0,
-            max_well_depth: 8,
-            well_column: [30, 0, 10, 50, 40, 40, 60, 10, 0, 30],
+
+            pattern_row: 1000,
+            pattern: [
+                0b1111111110,
+                0b1111111101,
+                0b1111111011,
+                0b1111110111,
+                0b1111101111,
+                0b1111011111,
+                0b1110111111,
+                0b1101111111,
+                0b1011111111,
+                0b0111111111,
+                0b1011111111,
+                0b1101111111,
+                0b1110111111,
+                0b1111011111,
+                0b1111101111,
+                0b1111110111,
+                0b1111111011,
+                0b1111111101,
+                0b1111111110,
+            ].iter().cloned().collect(),
 
             move_time: -1,
-            wasted_t: -150,
-            b2b_clear: 100,
-            clear1: -150,
-            clear2: -100,
-            clear3: -50,
-            clear4: 400,
-            tspin1: 130,
-            tspin2: 400,
-            tspin3: 600,
-            mini_tspin1: -150,
-            mini_tspin2: -100,
-            perfect_clear: 1000,
-            combo_garbage: 150,
 
             sub_name: None
         }
     }
 }
 
-impl Evaluator for Standard {
+impl Evaluator for PatternBuilder {
     fn name(&self) -> String {
-        let mut info = "Standard".to_owned();
+        let mut info = "Pattern Builder".to_owned();
         if let Some(extra) = &self.sub_name {
             info.push('\n');
             info.push_str(extra);
@@ -97,55 +74,6 @@ impl Evaluator for Standard {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
 
-        if lock.perfect_clear {
-            acc_eval += self.perfect_clear;
-        } else {
-            if lock.b2b {
-                acc_eval += self.b2b_clear;
-            }
-            if let Some(combo) = lock.combo {
-                let combo = combo.min(11) as usize;
-                acc_eval += self.combo_garbage * libtetris::COMBO_GARBAGE[combo] as i32;
-            }
-            match lock.placement_kind {
-                PlacementKind::Clear1 => {
-                    acc_eval += self.clear1;
-                }
-                PlacementKind::Clear2 => {
-                    acc_eval += self.clear2;
-                }
-                PlacementKind::Clear3 => {
-                    acc_eval += self.clear3;
-                }
-                PlacementKind::Clear4 => {
-                    acc_eval += self.clear4;
-                }
-                PlacementKind::Tspin1 => {
-                    acc_eval += self.tspin1;
-                }
-                PlacementKind::Tspin2 => {
-                    acc_eval += self.tspin2;
-                }
-                PlacementKind::Tspin3 => {
-                    acc_eval += self.tspin3;
-                }
-                PlacementKind::MiniTspin1 => {
-                    acc_eval += self.mini_tspin1;
-                }
-                PlacementKind::MiniTspin2 => {
-                    acc_eval += self.mini_tspin2;
-                }
-                _ => {}
-            }
-        }
-
-        if placed == Piece::T {
-            match lock.placement_kind {
-                PlacementKind::Tspin1 | PlacementKind::Tspin2 | PlacementKind::Tspin3 => {}
-                _ => acc_eval += self.wasted_t
-            }
-        }
-
         // magic approximations of spawn delay and line clear delay
         acc_eval += if lock.placement_kind.is_clear() {
             self.move_time * (move_time + 10 + 45) as i32
@@ -153,90 +81,27 @@ impl Evaluator for Standard {
             self.move_time * (move_time + 10) as i32
          };
 
-        if board.b2b_bonus {
-            transient_eval += self.back_to_back;
-        }
-
-        let highest_point = *board.column_heights().iter().max().unwrap() as i32;
-        transient_eval += self.top_quarter * (highest_point - 15).max(0);
-        transient_eval += self.top_half * (highest_point - 10).max(0);
-
-        let mut board = board.clone();
-        loop {
-            let result = if let Some((x, y)) = sky_tslot(&board) {
-                cutout_tslot(board.clone(), FallingPiece {
-                    x, y,
-                    kind: PieceState(Piece::T, RotationState::South),
-                    tspin: TspinStatus::Full
-                })
-            } else if let Some(twist) = tst_twist(&board) {
-                let piece = twist.piece();
-                if let Some((x, y)) = cave_tslot(&board, piece) {
-                    cutout_tslot(board.clone(), FallingPiece {
-                        x, y,
-                        kind: PieceState(Piece::T, RotationState::South),
-                        tspin: TspinStatus::Full
-                    })
-                } else if twist.is_tslot {
-                    cutout_tslot(board.clone(), piece)
-                } else {
-                    break
-                }
-            } else {
-                break
-            };
-            transient_eval += self.tslot[result.lines];
-            if let Some(b) = result.result {
-                board = b;
-            } else {
-                break
-            }
-        }
-
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.height * highest_point;
 
-        let mut well = 0;
-        for x in 1..10 {
-            if board.column_heights()[x] <= board.column_heights()[well] {
-                well = x;
-            }
-        }
-
-        let mut depth = 0;
-        'yloop: for y in board.column_heights()[well] .. 20 {
-            for x in 0..10 {
-                if x as usize != well && !board.occupied(x, y) {
-                    break 'yloop;
-                }
-            }
-            depth += 1;
-        }
-        let depth = depth.min(self.max_well_depth);
-        transient_eval += self.well_depth * depth;
-        if depth != 0 {
-            transient_eval += self.well_column[well];
-        }
-
         if self.bumpiness | self.bumpiness_sq != 0 {
-            let (bump, bump_sq) = bumpiness(&board, well);
+            let (bump, bump_sq) = bumpiness(&board);
             transient_eval += bump * self.bumpiness;
             transient_eval += bump_sq * self.bumpiness_sq;
         }
 
-        if self.cavity_cells | self.cavity_cells_sq |
-                self.overhang_cells | self.overhang_cells_sq != 0 {
+        if self.cavity_cells | self.overhang_cells != 0 {
             let (cavity_cells, overhang_cells) = cavities_and_overhangs(&board);
             transient_eval += self.cavity_cells * cavity_cells;
-            transient_eval += self.cavity_cells_sq * cavity_cells * cavity_cells;
             transient_eval += self.overhang_cells * overhang_cells;
-            transient_eval += self.overhang_cells_sq * overhang_cells * overhang_cells;
         }
 
-        if self.covered_cells | self.covered_cells_sq != 0 {
-            let (covered_cells, covered_cells_sq) = covered_cells(&board);
-            transient_eval += self.covered_cells * covered_cells;
-            transient_eval += self.covered_cells_sq * covered_cells_sq;
+        for y in 0..self.pattern.len() {
+            if self.pattern[y] == *board.get_row(y as i32) {
+                transient_eval += self.pattern_row;
+            } else {
+                break
+            }
         }
 
         Evaluation {
@@ -251,15 +116,12 @@ impl Evaluator for Standard {
 /// The first returned value is the total amount of height change outside of an apparent well. The
 /// second returned value is the sum of the squares of the height changes outside of an apparent
 /// well.
-fn bumpiness(board: &Board, well: usize) -> (i32, i32) {
+fn bumpiness(board: &Board) -> (i32, i32) {
     let mut bumpiness = -1;
     let mut bumpiness_sq = -1;
 
-    let mut prev = if well == 0 { 1 } else { 0 };
+    let mut prev = 0;
     for i in 1..10 {
-        if i == well {
-            continue
-        }
         let dh = (board.column_heights()[prev] - board.column_heights()[i]).abs();
         bumpiness += dh;
         bumpiness_sq += dh * dh;
@@ -577,6 +439,13 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
 struct Cutout {
     lines: usize,
     result: Option<Board>
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+enum TslotKind {
+    Tsd,
+    LeftTst,
+    RightTst
 }
 
 fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {

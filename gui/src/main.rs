@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use ggez::ContextBuilder;
 use ggez::event;
 use ggez::graphics::{ Image };
@@ -11,6 +13,7 @@ mod input;
 mod interface;
 
 use local::LocalGame;
+use crate::input::Keyboard;
 
 pub struct Resources {
     sprites: SpriteBatch,
@@ -71,18 +74,20 @@ fn main() {
             eprintln!("Error loading sound effect for movement: {}", e);
             Err(e)
         }).ok(),
-        stack_touched: audio::Source::new(&mut ctx, "/stack-touched.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for stack touched: {}", e);
-            Err(e)
-        }).ok(),
+        stack_touched: None,
+        // stack_touched: audio::Source::new(&mut ctx, "/stack-touched.ogg").or_else(|e| {
+        //     eprintln!("Error loading sound effect for stack touched: {}", e);
+        //     Err(e)
+        // }).ok(),
         hard_drop: audio::Source::new(&mut ctx, "/hard-drop.ogg").or_else(|e| {
             eprintln!("Error loading sound effect for hard drop: {}", e);
             Err(e)
         }).ok(),
-        tspin: audio::Source::new(&mut ctx, "/tspin.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for T-spin: {}", e);
-            Err(e)
-        }).ok(),
+        tspin: None,
+        // tspin: audio::Source::new(&mut ctx, "/tspin.ogg").or_else(|e| {
+        //     eprintln!("Error loading sound effect for T-spin: {}", e);
+        //     Err(e)
+        // }).ok(),
         line_clear: audio::Source::new(&mut ctx, "/line-clear.ogg").or_else(|e| {
             eprintln!("Error loading sound effect for line clear: {}", e);
             Err(e)
@@ -96,10 +101,17 @@ fn main() {
         }
         None => {
             use bot::evaluation::{ self, Evaluator };
-            use crate::input::*;
+            use crate::input::BotInput;
+            let input = match read_controls() {
+                Ok(controls) => controls,
+                Err(e) => {
+                    eprintln!("An error occured while loading the controls: {}", e);
+                    Keyboard::default()
+                }
+            };
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(|board| {
+                Box::new(move |board| {
                     let evaluator = evaluation::Standard {
                         ..Default::default()
                     };
@@ -111,7 +123,7 @@ fn main() {
                         },
                         evaluator
                     ))), name)
-                    // (Box::new(Keyboard), "Human".to_owned())
+                    // (Box::new(input), "Human".to_owned())
                 }),
                 GameConfig {
                     next_queue_size: 6,
@@ -123,3 +135,17 @@ fn main() {
     }
 }
 
+fn read_controls() -> Result<Keyboard, Box<dyn std::error::Error>> {
+    match std::fs::read_to_string("controls.toml") {
+        Ok(controls) => Ok(toml::from_str(&controls)?),
+        Err(e) => if e.kind() == std::io::ErrorKind::NotFound {
+            let ser = toml::to_string_pretty(&Keyboard::default())?;
+            let mut s = include_str!("control-help").to_owned();
+            s.push_str(&ser);
+            std::fs::write("controls.toml", &s)?;
+            Ok(Keyboard::default())
+        } else {
+            Err(e.into())
+        }
+    }
+}
