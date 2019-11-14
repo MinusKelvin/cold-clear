@@ -272,11 +272,13 @@ fn add_child(
     let lock = board.lock_piece(mv.location);
     if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
         if !lock.placement_kind.is_clear() || lock.placement_kind == PlacementKind::Tspin2 {
-            children.push(Child {
-                tree: Tree::new(board, &lock, mv.inputs.time, mv.location.kind.0, evaluator),
-                hold,
-                mv, lock
-            })
+            if mv.location.kind.0 != Piece::T || lock.placement_kind == PlacementKind::Tspin2 {
+                children.push(Child {
+                    tree: Tree::new(board, &lock, mv.inputs.time, mv.location.kind.0, evaluator),
+                    hold,
+                    mv, lock
+                })
+            }
         }
     }
 }
@@ -353,7 +355,8 @@ impl TreeKind {
         match self {
             TreeKind::Known(children) => {
                 children.retain_mut(|child|
-                    !child.tree.add_next_piece(piece, opts)
+                    !child.tree.add_next_piece(piece, opts) ||
+                        child.lock.placement_kind == PlacementKind::Tspin2
                 );
                 if children.is_empty() {
                     true
@@ -422,7 +425,7 @@ impl TreeKind {
         let index = thread_rng().sample(sampler);
 
         let result = to_expand[index].tree.expand(opts, evaluator);
-        if result.is_death {
+        if result.is_death && to_expand[index].lock.placement_kind != PlacementKind::Tspin2 {
             to_expand.remove(index);
             match self {
                 TreeKind::Known(children) => if children.is_empty() {
@@ -450,6 +453,7 @@ impl TreeKind {
             to_expand.sort_by_key(|c| -c.tree.evaluation);
             ExpandResult {
                 depth: result.depth + 1,
+                is_death: false,
                 ..result
             }
         }

@@ -47,22 +47,22 @@ impl Default for Standard {
             back_to_back: 50,
             bumpiness: -10,
             bumpiness_sq: -5,
-            height: -40,
+            height: -150,
             top_half: 0,
             top_quarter: 0,
-            cavity_cells: -150,
-            cavity_cells_sq: 0,
+            cavity_cells: -50,
+            cavity_cells_sq: -10,
             overhang_cells: -50,
-            overhang_cells_sq: 0,
+            overhang_cells_sq: -10,
             covered_cells: 0,
             covered_cells_sq: 0,
-            tslot: [20, 150, 200, -400],
-            well_depth: 0,
-            max_well_depth: 8,
-            well_column: [30, 0, 10, 50, 40, 40, 60, 10, 0, 30],
+            tslot: [20, 150, 300, -400],
+            well_depth: -150,
+            max_well_depth: 20,
+            well_column: [0, 0, 10, 50, 40, 40, 60, 10, 0, 0],
 
             move_time: -1,
-            wasted_t: -150,
+            wasted_t: -500,
             b2b_clear: 100,
             clear1: -150,
             clear2: -100,
@@ -83,7 +83,7 @@ impl Default for Standard {
 
 impl Evaluator for Standard {
     fn name(&self) -> String {
-        let mut info = "Standard".to_owned();
+        let mut info = "20TSD".to_owned();
         if let Some(extra) = &self.sub_name {
             info.push('\n');
             info.push_str(extra);
@@ -219,7 +219,7 @@ impl Evaluator for Standard {
         }
 
         if self.bumpiness | self.bumpiness_sq != 0 {
-            let (bump, bump_sq) = bumpiness(&board, well);
+            let (bump, bump_sq) = bumpiness(&board, 12);
             transient_eval += bump * self.bumpiness;
             transient_eval += bump_sq * self.bumpiness_sq;
         }
@@ -227,6 +227,7 @@ impl Evaluator for Standard {
         if self.cavity_cells | self.cavity_cells_sq |
                 self.overhang_cells | self.overhang_cells_sq != 0 {
             let (cavity_cells, overhang_cells) = cavities_and_overhangs(&board);
+            let cavity_cells = 0.max(cavity_cells - highest_point+4);
             transient_eval += self.cavity_cells * cavity_cells;
             transient_eval += self.cavity_cells_sq * cavity_cells * cavity_cells;
             transient_eval += self.overhang_cells * overhang_cells;
