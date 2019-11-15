@@ -47,10 +47,10 @@ impl Default for Standard {
             back_to_back: 50,
             bumpiness: -10,
             bumpiness_sq: -5,
-            height: -150,
+            height: -300,
             top_half: 0,
             top_quarter: 0,
-            cavity_cells: -50,
+            cavity_cells: -80,
             cavity_cells_sq: -10,
             overhang_cells: -50,
             overhang_cells_sq: -10,
@@ -227,7 +227,16 @@ impl Evaluator for Standard {
         if self.cavity_cells | self.cavity_cells_sq |
                 self.overhang_cells | self.overhang_cells_sq != 0 {
             let (cavity_cells, overhang_cells) = cavities_and_overhangs(&board);
-            let cavity_cells = 0.max(cavity_cells - highest_point+4);
+            let mut double_holes = 0;
+            for y in 0..40 {
+                if y + double_holes > cavity_cells {
+                    break;
+                }
+                let r = board.get_row(y);
+                let holes = 10 - r.count_ones() as i32;
+                double_holes += 0.max(holes-1);
+            }
+            let cavity_cells = double_holes;
             transient_eval += self.cavity_cells * cavity_cells;
             transient_eval += self.cavity_cells_sq * cavity_cells * cavity_cells;
             transient_eval += self.overhang_cells * overhang_cells;
