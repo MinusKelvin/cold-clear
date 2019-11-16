@@ -11,6 +11,7 @@ use rand::prelude::*;
 use crate::input::InputSource;
 use crate::replay::InfoReplay;
 use std::collections::VecDeque;
+use libflate::deflate;
 
 type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
 
@@ -74,16 +75,18 @@ impl EventHandler for LocalGame<'_> {
         while timer::check_update_time(ctx, 60) {
             let do_update = match self.state {
                 State::GameOver(0) => {
-                    serde_json::to_writer(
-                        std::io::BufWriter::new(
-                            std::fs::File::create("replay.json"
-                        ).unwrap()),
+                    let mut encoder = deflate::Encoder::new(
+                        std::fs::File::create("replay.dat"
+                    ).unwrap());
+                    bincode::serialize_into(
+                        &mut encoder,
                         &InfoReplay {
                             replay: self.battle.replay.clone(),
                             p1_info_updates: self.p1_info_updates.clone(),
                             p2_info_updates: self.p2_info_updates.clone()
                         }
                     ).unwrap();
+                    encoder.finish().unwrap();
 
                     // Don't catch up after pause due to replay saving
                     while timer::check_update_time(ctx, 60) {}

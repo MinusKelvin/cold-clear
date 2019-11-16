@@ -3,4 +3,4 @@
 playout*
 Cargo.lock
 options.yaml
-replay.json
+replay.dat

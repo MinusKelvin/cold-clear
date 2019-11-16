@@ -7,6 +7,7 @@ use crate::Resources;
 use battle::{ Battle, Controller, Replay };
 use std::collections::VecDeque;
 use serde::{ Serialize, Deserialize };
+use libflate::deflate;
 
 pub struct ReplayGame<'a, P> {
     gui: Gui,
@@ -23,8 +24,8 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
     pub fn new(resources: &'a mut Resources, file: P) -> Self {
         let InfoReplay {
             replay, p1_info_updates, p2_info_updates
-        } = serde_json::from_reader(
-            std::io::BufReader::new(std::fs::File::open(file.clone()).unwrap())
+        } = bincode::deserialize_from(
+            deflate::Decoder::new(std::fs::File::open(file.clone()).unwrap())
         ).unwrap();
         let battle = Battle::new(
             replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
@@ -61,7 +62,7 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     loop {
                         match std::fs::File::open(self.file.clone()) {
                             Ok(f) => {
-                                match serde_json::from_reader(std::io::BufReader::new(f)) {
+                                match bincode::deserialize_from(deflate::Decoder::new(f)) {
                                     Ok(r) => {
                                         replay = r;
                                         break
