@@ -7,10 +7,8 @@ use battle::{ Controller, Event, PieceMoveExecutor };
 use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {
-    fn controller(&mut self, ctx: &mut Context) -> Controller;
-    fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event], gamepad: Option<Gamepad>,
-    ) -> Option<bot::Info>;
+    fn controller(&mut self, ctx: &Context, gamepad: Option<Gamepad>) -> Controller;
+    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info>;
 }
 
 pub struct BotInput {
@@ -30,13 +28,11 @@ impl BotInput {
 }
 
 impl InputSource for BotInput {
-    fn controller(&mut self, _: &mut Context) -> Controller {
+    fn controller(&mut self, _: &Context, _: Option<Gamepad>) -> Controller {
         self.controller
     }
 
-    fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event], _: Option<Gamepad>
-    ) -> Option<bot::Info> {
+    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
         for event in events {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
@@ -123,29 +119,37 @@ impl Default for GamepadConfig {
             rotate_right: GamepadControl::Button(Button::East),
             hard_drop: GamepadControl::Button(Button::DPadUp),
             soft_drop: GamepadControl::Button(Button::DPadDown),
-            hold: GamepadControl::PositiveAxis(Axis::LeftStickX)
+            hold: GamepadControl::Button(Button::LeftTrigger)
         }
     }
 }
 
 impl InputSource for UserInput {
-    fn controller(&mut self, ctx: &mut Context) -> Controller {
+    fn controller(&mut self, ctx: &Context, c: Option<Gamepad>) -> Controller {
         Controller {
-            left: is_key_pressed(ctx, self.keyboard.left),
-            right: is_key_pressed(ctx, self.keyboard.right),
-            rotate_left: is_key_pressed(ctx, self.keyboard.rotate_left),
-            rotate_right: is_key_pressed(ctx, self.keyboard.rotate_right),
-            hard_drop: is_key_pressed(ctx, self.keyboard.hard_drop),
-            soft_drop: is_key_pressed(ctx, self.keyboard.soft_drop),
-            hold: is_key_pressed(ctx, self.keyboard.hold),
+            left: read_input(ctx, c, self.keyboard.left, self.gamepad.left),
+            right: read_input(ctx, c, self.keyboard.right, self.gamepad.right),
+            rotate_left: read_input(ctx, c, self.keyboard.rotate_left, self.gamepad.rotate_left),
+            rotate_right: read_input(ctx, c, self.keyboard.rotate_right, self.gamepad.rotate_right),
+            hard_drop: read_input(ctx, c, self.keyboard.hard_drop, self.gamepad.hard_drop),
+            soft_drop: read_input(ctx, c, self.keyboard.soft_drop, self.gamepad.soft_drop),
+            hold: read_input(ctx, c, self.keyboard.hold, self.gamepad.hold),
         }
     }
 
-    fn update(
-        &mut self, _: &Board<ColoredRow>, _: &[Event], gamepad: Option<Gamepad>
-    ) -> Option<bot::Info> {
+    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<bot::Info> {
         None
     }
+}
+
+fn read_input(
+    ctx: &Context, controller: Option<Gamepad>, keyboard: KeyCode, gamepad: GamepadControl
+) -> bool {
+    is_key_pressed(ctx, keyboard) || controller.map_or(false, |c| match gamepad {
+        GamepadControl::Button(button) => c.is_pressed(button),
+        GamepadControl::PositiveAxis(axis) => c.value(axis) > 0.5,
+        GamepadControl::NegativeAxis(axis) => c.value(axis) < -0.5,
+    })
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]

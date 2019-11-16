@@ -128,20 +128,17 @@ impl EventHandler for LocalGame<'_> {
             };
 
             if do_update {
-                let p1_controller = self.p1_input.controller(ctx);
-                let p2_controller = self.p2_input.controller(ctx);
+                let gamepad = self.gamepad.map(|id| gamepad(ctx, id));
+                let p1_controller = self.p1_input.controller(ctx, gamepad);
+                let p2_controller = self.p2_input.controller(ctx, gamepad);
 
                 let update = self.battle.update(p1_controller, p2_controller);
 
                 let p1_info_update = self.p1_input.update(
-                    &self.battle.player_1.board,
-                    &update.player_1.events,
-                    self.gamepad.map(|id| gamepad(ctx, id))
+                    &self.battle.player_1.board, &update.player_1.events,
                 );
                 let p2_info_update = self.p2_input.update(
-                    &self.battle.player_2.board,
-                    &update.player_2.events,
-                    self.gamepad.map(|id| gamepad(ctx, id))
+                    &self.battle.player_2.board, &update.player_2.events
                 );
 
                 self.p1_info_updates.push_back(p1_info_update.clone());
@@ -202,6 +199,12 @@ impl EventHandler for LocalGame<'_> {
 
     fn gamepad_button_down_event(
         &mut self, _: &mut Context, _: ggez::event::Button, id: GamepadId
+    ) {
+        self.gamepad.get_or_insert(id);
+    }
+
+    fn gamepad_axis_event(
+        &mut self, _: &mut Context, _: ggez::event::Axis, _: f32, id: GamepadId
     ) {
         self.gamepad.get_or_insert(id);
     }

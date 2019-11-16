@@ -3,6 +3,7 @@
 # List of gamepad axis names: https://docs.rs/gilrs/0.7.2/gilrs/ev/enum.Axis.html
 # To choose the positive/negative direction of an axis by writing PositiveAxis
 # or NegativeAxis in place of Button.
+# Binding multiple inputs to a single action is currently not possible.
 # The default max_nodes under bot options is the largest valid value.
 # Valid movement modes are ZeroG (default), TwentyG, and HardDropOnly
 # Everything is measured in frames, except for gravity, which is measured in
