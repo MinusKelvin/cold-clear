@@ -33,7 +33,7 @@ pub struct Standard {
     pub mini_tspin1: i32,
     pub mini_tspin2: i32,
     pub perfect_clear: i32,
-    pub combo_table: [i32; 12],
+    pub combo_garbage: i32,
     pub move_time: i32,
     pub wasted_t: i32,
 
@@ -43,41 +43,37 @@ pub struct Standard {
 impl Default for Standard {
     fn default() -> Self {
         Standard {
-            back_to_back: 50,
-            bumpiness: -10,
-            bumpiness_sq: -5,
-            height: -40,
+            back_to_back: 52,
+            bumpiness: -24,
+            bumpiness_sq: -7,
+            height: -39,
             top_half: -150,
-            top_quarter: -500,
-            cavity_cells: -150,
-            cavity_cells_sq: -10,
-            overhang_cells: -50,
-            overhang_cells_sq: -10,
-            covered_cells: -8,
+            top_quarter: -511,
+            cavity_cells: -158,
+            cavity_cells_sq: -7,
+            overhang_cells: -48,
+            overhang_cells_sq: 1,
+            covered_cells: -17,
             covered_cells_sq: -1,
-            tslot: [20, 150, 200, 400],
-            well_depth: 50,
-            max_well_depth: 8,
-            well_column: [30, 0, 10, 50, 40, 40, 60, 10, 0, 30],
+            tslot: [8, 148, 192, 407],
+            well_depth: 57,
+            max_well_depth: 17,
+            well_column: [20, 23, 20, 50, 59, 21, 59, 10, -10, 24],
 
-            move_time: -1,
-            wasted_t: -150,
-            b2b_clear: 100,
-            clear1: -150,
+            move_time: -3,
+            wasted_t: -152,
+            b2b_clear: 104,
+            clear1: -143,
             clear2: -100,
-            clear3: -50,
-            clear4: 400,
-            tspin1: 130,
-            tspin2: 400,
-            tspin3: 600,
-            mini_tspin1: -150,
-            mini_tspin2: -100,
-            perfect_clear: 1000,
-            combo_table: libtetris::COMBO_GARBAGE.iter()
-                .map(|&v| v as i32 * 150)
-                .collect::<ArrayVec<[_; 12]>>()
-                .into_inner()
-                .unwrap(),
+            clear3: -58,
+            clear4: 390,
+            tspin1: 121,
+            tspin2: 410,
+            tspin3: 602,
+            mini_tspin1: -158,
+            mini_tspin2: -93,
+            perfect_clear: 999,
+            combo_garbage: 150,
 
             sub_name: None
         }
@@ -108,7 +104,7 @@ impl Evaluator for Standard {
             }
             if let Some(combo) = lock.combo {
                 let combo = combo.min(11) as usize;
-                acc_eval += self.combo_table[combo];
+                acc_eval += self.combo_garbage * libtetris::COMBO_GARBAGE[combo] as i32;
             }
             match lock.placement_kind {
                 PlacementKind::Clear1 => {
