@@ -228,21 +228,17 @@ impl Game {
                 }
 
                 // Shift
-                if self.used.left {
-                    if falling.piece.shift(&self.board, -1, 0) {
-                        self.used.left = false;
-                        falling.rotation_move_count += 1;
-                        falling.lock_delay = self.config.lock_delay;
-                        events.push(Event::PieceMoved);
-                    }
+                while self.used.left && falling.piece.shift(&self.board, -1, 0) {
+                    self.used.left = self.config.auto_repeat_rate == 0 && self.das_delay == 0;
+                    falling.rotation_move_count += 1;
+                    falling.lock_delay = self.config.lock_delay;
+                    events.push(Event::PieceMoved);
                 }
-                if self.used.right {
-                    if falling.piece.shift(&self.board, 1, 0) {
-                        self.used.right = false;
-                        falling.rotation_move_count += 1;
-                        falling.lock_delay = self.config.lock_delay;
-                        events.push(Event::PieceMoved);
-                    }
+                while self.used.right && falling.piece.shift(&self.board, 1, 0) {
+                    self.used.right = self.config.auto_repeat_rate == 0 && self.das_delay == 0;
+                    falling.rotation_move_count += 1;
+                    falling.lock_delay = self.config.lock_delay;
+                    events.push(Event::PieceMoved);
                 }
 
                 // 15 move lock rule reset
@@ -303,16 +299,18 @@ impl Game {
                     } else if self.config.gravity > self.config.soft_drop_speed as i32 * 100 {
                         // Soft drop
                         if self.used.soft_drop {
-                            if falling.soft_drop_delay == 0 {
+                            while falling.soft_drop_delay == 0 {
                                 falling.piece.shift(&self.board, 0, -1);
                                 falling.soft_drop_delay = self.config.soft_drop_speed;
                                 falling.gravity = self.config.gravity;
                                 events.push(Event::PieceMoved);
+                                events.push(Event::SoftDropped);
                                 if self.board.on_stack(&falling.piece) {
                                     events.push(Event::StackTouched);
+                                    break
                                 }
-                                events.push(Event::SoftDropped);
-                            } else {
+                            }
+                            if falling.soft_drop_delay != 0 {
                                 falling.soft_drop_delay -= 1;
                             }
                         } else {

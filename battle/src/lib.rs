@@ -9,6 +9,7 @@ pub use game::{ Event, Game };
 
 /// Units are in ticks
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GameConfig {
     pub spawn_delay: u32,
     pub line_clear_delay: u32,
@@ -32,8 +33,8 @@ impl Default for GameConfig {
             spawn_delay: 7,
             line_clear_delay: 45,
             delayed_auto_shift: 12,
-            auto_repeat_rate: 1,
-            soft_drop_speed: 1,
+            auto_repeat_rate: 2,
+            soft_drop_speed: 2,
             lock_delay: 30,
             margin_time: None,
             gravity: 4500,

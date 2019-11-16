@@ -1,12 +1,16 @@
 use ggez::Context;
 use ggez::input::keyboard::{ KeyCode, is_key_pressed };
+use ggez::input::gamepad::Gamepad;
+use ggez::event::{ Button, Axis };
 use libtetris::*;
 use battle::{ Controller, Event, PieceMoveExecutor };
 use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {
     fn controller(&mut self, ctx: &mut Context) -> Controller;
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info>;
+    fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event], gamepad: Option<Gamepad>,
+    ) -> Option<bot::Info>;
 }
 
 pub struct BotInput {
@@ -30,7 +34,9 @@ impl InputSource for BotInput {
         self.controller
     }
 
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+    fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event], _: Option<Gamepad>
+    ) -> Option<bot::Info> {
         for event in events {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
@@ -66,8 +72,14 @@ impl InputSource for BotInput {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
-pub struct Keyboard {
+#[derive(Copy, Clone, Serialize, Deserialize, Default, Debug)]
+pub struct UserInput {
+    keyboard: KeyboardConfig,
+    gamepad: GamepadConfig,
+}
+
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+struct KeyboardConfig {
     left: KeyCode,
     right: KeyCode,
     rotate_left: KeyCode,
@@ -77,9 +89,20 @@ pub struct Keyboard {
     hold: KeyCode
 }
 
-impl Default for Keyboard {
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+struct GamepadConfig {
+    left: GamepadControl,
+    right: GamepadControl,
+    rotate_left: GamepadControl,
+    rotate_right: GamepadControl,
+    hard_drop: GamepadControl,
+    soft_drop: GamepadControl,
+    hold: GamepadControl
+}
+
+impl Default for KeyboardConfig {
     fn default() -> Self {
-        Keyboard {
+        KeyboardConfig {
             left: KeyCode::Left,
             right: KeyCode::Right,
             rotate_left: KeyCode::Z,
@@ -91,20 +114,85 @@ impl Default for Keyboard {
     }
 }
 
-impl InputSource for Keyboard {
+impl Default for GamepadConfig {
+    fn default() -> Self {
+        GamepadConfig {
+            left: GamepadControl::Button(Button::DPadLeft),
+            right: GamepadControl::Button(Button::DPadRight),
+            rotate_left: GamepadControl::Button(Button::South),
+            rotate_right: GamepadControl::Button(Button::East),
+            hard_drop: GamepadControl::Button(Button::DPadUp),
+            soft_drop: GamepadControl::Button(Button::DPadDown),
+            hold: GamepadControl::PositiveAxis(Axis::LeftStickX)
+        }
+    }
+}
+
+impl InputSource for UserInput {
     fn controller(&mut self, ctx: &mut Context) -> Controller {
         Controller {
-            left: is_key_pressed(ctx, self.left),
-            right: is_key_pressed(ctx, self.right),
-            rotate_left: is_key_pressed(ctx, self.rotate_left),
-            rotate_right: is_key_pressed(ctx, self.rotate_right),
-            hard_drop: is_key_pressed(ctx, self.hard_drop),
-            soft_drop: is_key_pressed(ctx, self.soft_drop),
-            hold: is_key_pressed(ctx, self.hold),
+            left: is_key_pressed(ctx, self.keyboard.left),
+            right: is_key_pressed(ctx, self.keyboard.right),
+            rotate_left: is_key_pressed(ctx, self.keyboard.rotate_left),
+            rotate_right: is_key_pressed(ctx, self.keyboard.rotate_right),
+            hard_drop: is_key_pressed(ctx, self.keyboard.hard_drop),
+            soft_drop: is_key_pressed(ctx, self.keyboard.soft_drop),
+            hold: is_key_pressed(ctx, self.keyboard.hold),
         }
     }
 
-    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<bot::Info> {
+    fn update(
+        &mut self, _: &Board<ColoredRow>, _: &[Event], gamepad: Option<Gamepad>
+    ) -> Option<bot::Info> {
         None
     }
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+enum GamepadControl {
+    #[serde(with = "ButtonDef")]
+    Button(Button),
+    #[serde(with = "AxisDef")]
+    NegativeAxis(Axis),
+    #[serde(with = "AxisDef")]
+    PositiveAxis(Axis)
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Button")]
+enum ButtonDef {
+    South,
+    East,
+    North,
+    West,
+    C,
+    Z,
+    LeftTrigger,
+    LeftTrigger2,
+    RightTrigger,
+    RightTrigger2,
+    Select,
+    Start,
+    Mode,
+    LeftThumb,
+    RightThumb,
+    DPadUp,
+    DPadDown,
+    DPadLeft,
+    DPadRight,
+    Unknown
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Axis")]
+enum AxisDef {
+    LeftStickX,
+    LeftStickY,
+    LeftZ,
+    RightStickX,
+    RightStickY,
+    RightZ,
+    DPadX,
+    DPadY,
+    Unknown
 }

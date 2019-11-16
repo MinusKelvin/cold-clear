@@ -5,6 +5,7 @@ use serde::{ Serialize, Deserialize };
 use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Standard {
     pub back_to_back: i32,
     pub bumpiness: i32,

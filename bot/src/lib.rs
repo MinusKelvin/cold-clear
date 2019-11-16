@@ -10,14 +10,14 @@ use crate::tree::Tree;
 use crate::moves::{ Move, Placement };
 use crate::evaluation::Evaluator;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Options {
     pub mode: crate::moves::MovementMode,
     pub use_hold: bool,
     pub speculate: bool,
     pub min_nodes: usize,
-    pub max_nodes: usize,
-    pub gamma: (i32, i32)
+    pub max_nodes: usize
 }
 
 impl Default for Options {
@@ -27,8 +27,7 @@ impl Default for Options {
             use_hold: true,
             speculate: true,
             min_nodes: 0,
-            max_nodes: std::usize::MAX,
-            gamma: (1, 1)
+            max_nodes: std::usize::MAX
         }
     }
 }

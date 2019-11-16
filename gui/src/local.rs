@@ -2,6 +2,7 @@ use ggez::event::EventHandler;
 use ggez::{ Context, GameResult };
 use ggez::graphics;
 use ggez::timer;
+use ggez::input::gamepad::{ GamepadId, gamepad };
 use libtetris::Board;
 use battle::{ Battle, GameConfig };
 use crate::interface::{ Gui, text };
@@ -26,7 +27,8 @@ pub struct LocalGame<'a> {
     p2_info_updates: VecDeque<Option<bot::Info>>,
     state: State,
     resources: &'a mut Resources,
-    config: GameConfig
+    config: GameConfig,
+    gamepad: Option<GamepadId>
 }
 
 enum State {
@@ -61,7 +63,8 @@ impl<'a> LocalGame<'a> {
             p2_info_updates: VecDeque::new(),
             state: State::Starting(180),
             resources,
-            config
+            config,
+            gamepad: None
         }
     }
 }
@@ -131,10 +134,14 @@ impl EventHandler for LocalGame<'_> {
                 let update = self.battle.update(p1_controller, p2_controller);
 
                 let p1_info_update = self.p1_input.update(
-                    &self.battle.player_1.board, &update.player_1.events
+                    &self.battle.player_1.board,
+                    &update.player_1.events,
+                    self.gamepad.map(|id| gamepad(ctx, id))
                 );
                 let p2_info_update = self.p2_input.update(
-                    &self.battle.player_2.board, &update.player_2.events
+                    &self.battle.player_2.board,
+                    &update.player_2.events,
+                    self.gamepad.map(|id| gamepad(ctx, id))
                 );
 
                 self.p1_info_updates.push_back(p1_info_update.clone());
@@ -191,5 +198,11 @@ impl EventHandler for LocalGame<'_> {
         graphics::set_window_title(ctx, &format!("Cold Clear (FPS: {:.0})", ggez::timer::fps(ctx)));
 
         graphics::present(ctx)
+    }
+
+    fn gamepad_button_down_event(
+        &mut self, _: &mut Context, _: ggez::event::Button, id: GamepadId
+    ) {
+        self.gamepad.get_or_insert(id);
     }
 }

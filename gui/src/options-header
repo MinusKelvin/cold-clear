@@ -1,0 +1,10 @@
+# List of key names: https://docs.rs/winit/0.19.5/winit/enum.VirtualKeyCode.html
+# List of gamepad button names: https://docs.rs/gilrs/0.7.2/gilrs/ev/enum.Button.html
+# List of gamepad axis names: https://docs.rs/gilrs/0.7.2/gilrs/ev/enum.Axis.html
+# To choose the positive/negative direction of an axis by writing PositiveAxis
+# or NegativeAxis in place of Button.
+# The default max_nodes under bot options is the largest valid value.
+# Valid movement modes are ZeroG (default), TwentyG, and HardDropOnly
+# Everything is measured in frames, except for gravity, which is measured in
+# frames per row times 100.
+# 0 ARR is currently not instant, nor is 0 soft drop speed.

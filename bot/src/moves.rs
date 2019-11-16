@@ -22,7 +22,7 @@ pub struct Move {
     pub hold: bool
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum MovementMode {
     ZeroG,
     ZeroGComplete,

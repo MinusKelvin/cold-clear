@@ -6,6 +6,7 @@ use ggez::graphics::{ Image };
 use ggez::graphics::spritebatch::SpriteBatch;
 use ggez::audio;
 use battle::GameConfig;
+use serde::{ Serialize, Deserialize };
 
 mod common;
 mod local;
@@ -15,7 +16,7 @@ mod replay;
 
 use local::LocalGame;
 use replay::ReplayGame;
-use crate::input::Keyboard;
+use crate::input::UserInput;
 
 pub struct Resources {
     sprites: SpriteBatch,
@@ -104,16 +105,18 @@ fn main() {
         None => {
             use bot::evaluation::{ self, Evaluator };
             use crate::input::BotInput;
-            let input = match read_controls() {
-                Ok(controls) => controls,
+            let Options {
+                controls, bot_options, bot_config, config
+            } = match read_options() {
+                Ok(options) => options,
                 Err(e) => {
-                    eprintln!("An error occured while loading the controls: {}", e);
-                    Keyboard::default()
+                    eprintln!("An error occured while loading options: {}", e);
+                    Options::default()
                 }
             };
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(move |board| {
+                Box::new(move |_| {
                     // let evaluator = evaluation::changed::Standard {
                     //     ..Default::default()
                     // };
@@ -125,42 +128,42 @@ fn main() {
                     //     },
                     //     evaluator
                     // ))), name)
-                    (Box::new(input), "Human".to_owned())
+                    (Box::new(controls), "Human".to_owned())
                 }),
-                Box::new(|board|{
-                    let evaluator = evaluation::Standard {
-                        ..Default::default()
-                    };
-                    let name = format!("Cold Clear\n{}", evaluator.name());
+                Box::new(move |board| {
+                    let name = format!("Cold Clear\n{}", bot_config.name());
                     (Box::new(BotInput::new(bot::Interface::launch(
                         board,
-                        bot::Options {
-                            ..Default::default()
-                        },
-                        evaluator
+                        bot_options,
+                        bot_config.clone()
                     ))), name)
                 }),
-                GameConfig {
-                    next_queue_size: 6,
-                    ..Default::default()
-                }
+                config
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }
     }
 }
 
-fn read_controls() -> Result<Keyboard, Box<dyn std::error::Error>> {
-    match std::fs::read_to_string("controls.toml") {
-        Ok(controls) => Ok(toml::from_str(&controls)?),
+fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
+    match std::fs::read_to_string("options.yaml") {
+        Ok(options) => Ok(serde_yaml::from_str(&options)?),
         Err(e) => if e.kind() == std::io::ErrorKind::NotFound {
-            let ser = toml::to_string_pretty(&Keyboard::default())?;
-            let mut s = include_str!("control-help").to_owned();
+            let ser = serde_yaml::to_string(&Options::default())?;
+            let mut s = include_str!("options-header").to_owned();
             s.push_str(&ser);
-            std::fs::write("controls.toml", &s)?;
-            Ok(Keyboard::default())
+            std::fs::write("options.yaml", &s)?;
+            Ok(Options::default())
         } else {
             Err(e.into())
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+struct Options {
+    controls: UserInput,
+    config: GameConfig,
+    bot_config: bot::evaluation::Standard,
+    bot_options: bot::Options
 }
