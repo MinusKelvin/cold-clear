@@ -8,4 +8,4 @@
 # Valid movement modes are ZeroG (default), TwentyG, and HardDropOnly
 # Everything is measured in frames, except for gravity, which is measured in
 # frames per row times 100.
-# 0 ARR is currently not instant, nor is 0 soft drop speed.
+# 0 ARR and 0 soft drop speed are both instant.
