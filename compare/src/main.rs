@@ -18,7 +18,7 @@ fn main() {
 
     let (send, recv) = std::sync::mpsc::channel();
 
-    for _ in 0..2 {
+    for _ in 0..12 {
         let p1_eval = p1_eval.clone();
         let p2_eval = p2_eval.clone();
         let send = send.clone();
@@ -32,7 +32,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 3000;
+    let games = 5000;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
@@ -59,7 +59,8 @@ fn main() {
 
 fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
     let mut battle = Battle::new(
-        Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+        Default::default(), Default::default(),
+        thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
     battle.replay.p1_name = format!("Cold Clear\n{}", p1.name());

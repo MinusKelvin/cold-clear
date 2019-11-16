@@ -10,7 +10,7 @@ pub struct BotInput<E: Evaluator> {
     bot: bot::BotState<E>
 }
 
-const THINK_AMOUNT: Duration = Duration::from_millis(2);
+const THINK_AMOUNT: Duration = Duration::from_millis(4);
 
 impl<E: Evaluator> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {

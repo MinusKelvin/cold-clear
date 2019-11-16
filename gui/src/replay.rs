@@ -28,7 +28,9 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
             deflate::Decoder::new(std::fs::File::open(file.clone()).unwrap())
         ).unwrap();
         let battle = Battle::new(
-            replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
+            replay.p1_config, replay.p2_config,
+            replay.p1_seed, replay.p2_seed,
+            replay.garbage_seed
         );
         ReplayGame {
             gui: Gui::new(&battle, replay.p1_name, replay.p2_name),
@@ -75,7 +77,9 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     }
                     let InfoReplay { replay, p1_info_updates, p2_info_updates } = replay;
                     let battle = Battle::new(
-                        replay.config, replay.p1_seed, replay.p2_seed, replay.garbage_seed
+                        replay.p1_config, replay.p2_config,
+                        replay.p1_seed, replay.p2_seed,
+                        replay.garbage_seed
                     );
                     self.gui = Gui::new(&battle, replay.p1_name, replay.p2_name);
                     self.battle = battle;

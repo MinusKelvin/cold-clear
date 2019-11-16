@@ -106,7 +106,7 @@ fn main() {
             use bot::evaluation::{ self, Evaluator };
             use crate::input::BotInput;
             let Options {
-                controls, bot_options, bot_config, config
+                controls, bot_options, bot_config, p1_config, p2_config
             } = match read_options() {
                 Ok(options) => options,
                 Err(e) => {
@@ -138,7 +138,7 @@ fn main() {
                         bot_config.clone()
                     ))), name)
                 }),
-                config
+                p1_config, p2_config
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }
@@ -163,7 +163,8 @@ fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Options {
     controls: UserInput,
-    config: GameConfig,
+    p1_config: GameConfig,
+    p2_config: GameConfig,
     bot_config: bot::evaluation::Standard,
     bot_options: bot::Options
 }

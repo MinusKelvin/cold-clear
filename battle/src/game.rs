@@ -122,6 +122,10 @@ impl Game {
 
         match self.state {
             GameState::SpawnDelay(0) => {
+                let mut events = vec![];
+                if self.config.spawn_delay == 0 {
+                    events.push(Event::FrameBeforePieceSpawns);
+                }
                 let next_piece = self.board.advance_queue().unwrap();
                 let new_piece = self.board.generate_next_piece(piece_rng);
                 self.board.add_next_piece(new_piece);
@@ -136,14 +140,13 @@ impl Game {
                     });
                     let mut ghost = spawned;
                     ghost.sonic_drop(&self.board);
-                    vec![
-                        Event::PieceSpawned { new_in_queue: new_piece },
-                        Event::PieceFalling(spawned, ghost)
-                    ]
+                    events.push(Event::PieceSpawned { new_in_queue: new_piece });
+                    events.push(Event::PieceFalling(spawned, ghost));
                 } else {
                     self.state = GameState::GameOver;
-                    vec![Event::GameOver]
+                    events.push(Event::GameOver);
                 }
+                events
             }
             GameState::SpawnDelay(ref mut delay) => {
                 *delay -= 1;

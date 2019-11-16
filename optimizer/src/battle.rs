@@ -75,7 +75,8 @@ impl<E: Evaluator> BotInput<E> {
 
 pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
-        Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+        Default::default(), Default::default(),
+        thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
     battle.replay.p1_name = format!("Cold Clear\n{}", p1.name());

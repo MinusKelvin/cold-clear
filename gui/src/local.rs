@@ -28,7 +28,8 @@ pub struct LocalGame<'a> {
     p2_info_updates: VecDeque<Option<bot::Info>>,
     state: State,
     resources: &'a mut Resources,
-    config: GameConfig,
+    p1_config: GameConfig,
+    p2_config: GameConfig,
     gamepad: Option<GamepadId>
 }
 
@@ -43,10 +44,10 @@ impl<'a> LocalGame<'a> {
         resources: &'a mut Resources,
         p1: Box<InputFactory>,
         p2: Box<InputFactory>,
-        config: GameConfig
+        p1_config: GameConfig, p2_config: GameConfig
     ) -> Self {
         let mut battle = Battle::new(
-            config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+            p1_config, p2_config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
         let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
         let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
@@ -64,7 +65,7 @@ impl<'a> LocalGame<'a> {
             p2_info_updates: VecDeque::new(),
             state: State::Starting(180),
             resources,
-            config,
+            p1_config, p2_config,
             gamepad: None
         }
     }
@@ -92,7 +93,7 @@ impl EventHandler for LocalGame<'_> {
                     while timer::check_update_time(ctx, 60) {}
 
                     self.battle = Battle::new(
-                        self.config,
+                        self.p1_config, self.p2_config,
                         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
                     );
 
