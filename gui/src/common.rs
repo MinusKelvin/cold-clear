@@ -326,11 +326,11 @@ impl BoardDrawState {
                 None
             );
             queue_text(
-                ctx, &text("Eval", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
+                ctx, &text("O. Rank", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
             );
             queue_text(
                 ctx,
-                &text(format!("{}", info.evaluation), scale*0.66, -3.5*scale),
+                &text(format!("{}", info.original_rank), scale*0.66, -3.5*scale),
                 [text_x-0.75*scale, y + 3.4*scale],
                 None
             );

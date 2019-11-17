@@ -216,7 +216,7 @@ impl<E: Evaluator> BotState<E> {
             self.tree.get_plan(&mut plan);
             let info = Info {
                 nodes: self.tree.child_nodes,
-                evaluation: child.tree.evaluation,
+                original_rank: child.original_rank,
                 depth: child.tree.depth + 1,
                 plan
             };
@@ -244,7 +244,7 @@ impl<E: Evaluator> BotState<E> {
                 let mut plan = vec![(child.mv.clone(), child.lock.clone())];
                 child.tree.get_plan(&mut plan);
                 let info = Info {
-                    evaluation: child.tree.evaluation,
+                    original_rank: child.original_rank,
                     nodes: moves_considered,
                     depth: child.tree.depth+1,
                     plan
@@ -313,6 +313,6 @@ fn run(
 pub struct Info {
     pub nodes: usize,
     pub depth: usize,
-    pub evaluation: i32,
+    pub original_rank: usize,
     pub plan: Vec<(Placement, LockResult)>
 }

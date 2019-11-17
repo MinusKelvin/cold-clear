@@ -27,6 +27,7 @@ pub struct Child {
     pub hold: bool,
     pub mv: Placement,
     pub lock: LockResult,
+    pub original_rank: usize,
     pub tree: Tree
 }
 
@@ -256,6 +257,9 @@ fn new_children(
     }
 
     children.sort_by_key(|child| -child.tree.evaluation);
+    for (i, child) in children.iter_mut().enumerate() {
+        child.original_rank = i;
+    }
     children
 }
 
@@ -269,8 +273,8 @@ fn add_child(
     if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
         children.push(Child {
             tree: Tree::new(board, &lock, mv.inputs.time, mv.location.kind.0, evaluator),
-            hold,
-            mv, lock
+            original_rank: 0,
+            hold, mv, lock
         })
     }
 }
