@@ -1,5 +1,5 @@
-use libtetris::{ Board, ColoredRow, FallingPiece };
-use battle::{ Controller, Event, PieceMoveExecutor };
+use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
+use battle::{ Event, PieceMoveExecutor };
 use std::time::{ Instant, Duration };
 use bot::evaluation::Evaluator;
 

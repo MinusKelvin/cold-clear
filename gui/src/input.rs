@@ -3,7 +3,7 @@ use ggez::input::keyboard::{ KeyCode, is_key_pressed };
 use ggez::input::gamepad::Gamepad;
 use ggez::event::{ Button, Axis };
 use libtetris::*;
-use battle::{ Controller, Event, PieceMoveExecutor };
+use battle::{ Event, PieceMoveExecutor };
 use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {

@@ -2,7 +2,8 @@ use rand_pcg::Pcg64Mcg;
 use rand::prelude::*;
 use std::collections::VecDeque;
 use serde::{ Serialize, Deserialize };
-use crate::{ Game, GameConfig, Controller, Event };
+use crate::{ Game, GameConfig, Event };
+use libtetris::Controller;
 
 pub struct Battle {
     pub player_1: Game,

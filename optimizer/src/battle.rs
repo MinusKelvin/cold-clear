@@ -1,5 +1,5 @@
-use libtetris::{ Board, ColoredRow, FallingPiece };
-use battle::{ Battle, Replay, Controller, Event, PieceMoveExecutor };
+use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
+use battle::{ Battle, Replay, Event, PieceMoveExecutor };
 use bot::evaluation::Evaluator;
 use rand::prelude::*;
 use serde::{ Serialize, Deserialize };

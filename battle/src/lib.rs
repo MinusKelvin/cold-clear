@@ -3,7 +3,7 @@ use serde::{ Serialize, Deserialize };
 mod battle;
 pub use battle::{ Battle, BattleUpdate, PlayerUpdate, Replay };
 mod controller;
-pub use controller::{ Controller, PieceMoveExecutor };
+pub use controller::PieceMoveExecutor;
 mod game;
 pub use game::{ Event, Game };
 

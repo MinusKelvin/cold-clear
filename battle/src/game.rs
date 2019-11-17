@@ -1,7 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use rand::prelude::*;
-use crate::{ Controller, GameConfig };
+use crate::GameConfig;
 
 pub struct Game {
     pub board: Board<ColoredRow>,
