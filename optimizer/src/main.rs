@@ -1,6 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use bot::evaluation::Standard;
 use rand::prelude::*;
+use libflate::deflate;
 
 mod battle;
 mod mutate;
@@ -21,9 +22,11 @@ fn main() {
     let (replay_saver, recv) = crossbeam_channel::unbounded();
     let replay_save_thread = std::thread::spawn(move || {
         while let Ok(replay) = recv.recv() {
-            if let Ok(f) = std::fs::File::create("recent-game.json") {
-                serde_json::to_writer(std::io::BufWriter::new(f), &replay).ok();
-            }
+            let mut encoder = deflate::Encoder::new(
+                std::fs::File::create("recent-game.dat"
+            ).unwrap());
+            bincode::serialize_into(&mut encoder, &replay).unwrap();
+            encoder.finish().unwrap();
         }
     });
 

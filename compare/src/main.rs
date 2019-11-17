@@ -4,6 +4,7 @@ use battle::{ Replay, Battle };
 use bot::evaluation::Evaluator;
 use rand::prelude::*;
 use statrs::distribution::{ Binomial, Univariate };
+use libflate::deflate;
 
 mod input;
 use input::BotInput;
@@ -32,7 +33,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 5000;
+    let games = 2500;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
@@ -43,8 +44,11 @@ fn main() {
                     p2_wins += 1;
                 }
 
-                let f = std::fs::File::create("recent-game.json").unwrap();
-                serde_json::to_writer(std::io::BufWriter::new(f), &replay).unwrap();
+                let mut encoder = deflate::Encoder::new(
+                    std::fs::File::create("recent-game.dat"
+                ).unwrap());
+                bincode::serialize_into(&mut encoder, &replay).unwrap();
+                encoder.finish().unwrap();
 
                 println!("{} of {}", p1_wins + p2_wins, games);
                 println!("{} - {}", p1_wins, p2_wins);
