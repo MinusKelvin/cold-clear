@@ -516,12 +516,13 @@ impl TstTwist {
 /// That is, if looks for these with sky above:
 /// 
 /// ```
-/// []....    ....[]
-/// ......    ......
-/// ..[]        []..
-/// ....        ....
-/// ..            ..
+/// []....{}    {}....[]
+/// ......{}    {}......
+/// ..[]            []..
+/// ....            ....
+/// ..                ..
 /// ```
+/// where the `{}` have the same occupied state
 fn tst_twist(board: &Board) -> Option<TstTwist> {
     for (x, hs) in board.column_heights().windows(3).enumerate() {
         let x = x as i32;
@@ -535,7 +536,8 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
                 !board.occupied(x, middle_h-1) &&
                 !board.occupied(x, middle_h-2) &&
                 !board.occupied(x+1, middle_h-2) &&
-                !board.occupied(x, middle_h-3);
+                !board.occupied(x, middle_h-3) &&
+                board.occupied(x+3, middle_h) == board.occupied(x+3, middle_h+1);
             if is_tst_slot {
                 return Some(TstTwist {
                     point_left: false,
@@ -557,7 +559,8 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
                 !board.occupied(x+2, middle_h-1) &&
                 !board.occupied(x+2, middle_h-2) &&
                 !board.occupied(x+1, middle_h-2) &&
-                !board.occupied(x+2, middle_h-3);
+                !board.occupied(x+2, middle_h-3) &&
+                board.occupied(x-1, middle_h) == board.occupied(x-1, middle_h+1);
             if is_tst_slot {
                 return Some(TstTwist {
                     point_left: true,
