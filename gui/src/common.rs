@@ -97,7 +97,7 @@ impl BoardDrawState {
                     self.statistics.update(&locked);
                     if hard_drop_distance.is_some() {
                         let mut particles = vec![];
-                        for (x, y, _) in piece.cells() {
+                        for &(x, y, _) in &piece.cells() {
                             if y == 0 || self.board[y as usize - 1].get(x as usize) {
                                 for i in 0..5 {
                                     let r: f32 = thread_rng().gen();
@@ -109,7 +109,7 @@ impl BoardDrawState {
                         }
                         self.hard_drop_particles = Some((5, particles));
                     }
-                    for (x, y, _) in piece.cells() {
+                    for &(x, y, _) in &piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
                     if locked.cleared_lines.is_empty() {
@@ -207,12 +207,12 @@ impl BoardDrawState {
         // Draw either the falling piece or the line clear animation
         match self.state {
             State::Falling(piece, ghost) => {
-                for (x,y,_) in ghost.cells() {
+                for &(x,y,_) in &ghost.cells() {
                     sprites.add(draw_tile(
                         x+3, y, 2, 0, cell_color_to_color(piece.kind.0.color())
                     ));
                 }
-                for (x,y,_) in piece.cells() {
+                for &(x,y,_) in &piece.cells() {
                     sprites.add(draw_tile(
                         x+3, y, 1, 0, cell_color_to_color(piece.kind.0.color())
                     ));
@@ -373,7 +373,7 @@ impl BoardDrawState {
                     y_map[i] = i as i32;
                 }
                 for (placement, lock) in &info.plan {
-                    for (x, y, d) in placement.location.cells() {
+                    for &(x, y, d) in &placement.location.cells() {
                         let (tx, ty) = dir_to_tile(d);
                         sprites.add(draw_tile(
                             x+3, y_map[y as usize],
