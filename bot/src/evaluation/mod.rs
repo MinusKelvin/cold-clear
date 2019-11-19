@@ -5,8 +5,6 @@ pub use self::misalike::Misalike;
 mod standard;
 pub use self::standard::Standard;
 pub mod changed;
-mod pattern_builder;
-pub use self::pattern_builder::PatternBuilder;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Evaluation {
