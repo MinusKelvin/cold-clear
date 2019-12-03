@@ -271,8 +271,9 @@ fn add_child(
             board.column_heights().iter().all(|&y| y < 18);
     let lock = board.lock_piece(mv.location);
     if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
+        let move_time = mv.inputs.time + if hold { 1 } else { 0 };
         children.push(Child {
-            tree: Tree::new(board, &lock, mv.inputs.time, mv.location.kind.0, evaluator),
+            tree: Tree::new(board, &lock, move_time, mv.location.kind.0, evaluator),
             original_rank: 0,
             hold, mv, lock
         })
