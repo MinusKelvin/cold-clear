@@ -1,6 +1,6 @@
 use libtetris::{ Board, FallingPiece, Piece, RotationState, TspinStatus, PieceMovement };
 use arrayvec::ArrayVec;
-use std::collections::{ HashMap, HashSet, VecDeque, hash_map::Entry };
+use std::collections::{ HashMap, HashSet, hash_map::Entry };
 use serde::{ Serialize, Deserialize };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -37,7 +37,7 @@ pub fn find_moves(
 ) -> Vec<Placement> {
     let mut locks = HashMap::with_capacity(1024);
     let mut checked = HashSet::with_capacity(1024);
-    let mut check_queue = VecDeque::new();
+    let mut check_queue = vec![];
     let fast_mode;
 
     if board.column_heights().iter().all(|&v| v < 16) {
@@ -68,7 +68,7 @@ pub fn find_moves(
                 if mode != MovementMode::TwentyG {
                     inputs.time += 2 * (orig_y - place.y) as u32;
                 }
-                check_queue.push_back((inputs, place));
+                check_queue.push(Placement { inputs, location: place });
             }
         }
     } else {
@@ -79,10 +79,20 @@ pub fn find_moves(
             movements.push(PieceMovement::SonicDrop);
         }
         checked.insert(spawned);
-        check_queue.push_back((InputList { movements, time: 0 }, spawned));
+        check_queue.push(Placement {
+            inputs: InputList { movements, time: 0 },
+            location: spawned
+        });
     }
 
-    while let Some((moves, position)) = check_queue.pop_front() {
+    fn next(q: &mut Vec<Placement>) -> Option<Placement> {
+        q.sort_by_key(|p| std::u32::MAX-p.inputs.time);
+        q.pop()
+    }
+
+    while let Some(placement) = next(&mut check_queue) {
+        let moves = placement.inputs;
+        let position = placement.location;
         if !moves.movements.is_full() {
             attempt(
                 board, &moves, position,
@@ -178,7 +188,7 @@ fn attempt(
     moves: &InputList,
     mut piece: FallingPiece,
     checked: &mut HashSet<FallingPiece>,
-    check_queue: &mut VecDeque<(InputList, FallingPiece)>,
+    check_queue: &mut Vec<Placement>,
     mode: MovementMode,
     fast_mode: bool,
     input: PieceMovement,
@@ -219,7 +229,7 @@ fn attempt(
                     moves.movements.push(PieceMovement::SonicDrop);
                 }
                 if !(mode == MovementMode::HardDropOnly && input == PieceMovement::SonicDrop) {
-                    check_queue.push_back((moves, piece));
+                    check_queue.push(Placement { inputs: moves, location: piece });
                 }
             }
         }
