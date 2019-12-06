@@ -183,6 +183,8 @@ impl Evaluator for Standard {
                 } else {
                     break
                 }
+            } else if let Some(twist) = fin_to_win(&board) {
+                cutout_tslot(board.clone(), twist.piece())
             } else {
                 break
             };
@@ -573,6 +575,56 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
                     ) >= 2
                 });
             }
+        }
+    }
+    None
+}
+
+/// Finds this thing:
+/// ```
+/// ....[][]
+/// ........
+///   ......[]
+///   []....
+///     []..[]
+/// ```
+/// and the mirror version, with sky above.
+fn fin_to_win(board: &Board) -> Option<TstTwist> {
+    for x in 0..7 {
+        // left-pointing fin
+        let h = board.column_heights()[x as usize + 1];
+        if board.column_heights()[x as usize] <= h+1 &&
+                board.occupied(x+1, h-1) &&
+                board.occupied(x+2, h+2) && board.occupied(x+2, h-2) &&
+                board.occupied(x+3, h+2) &&
+                board.occupied(x+4, h) && board.occupied(x+4, h-2) &&
+                !board.occupied(x+2, h+1) && !board.occupied(x+3, h+1) &&
+                !board.occupied(x+2, h) && !board.occupied(x+3, h) &&
+                !board.occupied(x+2, h-1) && !board.occupied(x+3, h-1) &&
+                !board.occupied(x+3, h-2) {
+            return Some(TstTwist {
+                point_left: true,
+                is_tslot: true,
+                x: x+3,
+                y: h-1
+            });
+        }
+        // right-pointing fin
+        let h = board.column_heights()[x as usize + 2];
+        if board.column_heights()[x as usize + 3] <= h+1 &&
+                board.occupied(x, h+2) && board.occupied(x+1, h+2) &&
+                board.occupied(x+1, h-2) && board.occupied(x+2, h-1) &&
+                board.occupied(x-1, h) && board.occupied(x-1, h-2) &&
+                !board.occupied(x, h+1) && !board.occupied(x+1, h+1) &&
+                !board.occupied(x, h) && !board.occupied(x+1, h) &&
+                !board.occupied(x, h-1) && !board.occupied(x+1, h-1) &&
+                !board.occupied(x, h-2) {
+            return Some(TstTwist {
+                point_left: false,
+                is_tslot: true,
+                x,
+                y: h-1
+            });
         }
     }
     None
