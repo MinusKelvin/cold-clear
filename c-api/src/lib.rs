@@ -72,7 +72,7 @@ struct CCMove {
     movements: [CCMovement; 32],
     nodes: u32,
     depth: u32,
-    evaluation: i32,
+    original_rank: u32,
 }
 
 #[repr(C)]
@@ -101,6 +101,7 @@ struct CCWeights {
     tslot: [i32; 4],
     well_depth: i32,
     max_well_depth: i32,
+    well_column: [i32; 10],
 
     b2b_clear: i32,
     clear1: i32,
@@ -113,8 +114,9 @@ struct CCWeights {
     mini_tspin1: i32,
     mini_tspin2: i32,
     perfect_clear: i32,
-    combo_table: [i32; 12],
+    combo_garbage: i32,
     move_time: i32,
+    wasted_t: i32,
 }
 
 #[no_mangle]
@@ -145,6 +147,7 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             tslot: weights.tslot,
             well_depth: weights.well_depth,
             max_well_depth: weights.max_well_depth,
+            well_column: weights.well_column,
 
             b2b_clear: weights.b2b_clear,
             clear1: weights.clear1,
@@ -157,8 +160,9 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             mini_tspin1: weights.mini_tspin1,
             mini_tspin2: weights.mini_tspin2,
             perfect_clear: weights.perfect_clear,
-            combo_table: weights.combo_table,
+            combo_garbage: weights.combo_garbage,
             move_time: weights.move_time,
+            wasted_t: weights.wasted_t,
 
             sub_name: None
         }
@@ -192,7 +196,7 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> bool {
     if let Some((m, info)) = bot.poll_next_move() {
         let mut expected_x = [0; 4];
         let mut expected_y = [0; 4];
-        for (i, (x, y, _)) in m.expected_location.cells().into_iter().enumerate() {
+        for (i, &(x, y, _)) in m.expected_location.cells().iter().enumerate() {
             expected_x[i] = x as u8;
             expected_y[i] = y as u8;
         }
@@ -208,7 +212,7 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> bool {
             movements,
             nodes: info.nodes as u32,
             depth: info.depth as u32,
-            evaluation: info.evaluation,
+            original_rank: info.original_rank as u32,
         };
         true
     } else {
@@ -252,6 +256,7 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
         tslot: w.tslot,
         well_depth: w.well_depth,
         max_well_depth: w.max_well_depth,
+        well_column: w.well_column,
 
         b2b_clear: w.b2b_clear,
         clear1: w.clear1,
@@ -264,7 +269,8 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
         mini_tspin1: w.mini_tspin1,
         mini_tspin2: w.mini_tspin2,
         perfect_clear: w.perfect_clear,
-        combo_table: w.combo_table,
+        combo_garbage: w.combo_garbage,
         move_time: w.move_time,
+        wasted_t: w.wasted_t
     }
 }
