@@ -1,12 +1,14 @@
 use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
+use std::sync::{ Arc, Mutex };
 use serde::{ Serialize, Deserialize };
+use enum_map::EnumMap;
 
 pub mod evaluation;
 pub mod moves;
 mod tree;
 
 use libtetris::*;
-use crate::tree::Tree;
+use crate::tree::{ ChildData, TreeState };
 use crate::moves::{ Move, Placement };
 use crate::evaluation::Evaluator;
 
@@ -17,7 +19,8 @@ pub struct Options {
     pub use_hold: bool,
     pub speculate: bool,
     pub min_nodes: usize,
-    pub max_nodes: usize
+    pub max_nodes: usize,
+    pub threads: usize
 }
 
 impl Default for Options {
@@ -27,7 +30,8 @@ impl Default for Options {
             use_hold: true,
             speculate: true,
             min_nodes: 0,
-            max_nodes: std::usize::MAX
+            max_nodes: std::usize::MAX,
+            threads: 1
         }
     }
 }
@@ -144,24 +148,20 @@ enum BotMsg {
         combo: u32
     },
     NewPiece(Piece),
-    NextMove,
-    PrepareNextMove
+    NextMove
 }
 
 pub struct BotState<E: Evaluator> {
-    tree: Tree,
+    tree: Mutex<Option<TreeState>>,
     options: Options,
-    dead: bool,
     eval: E,
 }
 
 impl<E: Evaluator> BotState<E> {
     pub fn new(board: Board, options: Options, eval: E) -> Self {
+        let tree = Mutex::new(Some(TreeState::create(board, options.use_hold)));
         BotState {
-            dead: false,
-            tree: Tree::starting(board),
-            options,
-            eval
+            tree, options, eval
         }
     }
 
@@ -169,103 +169,202 @@ impl<E: Evaluator> BotState<E> {
     /// 
     /// Returns true if a thinking cycle was performed. If a thinking cycle was not performed,
     /// calling this function again will not perform a thinking cycle either.
-    pub fn think(&mut self) -> bool {
-        if self.tree.child_nodes < self.options.max_nodes &&
-                self.tree.board.next_queue().count() > 0 &&
-                !self.dead {
-            if self.tree.extend(self.options, &self.eval) {
-                self.dead = true;
+    pub fn think(&self) -> Option<bool> {
+        loop {
+            let mut lock = self.tree.lock().unwrap();
+            let tree = lock.as_mut()?;
+            if tree.nodes < self.options.max_nodes && !tree.is_dead() {
+                if let Some((node, board)) = tree.find_and_mark_leaf() {
+                    drop(lock);
+                    self.generate_children(node, board);
+                    return Some(true)
+                } else {
+                    drop(lock);
+                    std::thread::yield_now();
+                }
+            } else {
+                return Some(false)
             }
+        }
+    }
+
+    fn generate_children(&self, node: tree::NodeId, board: Board) {
+        if let Err(possibilities) = board.get_next_piece() {
+            // Next unknown (implies hold is known) => Speculate
+            if self.options.speculate {
+                let mut children = EnumMap::new();
+                for p in possibilities {
+                    let mut b = board.clone();
+                    b.add_next_piece(p);
+                    children[p] = Some(self.make_children(b));
+                }
+                if let Some(tree) = self.tree.lock().unwrap().as_mut() {
+                    tree.update_speculated(node, children);
+                }
+            } else {
+                if let Some(tree) = self.tree.lock().unwrap().as_mut() {
+                    tree.unmark(node);
+                }
+            }
+        } else {
+            if self.options.use_hold && board.hold_piece.or(board.get_next_next_piece()).is_none() {
+                // Next known, hold unknown => Speculate
+                if self.options.speculate {
+                    let mut children = EnumMap::new();
+                    let possibilities = {
+                        let mut b = board.clone();
+                        b.advance_queue();
+                        b.get_next_piece().unwrap_err()
+                    };
+                    for p in possibilities {
+                        let mut b = board.clone();
+                        b.add_next_piece(p);
+                        children[p] = Some(self.make_children(b));
+                    }
+                    if let Some(tree) = self.tree.lock().unwrap().as_mut() {
+                        tree.update_speculated(node, children);
+                    }
+                } else {
+                    if let Some(tree) = self.tree.lock().unwrap().as_mut() {
+                        tree.unmark(node);
+                    }
+                }
+            } else {
+                // Next and hold known
+                let children = self.make_children(board);
+                if let Some(tree) = self.tree.lock().unwrap().as_mut() {
+                    tree.update_known(node, children);
+                }
+            }
+        }
+    }
+
+    fn make_children(&self, mut board: Board) -> Vec<ChildData> {
+        let mut children = vec![];
+
+        let next = board.advance_queue().unwrap();
+        let spawned = match FallingPiece::spawn(next, &board) {
+            Some(spawned) => spawned,
+            None => return children
+        };
+
+        self.add_children(&mut children, &board, spawned, false);
+
+        if self.options.use_hold {
+            let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
+            if hold == next {
+                return children
+            }
+            let spawned = match FallingPiece::spawn(hold, &board) {
+                Some(spawned) => spawned,
+                None => return children
+            };
+        
+            self.add_children(&mut children, &board, spawned, true);
+        }
+
+        children
+    }
+
+    fn add_children(
+        &self, children: &mut Vec<ChildData>, board: &Board, spawned: FallingPiece, hold: bool
+    ) {
+        for mv in moves::find_moves(&board, spawned, self.options.mode) {
+            let can_be_hd = board.above_stack(&mv.location) &&
+            board.column_heights().iter().all(|&y| y < 18);
+            let mut result = board.clone();
+            let lock = result.lock_piece(mv.location);
+            // Don't add deaths by lock out, don't add useless mini tspins
+            if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
+                let move_time = mv.inputs.time + if hold { 1 } else { 0 };
+                let evaluated = self.eval.evaluate(&lock, &result, move_time, spawned.kind.0);
+                children.push(ChildData {
+                    accumulated: evaluated.accumulated,
+                    evaluation: evaluated.transient,
+                    board: result,
+                    hold,
+                    mv: mv.location,
+                    lock,
+                });
+            }
+        }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        let lock = self.tree.lock().unwrap();
+        lock.as_ref().map_or(false, |t| t.is_dead())
+    }
+
+    /// Adds a new piece to the queue.
+    pub fn add_next_piece(&self, piece: Piece) {
+        let mut lock = self.tree.lock().unwrap();
+        if let Some(ref mut tree) = *lock {
+            tree.add_next_piece(piece);
+        }
+    }
+
+    pub fn reset(&self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
+        let mut lock = self.tree.lock().unwrap();
+        if let Some(ref mut tree) = *lock {
+            tree.reset(field, b2b, combo);
+        }
+    }
+
+    pub fn min_thinking_reached(&self) -> bool {
+        self.tree.lock().unwrap().as_ref().map_or(true, |t| t.nodes > self.options.min_nodes)
+    }
+
+    pub fn next_move(&self, f: impl FnOnce(Move, Info)) -> bool {
+        let mut lock = self.tree.lock().unwrap();
+        if let Some(ref mut tree) = *lock {
+            if tree.nodes < self.options.min_nodes {
+                return false
+            }
+
+            let child = if let Some(child) = tree.best_move() {
+                child
+            } else {
+                return false
+            };
+
+            let mut plan = vec![(child.mv, child.lock.clone())];
+            let mut next = child.node;
+            while let Some(Some(tree::Children::Known(children))) = tree.get_children(next) {
+                let child = &children[0];
+                plan.push((child.mv, child.lock.clone()));
+                next = child.node;
+            }
+
+            let info = Info {
+                nodes: tree.nodes,
+                depth: tree.depth(),
+                original_rank: child.original_rank,
+                plan,
+            };
+
+            let inputs = moves::find_moves(
+                &tree.board,
+                FallingPiece::spawn(child.mv.kind.0, &tree.board).unwrap(),
+                self.options.mode
+            ).into_iter().find(|p| p.location == child.mv).unwrap().inputs;
+            let mv = Move {
+                hold: child.hold,
+                inputs: inputs.movements,
+                expected_location: child.mv
+            };
+
+            f(mv, info);
+
+            tree.advance_move();
+
             true
         } else {
             false
         }
     }
 
-    pub fn is_dead(&self) -> bool {
-        self.dead
-    }
-
-    /// Adds a new piece to the queue.
-    pub fn add_next_piece(&mut self, piece: Piece) {
-        if self.tree.add_next_piece(piece, self.options) {
-            self.dead = true;
-        }
-    }
-
-    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
-        let mut board = Board::new();
-        std::mem::swap(&mut board, &mut self.tree.board);
-        board.set_field(field);
-        board.combo = combo;
-        board.b2b_bonus = b2b;
-        self.tree = Tree::starting(board);
-    }
-
-    pub fn min_thinking_reached(&self) -> bool {
-        self.tree.child_nodes > self.options.min_nodes
-    }
-
-    pub fn peek_next_move(&self) -> Option<(Move, Info)> {
-        if !self.min_thinking_reached() {
-            return None;
-        }
-
-        if let Some(child) = self.tree.get_best_child() {
-            let mut plan = vec![];
-            self.tree.get_plan(&mut plan);
-            let info = Info {
-                nodes: self.tree.child_nodes,
-                original_rank: child.original_rank,
-                depth: child.tree.depth + 1,
-                plan
-            };
-            let mv = Move {
-                hold: child.hold,
-                inputs: child.mv.inputs.movements.clone(),
-                expected_location: child.mv.location
-            };
-            Some((mv, info))
-        } else {
-            None
-        }
-    }
-
-    pub fn next_move(&mut self) -> Option<(Move, Info)> {
-        if !self.min_thinking_reached() {
-            return None;
-        }
-
-        let moves_considered = self.tree.child_nodes;
-        let mut tree = Tree::starting(Board::new());
-        std::mem::swap(&mut tree, &mut self.tree);
-        match tree.into_best_child() {
-            Ok(child) => {
-                let mut plan = vec![(child.mv.clone(), child.lock.clone())];
-                child.tree.get_plan(&mut plan);
-                let info = Info {
-                    original_rank: child.original_rank,
-                    nodes: moves_considered,
-                    depth: child.tree.depth+1,
-                    plan
-                };
-                let mv = Move {
-                    hold: child.hold,
-                    inputs: child.mv.inputs.movements,
-                    expected_location: child.mv.location
-                };
-                self.tree = child.tree;
-                Some((mv, info))
-            }
-            Err(t) => {
-                self.tree = t;
-                None
-            }
-        }
-    }
-
-    pub fn get_possible_next_moves_and_evaluations(&self) -> Vec<(FallingPiece, i32)> {
-        self.tree.get_moves_and_evaluations()
+    pub fn invalidate(&self) {
+        *self.tree.lock().unwrap() = None;
     }
 }
 
@@ -273,40 +372,41 @@ fn run(
     recv: Receiver<BotMsg>,
     send: Sender<(Move, Info)>,
     board: Board,
-    evaluator: impl Evaluator,
+    evaluator: impl Evaluator + 'static,
     options: Options
 ) {
-    let mut bot = BotState::new(board, options, evaluator);
+    if options.threads == 0 {
+        panic!("Invalid number of threads: 0");
+    }
 
-    let mut do_move = false;
-    let mut can_think = true;
+    let bot = Arc::new(BotState::new(board, options, evaluator));
+
+    for _ in 0..options.threads {
+        let bot = Arc::clone(&bot);
+        std::thread::spawn(move || while let Some(thought) = bot.think() {
+            std::thread::yield_now();
+            if !thought {
+                // thinking limit reached, so we should wait
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        });
+    }
+
     while !bot.is_dead() {
-        let result = if can_think {
-            recv.try_recv()
-        } else {
-            recv.recv().map_err(|_| TryRecvError::Disconnected)
-        };
-        match result {
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => break,
+        match recv.recv() {
+            Err(_) => break,
             Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
             Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
-            Ok(BotMsg::NextMove) => do_move = true,
-            Ok(BotMsg::PrepareNextMove) => {}
-        }
-
-        if do_move && bot.min_thinking_reached() {
-            if let Some((mv, info)) = bot.peek_next_move() {
-                do_move = false;
-                if send.send((mv, info)).is_err() {
-                    return
+            Ok(BotMsg::NextMove) =>
+                while !bot.next_move(|mv, info| { send.send((mv, info)).ok(); }) {
+                    if bot.is_dead() {
+                        break
+                    }
                 }
-                bot.next_move();
-            }
         }
-
-        can_think = bot.think();
     }
+
+    bot.invalidate();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -314,5 +414,5 @@ pub struct Info {
     pub nodes: usize,
     pub depth: usize,
     pub original_rank: usize,
-    pub plan: Vec<(Placement, LockResult)>
+    pub plan: Vec<(FallingPiece, LockResult)>
 }

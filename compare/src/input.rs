@@ -10,7 +10,7 @@ pub struct BotInput<E: Evaluator> {
     bot: bot::BotState<E>
 }
 
-const THINK_AMOUNT: Duration = Duration::from_millis(4);
+const THINK_AMOUNT: Duration = Duration::from_millis(16);
 
 impl<E: Evaluator> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {
@@ -31,7 +31,7 @@ impl<E: Evaluator> BotInput<E> {
         std::thread::yield_now(); // get a new timeslice
         while self.time_budget < THINK_AMOUNT {
             let start = Instant::now();
-            if !self.bot.think() {
+            if !self.bot.think().unwrap() {
                 // can't think anymore
                 self.time_budget = THINK_AMOUNT;
                 break
@@ -50,13 +50,14 @@ impl<E: Evaluator> BotInput<E> {
                 Event::PieceSpawned { new_in_queue } => {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
-                        if let Some((mv, inf)) = self.bot.next_move() {
+                        let exec = &mut self.executing;
+                        self.bot.next_move(|mv, inf| {
                             info = Some(inf);
-                            self.executing = Some((
+                            *exec = Some((
                                 mv.expected_location,
                                 PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
                             ));
-                        }
+                        });
                     }
                 }
                 Event::GarbageAdded(_) => {

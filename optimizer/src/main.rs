@@ -11,7 +11,7 @@ mod mutate;
 
 use mutate::Mutateable;
 
-const BATTLES: usize = 10;
+const BATTLES: usize = 6;
 
 fn main() {
     let mut population = match std::fs::File::open("pop.json") {
@@ -78,7 +78,7 @@ fn main() {
                 bincode::serialize_into(&mut encoder, &replay).unwrap();
                 encoder.finish().unwrap();
             }
-            if (i+1) % 100 == 0 {
+            if (i+1) % 80 == 0 {
                 println!("Completed game {} of {}", i+1, count);
             }
         }

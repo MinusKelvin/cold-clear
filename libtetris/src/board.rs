@@ -1,6 +1,7 @@
 use arrayvec::ArrayVec;
 use enumset::EnumSet;
 use std::collections::VecDeque;
+use std::iter::DoubleEndedIterator;
 
 use crate::*;
 
@@ -10,9 +11,9 @@ pub struct Board<R=u16> {
     column_heights: [i32; 10],
     pub combo: u32,
     pub b2b_bonus: bool,
-    hold_piece: Option<Piece>,
+    pub hold_piece: Option<Piece>,
     next_pieces: VecDeque<Piece>,
-    bag: EnumSet<Piece>,
+    pub bag: EnumSet<Piece>,
 }
 
 pub trait Row: Copy + Clone + 'static {
@@ -198,11 +199,7 @@ impl<R: Row> Board<R> {
         hold
     }
 
-    pub fn hold_piece(&self) -> Option<Piece> {
-        self.hold_piece
-    }
-
-    pub fn next_queue<'a>(&'a self) -> impl Iterator<Item=Piece> + 'a {
+    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item=Piece> + 'a {
         self.next_pieces.iter().copied()
     }
 
@@ -273,6 +270,17 @@ impl<R: Row> Board<R> {
             }
         }
         field
+    }
+
+    pub fn next_bag(&self) -> EnumSet<Piece> {
+        let mut bag = self.bag;
+        for p in self.next_queue().rev() {
+            if bag == EnumSet::all() {
+                bag = EnumSet::empty();
+            }
+            bag.insert(p);
+        }
+        bag
     }
 }
 

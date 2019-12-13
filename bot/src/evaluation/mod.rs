@@ -12,7 +12,7 @@ pub struct Evaluation {
     pub transient: i32
 }
 
-pub trait Evaluator {
+pub trait Evaluator : Send + Sync {
     fn name(&self) -> String;
     fn evaluate(
         &self, lock: &LockResult, board: &Board, move_time: u32, placed: Piece

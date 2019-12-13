@@ -373,12 +373,12 @@ impl BoardDrawState {
                     y_map[i] = i as i32;
                 }
                 for (placement, lock) in &info.plan {
-                    for &(x, y, d) in &placement.location.cells() {
+                    for &(x, y, d) in &placement.cells() {
                         let (tx, ty) = dir_to_tile(d);
                         sprites.add(draw_tile(
                             x+3, y_map[y as usize],
                             tx, ty,
-                            cell_color_to_color(placement.location.kind.0.color())
+                            cell_color_to_color(placement.kind.0.color())
                         ));
                     }
                     let mut new_map = [0; 40];

@@ -29,7 +29,7 @@ impl<E: Evaluator> BotInput<E> {
 
     fn think(&mut self) {
         for _ in 0..THINK_AMOUNT {
-            if !self.bot.think() {
+            if self.bot.think() != Some(true) {
                 // can't think anymore
                 break
             }
@@ -45,13 +45,14 @@ impl<E: Evaluator> BotInput<E> {
                 Event::PieceSpawned { new_in_queue } => {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
-                        if let Some((mv, inf)) = self.bot.next_move() {
+                        let exec = &mut self.executing;
+                        self.bot.next_move(|mv, inf| {
                             info = Some(inf);
-                            self.executing = Some((
+                            *exec = Some((
                                 mv.expected_location,
                                 PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
                             ));
-                        }
+                        });
                     }
                 }
                 Event::GarbageAdded(_) => {
