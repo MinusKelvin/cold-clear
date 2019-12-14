@@ -13,6 +13,7 @@ pub struct Standard {
     pub height: i32,
     pub top_half: i32,
     pub top_quarter: i32,
+    pub jeopardy: i32,
     pub cavity_cells: i32,
     pub cavity_cells_sq: i32,
     pub overhang_cells: i32,
@@ -51,6 +52,7 @@ impl Default for Standard {
             height: -39,
             top_half: -150,
             top_quarter: -511,
+            jeopardy: -5,
             cavity_cells: -158,
             cavity_cells_sq: -7,
             overhang_cells: -48,
@@ -161,6 +163,7 @@ impl Evaluator for Standard {
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.top_quarter * (highest_point - 15).max(0);
         transient_eval += self.top_half * (highest_point - 10).max(0);
+        acc_eval += self.jeopardy * (highest_point - 10).max(0);
 
         let mut board = board.clone();
         loop {

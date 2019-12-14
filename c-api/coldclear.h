@@ -53,6 +53,7 @@ typedef struct CCWeights {
     int32_t height;
     int32_t top_half;
     int32_t top_quarter;
+    int32_t jeopardy;
     int32_t cavity_cells;
     int32_t cavity_cells_sq;
     int32_t overhang_cells;
