@@ -384,7 +384,7 @@ fn run(
     for _ in 0..options.threads {
         let bot = Arc::clone(&bot);
         std::thread::spawn(move || while let Some(thought) = bot.think() {
-            std::thread::yield_now();
+            // std::thread::yield_now();
             if !thought {
                 // thinking limit reached, so we should wait
                 std::thread::sleep(std::time::Duration::from_millis(1));
