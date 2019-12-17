@@ -398,7 +398,7 @@ fn run(
         if tasks < 2*options.threads {
             if let Ok(thinker) = bot.think() {
                 let result_send = result_send.clone();
-                pool.spawn(move || {
+                pool.spawn_fifo(move || {
                     result_send.send(thinker.think()).ok();
                 });
                 tasks += 1;
