@@ -1,5 +1,5 @@
-use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
-use std::sync::{ Arc, Mutex };
+use std::sync::mpsc::{ Sender, Receiver, TryRecvError, TrySendError, channel, sync_channel };
+use std::sync::Arc;
 use serde::{ Serialize, Deserialize };
 use enum_map::EnumMap;
 
@@ -8,8 +8,8 @@ pub mod moves;
 mod tree;
 
 use libtetris::*;
-use crate::tree::{ ChildData, TreeState };
-use crate::moves::{ Move, Placement };
+use crate::tree::{ ChildData, TreeState, NodeId };
+use crate::moves::Move;
 use crate::evaluation::Evaluator;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -152,89 +152,161 @@ enum BotMsg {
 }
 
 pub struct BotState<E: Evaluator> {
-    tree: Mutex<Option<TreeState>>,
+    tree: TreeState,
     options: Options,
-    eval: E,
+    eval: Arc<E>,
+}
+
+pub struct Thinker<E: Evaluator> {
+    node: NodeId,
+    board: Board,
+    options: Options,
+    eval: Arc<E>
+}
+
+pub enum ThinkResult {
+    Known(NodeId, Vec<ChildData>),
+    Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData>>>),
+    Unmark(NodeId)
 }
 
 impl<E: Evaluator> BotState<E> {
     pub fn new(board: Board, options: Options, eval: E) -> Self {
-        let tree = Mutex::new(Some(TreeState::create(board, options.use_hold)));
         BotState {
-            tree, options, eval
+            tree: TreeState::create(board, options.use_hold),
+            options,
+            eval: Arc::new(eval)
         }
     }
 
-    /// Perform a thinking cycle.
+    /// Prepare a thinking cycle.
     /// 
-    /// Returns true if a thinking cycle was performed. If a thinking cycle was not performed,
-    /// calling this function again will not perform a thinking cycle either.
-    pub fn think(&self) -> Option<bool> {
-        loop {
-            let mut lock = self.tree.lock().unwrap();
-            let tree = lock.as_mut()?;
-            if tree.nodes < self.options.max_nodes && !tree.is_dead() {
-                if let Some((node, board)) = tree.find_and_mark_leaf() {
-                    drop(lock);
-                    self.generate_children(node, board);
-                    return Some(true)
-                } else {
-                    drop(lock);
-                    std::thread::yield_now();
-                }
+    /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find 
+    pub fn think(&mut self) -> Result<Thinker<E>, bool> {
+        if self.tree.nodes < self.options.max_nodes && !self.tree.is_dead() {
+            if let Some((node, board)) = self.tree.find_and_mark_leaf() {
+                return Ok(Thinker {
+                    node, board,
+                    options: self.options,
+                    eval: Arc::clone(&self.eval)
+                });
             } else {
-                return Some(false)
+                return Err(true)
             }
+        } else {
+            return Err(false)
         }
     }
 
-    fn generate_children(&self, node: tree::NodeId, board: Board) {
-        if let Err(possibilities) = board.get_next_piece() {
+    pub fn finish_thinking(&mut self, result: ThinkResult) {
+        match result {
+            ThinkResult::Known(node, children) => self.tree.update_known(node, children),
+            ThinkResult::Speculated(node, children) => self.tree.update_speculated(node, children),
+            ThinkResult::Unmark(node) => self.tree.unmark(node)
+        }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.tree.is_dead()
+    }
+
+    /// Adds a new piece to the queue.
+    pub fn add_next_piece(&mut self, piece: Piece) {
+        self.tree.add_next_piece(piece);
+    }
+
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
+        self.tree.reset(field, b2b, combo);
+    }
+
+    pub fn min_thinking_reached(&self) -> bool {
+        self.tree.nodes > self.options.min_nodes
+    }
+
+    pub fn next_move(&mut self, f: impl FnOnce(Move, Info)) -> bool {
+        if self.tree.nodes < self.options.min_nodes {
+            return false
+        }
+
+        let child = if let Some(child) = self.tree.best_move() {
+            child
+        } else {
+            return false
+        };
+
+        let mut plan = vec![(child.mv, child.lock.clone())];
+        let mut next = child.node;
+        while let Some(Some(tree::Children::Known(children))) = self.tree.get_children(next) {
+            let child = &children[0];
+            plan.push((child.mv, child.lock.clone()));
+            next = child.node;
+        }
+
+        let info = Info {
+            nodes: self.tree.nodes,
+            depth: self.tree.depth(),
+            original_rank: child.original_rank,
+            plan,
+        };
+
+        let inputs = moves::find_moves(
+            &self.tree.board,
+            FallingPiece::spawn(child.mv.kind.0, &self.tree.board).unwrap(),
+            self.options.mode
+        ).into_iter().find(|p| p.location == child.mv).unwrap().inputs;
+        let mv = Move {
+            hold: child.hold,
+            inputs: inputs.movements,
+            expected_location: child.mv
+        };
+
+        f(mv, info);
+
+        self.tree.advance_move();
+
+        true
+    }
+}
+
+impl<E: Evaluator> Thinker<E> {
+    pub fn think(self) -> ThinkResult {
+        if let Err(possibilities) = self.board.get_next_piece() {
             // Next unknown (implies hold is known) => Speculate
             if self.options.speculate {
                 let mut children = EnumMap::new();
                 for p in possibilities {
-                    let mut b = board.clone();
+                    let mut b = self.board.clone();
                     b.add_next_piece(p);
                     children[p] = Some(self.make_children(b));
                 }
-                if let Some(tree) = self.tree.lock().unwrap().as_mut() {
-                    tree.update_speculated(node, children);
-                }
+                ThinkResult::Speculated(self.node, children)
             } else {
-                if let Some(tree) = self.tree.lock().unwrap().as_mut() {
-                    tree.unmark(node);
-                }
+                ThinkResult::Unmark(self.node)
             }
         } else {
-            if self.options.use_hold && board.hold_piece.or(board.get_next_next_piece()).is_none() {
+            if self.options.use_hold && self.board.hold_piece.is_none() &&
+                    self.board.get_next_next_piece().is_none() {
                 // Next known, hold unknown => Speculate
                 if self.options.speculate {
                     let mut children = EnumMap::new();
                     let possibilities = {
-                        let mut b = board.clone();
+                        let mut b = self.board.clone();
                         b.advance_queue();
                         b.get_next_piece().unwrap_err()
                     };
                     for p in possibilities {
-                        let mut b = board.clone();
+                        let mut b = self.board.clone();
                         b.add_next_piece(p);
                         children[p] = Some(self.make_children(b));
                     }
-                    if let Some(tree) = self.tree.lock().unwrap().as_mut() {
-                        tree.update_speculated(node, children);
-                    }
+                    ThinkResult::Speculated(self.node, children)
                 } else {
-                    if let Some(tree) = self.tree.lock().unwrap().as_mut() {
-                        tree.unmark(node);
-                    }
+                    ThinkResult::Unmark(self.node)
                 }
             } else {
                 // Next and hold known
-                let children = self.make_children(board);
-                if let Some(tree) = self.tree.lock().unwrap().as_mut() {
-                    tree.update_known(node, children);
-                }
+                let children = self.make_children(self.board.clone());
+                ThinkResult::Known(self.node, children)
             }
         }
     }
@@ -289,83 +361,6 @@ impl<E: Evaluator> BotState<E> {
             }
         }
     }
-
-    pub fn is_dead(&self) -> bool {
-        let lock = self.tree.lock().unwrap();
-        lock.as_ref().map_or(false, |t| t.is_dead())
-    }
-
-    /// Adds a new piece to the queue.
-    pub fn add_next_piece(&self, piece: Piece) {
-        let mut lock = self.tree.lock().unwrap();
-        if let Some(ref mut tree) = *lock {
-            tree.add_next_piece(piece);
-        }
-    }
-
-    pub fn reset(&self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
-        let mut lock = self.tree.lock().unwrap();
-        if let Some(ref mut tree) = *lock {
-            tree.reset(field, b2b, combo);
-        }
-    }
-
-    pub fn min_thinking_reached(&self) -> bool {
-        self.tree.lock().unwrap().as_ref().map_or(true, |t| t.nodes > self.options.min_nodes)
-    }
-
-    pub fn next_move(&self, f: impl FnOnce(Move, Info)) -> bool {
-        let mut lock = self.tree.lock().unwrap();
-        if let Some(ref mut tree) = *lock {
-            if tree.nodes < self.options.min_nodes {
-                return false
-            }
-
-            let child = if let Some(child) = tree.best_move() {
-                child
-            } else {
-                return false
-            };
-
-            let mut plan = vec![(child.mv, child.lock.clone())];
-            let mut next = child.node;
-            while let Some(Some(tree::Children::Known(children))) = tree.get_children(next) {
-                let child = &children[0];
-                plan.push((child.mv, child.lock.clone()));
-                next = child.node;
-            }
-
-            let info = Info {
-                nodes: tree.nodes,
-                depth: tree.depth(),
-                original_rank: child.original_rank,
-                plan,
-            };
-
-            let inputs = moves::find_moves(
-                &tree.board,
-                FallingPiece::spawn(child.mv.kind.0, &tree.board).unwrap(),
-                self.options.mode
-            ).into_iter().find(|p| p.location == child.mv).unwrap().inputs;
-            let mv = Move {
-                hold: child.hold,
-                inputs: inputs.movements,
-                expected_location: child.mv
-            };
-
-            f(mv, info);
-
-            tree.advance_move();
-
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn invalidate(&self) {
-        *self.tree.lock().unwrap() = None;
-    }
 }
 
 fn run(
@@ -379,22 +374,23 @@ fn run(
         panic!("Invalid number of threads: 0");
     }
 
-    let bot = Arc::new(BotState::new(board, options, evaluator));
+    let mut bot = BotState::new(board, options, evaluator);
 
+    let (result_send, result_recv) = channel();
+    let mut workers = vec![];
     for _ in 0..options.threads {
-        let bot = Arc::clone(&bot);
-        std::thread::spawn(move || while let Some(thought) = bot.think() {
-            // std::thread::yield_now();
-            if !thought {
-                // thinking limit reached, so we should wait
-                std::thread::sleep(std::time::Duration::from_millis(1));
-            }
+        let (send, recv): (_, Receiver<Thinker<_>>) = sync_channel(1);
+        workers.push(send);
+        let result_send = result_send.clone();
+        std::thread::spawn(move || while let Ok(thinker) = recv.recv() {
+            result_send.send(thinker.think()).ok();
         });
     }
 
     while !bot.is_dead() {
-        match recv.recv() {
-            Err(_) => break,
+        match recv.try_recv() {
+            Err(TryRecvError::Disconnected) => break,
+            Err(TryRecvError::Empty) => {}
             Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
             Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
             Ok(BotMsg::NextMove) =>
@@ -404,9 +400,24 @@ fn run(
                     }
                 }
         }
-    }
 
-    bot.invalidate();
+        if let Ok(mut thinker) = bot.think() {
+            'send: loop {
+                for s in &workers {
+                    match s.try_send(thinker) {
+                        Ok(()) => break 'send,
+                        Err(TrySendError::Full(t)) => thinker = t,
+                        Err(TrySendError::Disconnected(t)) => thinker = t
+                    }
+                }
+                std::thread::yield_now();
+            }
+        }
+
+        for result in result_recv.try_iter() {
+            bot.finish_thinking(result)
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
