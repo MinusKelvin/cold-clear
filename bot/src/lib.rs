@@ -1,4 +1,4 @@
-use std::sync::mpsc::{ channel, TryRecvError, Sender, Receiver };
+use std::sync::mpsc::{ Sender, Receiver, TryRecvError, TrySendError, channel, sync_channel };
 use std::sync::Arc;
 use serde::{ Serialize, Deserialize };
 use enum_map::EnumMap;
@@ -376,16 +376,10 @@ fn run(
 
     let mut bot = BotState::new(board, options, evaluator);
 
-    let (task_send, task_recv) = crossbeam_channel::bounded(options.threads);
-    let (result_send, result_recv) = channel();
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(options.threads).build().unwrap();
 
-    for _ in 0..options.threads {
-        let recv: crossbeam_channel::Receiver<Thinker<_>> = task_recv.clone();
-        let send = result_send.clone();
-        std::thread::spawn(move || while let Ok(thinker) = recv.recv() {
-            send.send(thinker.think()).ok();
-        });
-    }
+    let (result_send, result_recv) = channel();
+    let mut tasks = 0;
 
     while !bot.is_dead() {
         match recv.try_recv() {
@@ -401,18 +395,24 @@ fn run(
                 }
         }
 
-        if !task_send.is_full() {
+        if tasks < 2*options.threads {
             if let Ok(thinker) = bot.think() {
-                task_send.send(thinker).ok();
+                let result_send = result_send.clone();
+                pool.spawn_fifo(move || {
+                    result_send.send(thinker.think()).ok();
+                });
+                tasks += 1;
             }
         }
 
-        if task_send.is_full() {
+        if tasks == 2*options.threads {
             if let Ok(result) = result_recv.recv() {
+                tasks -= 1;
                 bot.finish_thinking(result);
             }
         }
         for result in result_recv.try_iter() {
+            tasks -= 1;
             bot.finish_thinking(result);
         }
     }
