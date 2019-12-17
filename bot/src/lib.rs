@@ -376,16 +376,10 @@ fn run(
 
     let mut bot = BotState::new(board, options, evaluator);
 
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(options.threads).build().unwrap();
+
     let (result_send, result_recv) = channel();
-    let mut workers = vec![];
-    for _ in 0..options.threads {
-        let (send, recv): (_, Receiver<Thinker<_>>) = sync_channel(1);
-        workers.push(send);
-        let result_send = result_send.clone();
-        std::thread::spawn(move || while let Ok(thinker) = recv.recv() {
-            result_send.send(thinker.think()).ok();
-        });
-    }
+    let mut tasks = 0;
 
     while !bot.is_dead() {
         match recv.try_recv() {
@@ -401,21 +395,25 @@ fn run(
                 }
         }
 
-        if let Ok(mut thinker) = bot.think() {
-            'send: loop {
-                for s in &workers {
-                    match s.try_send(thinker) {
-                        Ok(()) => break 'send,
-                        Err(TrySendError::Full(t)) => thinker = t,
-                        Err(TrySendError::Disconnected(t)) => thinker = t
-                    }
-                }
-                std::thread::yield_now();
+        if tasks < 2*options.threads {
+            if let Ok(thinker) = bot.think() {
+                let result_send = result_send.clone();
+                pool.spawn(move || {
+                    result_send.send(thinker.think()).ok();
+                });
+                tasks += 1;
             }
         }
 
+        if tasks == 2*options.threads {
+            if let Ok(result) = result_recv.recv() {
+                tasks -= 1;
+                bot.finish_thinking(result);
+            }
+        }
         for result in result_recv.try_iter() {
-            bot.finish_thinking(result)
+            tasks -= 1;
+            bot.finish_thinking(result);
         }
     }
 }
