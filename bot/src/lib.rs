@@ -380,6 +380,7 @@ fn run(
 
     let (result_send, result_recv) = channel();
     let mut tasks = 0;
+    let mut do_move = false;
 
     while !bot.is_dead() {
         match recv.try_recv() {
@@ -387,12 +388,13 @@ fn run(
             Err(TryRecvError::Empty) => {}
             Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
             Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
-            Ok(BotMsg::NextMove) =>
-                while !bot.next_move(|mv, info| { send.send((mv, info)).ok(); }) {
-                    if bot.is_dead() {
-                        break
-                    }
-                }
+            Ok(BotMsg::NextMove) => do_move = true,
+        }
+
+        if do_move {
+            if bot.next_move(|mv, info| { send.send((mv, info)).ok(); }) {
+                do_move = false;
+            }
         }
 
         if tasks < 2*options.threads {
