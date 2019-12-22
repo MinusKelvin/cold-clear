@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{ VecDeque, HashMap, HashSet };
 use libtetris::{ Piece, FallingPiece, LockResult, Board };
 use arrayvec::ArrayVec;
 use smallvec::SmallVec;
@@ -9,10 +9,11 @@ use rand::prelude::*;
 pub struct TreeState {
     pub board: Board,
     pub root: NodeId,
+    boards: HashMap<SimplifiedBoard, NodeId>,
     trees: Storage<Tree>,
     children: Storage<Option<Children>>,
     free: VecDeque<u32>,
-    next_speculation: Vec<NodeId>,
+    next_speculation: HashSet<NodeId>,
     pieces: Pieces,
     pub nodes: usize,
     use_hold: bool
@@ -78,7 +79,8 @@ impl TreeState {
             trees: Storage(vec![]),
             children: Storage(vec![]),
             free: VecDeque::new(),
-            next_speculation: vec![],
+            next_speculation: HashSet::new(),
+            boards: HashMap::new(),
             pieces: Pieces {
                 piece_queue: board.next_queue().collect(),
                 pieces_used: 0
@@ -106,10 +108,11 @@ impl TreeState {
         for i in 0..self.trees.0.len() {
             if self.trees.0[i].1.is_some() {
                 self.free.push_back(i as u32);
+                self.trees.0[i].1 = None;
+                self.children.0[i].1 = None;
             }
-            self.trees.0[i].1 = None;
-            self.children.0[i].1 = None;
         }
+        self.boards.clear();
         self.nodes = 0;
 
         let pieces_used = if self.use_hold && self.board.hold_piece.is_none() {
@@ -210,7 +213,7 @@ impl TreeState {
 
         if speculation_piece_index == self.pieces.piece_queue.len() {
             // Next speculation (will be resolved with the next piece)
-            self.next_speculation.push(node);
+            self.next_speculation.insert(node);
         }
         let mut childs = EnumMap::new();
         for (p, c) in children {
@@ -234,10 +237,11 @@ impl TreeState {
     pub fn add_next_piece(&mut self, piece: Piece) {
         self.pieces.piece_queue.push_back(piece);
         self.board.add_next_piece(piece);
-        let mut next_speculation = vec![];
+        let mut next_speculation = HashSet::new();
         let mut to_update = VecDeque::new();
         let mut to_unparent = VecDeque::new();
-        for node in self.next_speculation.drain(..) {
+        std::mem::swap(&mut self.next_speculation, &mut next_speculation);
+        for node in next_speculation {
             let mut children = vec![];
             let childs = if let Some(c) = self.children.get_mut(node) {
                 c.as_mut().expect("not a speculation node")
@@ -266,12 +270,11 @@ impl TreeState {
             };
             for child in children {
                 if self.children.get(child.node).unwrap().is_some() {
-                    next_speculation.push(child.node);
+                    self.next_speculation.insert(child.node);
                 }
             }
             to_update.push_back(node);
         }
-        self.next_speculation = next_speculation;
         self.unparent(to_unparent);
         self.update(to_update);
     }
@@ -340,13 +343,19 @@ impl TreeState {
     }
 
     fn make_node(&mut self, board: SimplifiedBoard, parent: NodeId, eval: i32) -> NodeId {
-        self.create_tree(Tree {
-            board,
-            parents: SmallVec::from_elem(parent, 1),
-            evaluation: eval,
-            depth: 0,
-            marked: false
-        })
+        if self.boards.contains_key(&board) {
+            let id = self.boards[&board];
+            self.trees.get_mut(id).unwrap().parents.push(parent);
+            id
+        } else {
+            self.create_tree(Tree {
+                board,
+                parents: SmallVec::from_elem(parent, 1),
+                evaluation: eval,
+                depth: 0,
+                marked: false
+            })
+        }
     }
 
     fn update(&mut self, mut to_update: VecDeque<NodeId>) {
@@ -358,7 +367,9 @@ impl TreeState {
                     children.retain(|c| trees.get(c.node).is_some());
                     if children.is_empty() {
                         // Path is death; prune
-                        add_parents(&mut to_update, trees.get(node).unwrap());
+                        let t = trees.get(node).unwrap();
+                        add_parents(&mut to_update, t);
+                        self.boards.remove(&t.board);
                         self.trees.0[node.0 as usize].1 = None;
                         self.children.0[node.0 as usize].1 = None;
                         self.free.push_back(node.0);
@@ -417,7 +428,9 @@ impl TreeState {
                     }
                     if count == deaths {
                         // Path is death; prune
-                        add_parents(&mut to_update, trees.get(node).unwrap());
+                        let t = trees.get(node).unwrap();
+                        add_parents(&mut to_update, t);
+                        self.boards.remove(&t.board);
                         self.trees.0[node.0 as usize].1 = None;
                         self.children.0[node.0 as usize].1 = None;
                         self.free.push_back(node.0);
@@ -444,6 +457,7 @@ impl TreeState {
             Some(index) => {
                 let gen = self.trees.0[index as usize].0 + 1;
                 let id = NodeId(index, gen);
+                self.boards.insert(tree.board.clone(), id);
                 self.trees.0[index as usize] = (gen, Some(tree));
                 self.children.0[index as usize] = (gen, Some(None));
                 id
@@ -451,6 +465,7 @@ impl TreeState {
             None => {
                 let index = self.trees.0.len() as u32;
                 let id = NodeId(index, 0);
+                self.boards.insert(tree.board.clone(), id);
                 self.trees.0.push((0, Some(tree)));
                 self.children.0.push((0, Some(None)));
                 id
@@ -464,7 +479,9 @@ impl TreeState {
                 c.parents.retain(|&mut n| n != parent);
                 if c.parents.is_empty() && child != self.root {
                     // There are no remaining references to this node, so we destroy it...
-                    self.trees.0[child.0 as usize].1 = None;
+                    let t = &mut self.trees.0[child.0 as usize];
+                    self.boards.remove(&t.1.as_ref().unwrap().board);
+                    t.1 = None;
                     let mut children = None;
                     std::mem::swap(&mut self.children.0[child.0 as usize].1, &mut children);
                     self.free.push_back(child.0);
