@@ -103,7 +103,7 @@ fn main() {
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         None => {
-            use bot::evaluation::{ self, Evaluator };
+            use cold_clear::evaluation::{ self, Evaluator };
             use crate::input::BotInput;
             let Options {
                 controls, bot_options, bot_config, p1_config, p2_config
@@ -116,14 +116,14 @@ fn main() {
             };
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(move |_| {
+                Box::new(move |board| {
                     // let evaluator = evaluation::changed::Standard {
                     //     ..Default::default()
                     // };
                     // let name = format!("Cold Clear\n{}", evaluator.name());
-                    // (Box::new(BotInput::new(bot::Interface::launch(
+                    // (Box::new(BotInput::new(cold_clear::Interface::launch(
                     //     board,
-                    //     bot::Options {
+                    //     cold_clear::Options {
                     //         ..Default::default()
                     //     },
                     //     evaluator
@@ -132,7 +132,7 @@ fn main() {
                 }),
                 Box::new(move |board| {
                     let name = format!("Cold Clear\n{}", bot_config.name());
-                    (Box::new(BotInput::new(bot::Interface::launch(
+                    (Box::new(BotInput::new(cold_clear::Interface::launch(
                         board,
                         bot_options,
                         bot_config.clone()
@@ -165,6 +165,6 @@ struct Options {
     controls: UserInput,
     p1_config: GameConfig,
     p2_config: GameConfig,
-    bot_config: bot::evaluation::Standard,
-    bot_options: bot::Options
+    bot_config: cold_clear::evaluation::Standard,
+    bot_options: cold_clear::Options
 }

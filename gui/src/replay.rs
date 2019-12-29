@@ -14,8 +14,8 @@ pub struct ReplayGame<'a, P> {
     gui: Gui,
     battle: Battle,
     updates: VecDeque<(Controller, Controller)>,
-    p1_info_updates: VecDeque<Option<bot::Info>>,
-    p2_info_updates: VecDeque<Option<bot::Info>>,
+    p1_info_updates: VecDeque<Option<cold_clear::Info>>,
+    p2_info_updates: VecDeque<Option<cold_clear::Info>>,
     start_delay: u32,
     resources: &'a mut Resources,
     file: P
@@ -116,6 +116,6 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InfoReplay {
     pub replay: Replay,
-    pub p1_info_updates: VecDeque<Option<bot::Info>>,
-    pub p2_info_updates: VecDeque<Option<bot::Info>>
+    pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
 }

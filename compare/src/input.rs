@@ -1,16 +1,16 @@
 use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
 use battle::{ Event, PieceMoveExecutor };
 use std::time::{ Instant, Duration };
-use bot::evaluation::Evaluator;
+use cold_clear::evaluation::Evaluator;
 
 pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     time_budget: Duration,
-    bot: bot::BotState<E>
+    bot: cold_clear::BotState<E>
 }
 
-const THINK_AMOUNT: Duration = Duration::from_millis(16);
+const THINK_AMOUNT: Duration = Duration::from_millis(4);
 
 impl<E: Evaluator> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {
@@ -18,7 +18,7 @@ impl<E: Evaluator> BotInput<E> {
             controller: Controller::default(),
             executing: None,
             time_budget: Duration::new(0, 0),
-            bot: bot::BotState::new(board, Default::default(), eval)
+            bot: cold_clear::BotState::new(board, Default::default(), eval)
         };
         for _ in 0..180 {
             // equivalent of 3 realtime seconds of thinking
@@ -31,17 +31,24 @@ impl<E: Evaluator> BotInput<E> {
         std::thread::yield_now(); // get a new timeslice
         while self.time_budget < THINK_AMOUNT {
             let start = Instant::now();
-            if !self.bot.think().unwrap() {
-                // can't think anymore
-                self.time_budget = THINK_AMOUNT;
-                break
+            match self.bot.think() {
+                Ok(thinker) => {
+                    self.bot.finish_thinking(thinker.think());
+                }
+                Err(_) => {
+                    // can't think anymore
+                    self.time_budget = THINK_AMOUNT;
+                    break
+                }
             }
             self.time_budget += start.elapsed();
         }
         self.time_budget -= THINK_AMOUNT;
     }
 
-    pub fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+    pub fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event]
+    ) -> Option<cold_clear::Info> {
         self.think();
 
         let mut info = None;

@@ -8,17 +8,17 @@ use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {
     fn controller(&mut self, ctx: &Context, gamepad: Option<Gamepad>) -> Controller;
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info>;
+    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<cold_clear::Info>;
 }
 
 pub struct BotInput {
-    interface: bot::Interface,
+    interface: cold_clear::Interface,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     controller: Controller
 }
 
 impl BotInput {
-    pub fn new(interface: bot::Interface) -> Self {
+    pub fn new(interface: cold_clear::Interface) -> Self {
         BotInput {
             interface,
             executing: None,
@@ -32,7 +32,7 @@ impl InputSource for BotInput {
         self.controller
     }
 
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<cold_clear::Info> {
         for event in events {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
@@ -137,7 +137,7 @@ impl InputSource for UserInput {
         }
     }
 
-    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<bot::Info> {
+    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<cold_clear::Info> {
         None
     }
 }

@@ -22,7 +22,7 @@ pub struct BoardDrawState {
     clear_splash: Option<(&'static str, u32)>,
     name: String,
     hard_drop_particles: Option<(u32, Vec<(f32, f32, f32)>)>,
-    info: Option<bot::Info>
+    info: Option<cold_clear::Info>
 }
 
 enum State {
@@ -51,7 +51,9 @@ impl BoardDrawState {
         }
     }
 
-    pub fn update(&mut self, update: PlayerUpdate, info_update: Option<bot::Info>, time: u32) {
+    pub fn update(
+        &mut self, update: PlayerUpdate, info_update: Option<cold_clear::Info>, time: u32
+    ) {
         self.garbage_queue = update.garbage_queue;
         self.info = info_update.or(self.info.take());
         self.game_time = time;

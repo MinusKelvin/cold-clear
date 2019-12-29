@@ -11,5 +11,5 @@ name = "cold_clear"
 crate-type = ["cdylib"]
 
 [dependencies]
-bot = { path = "../bot" }
+cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }

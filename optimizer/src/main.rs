@@ -1,5 +1,5 @@
 use serde::{ Serialize, Deserialize };
-use bot::evaluation::Standard;
+use cold_clear::evaluation::Standard;
 use rand::prelude::*;
 use libflate::deflate;
 use std::sync::{ Arc, Mutex };

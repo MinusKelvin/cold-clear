@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 battle = { path = "../battle" }
-bot = { path = "../bot" }
+cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 serde = { version = "1", features = ["derive"] }
 bincode = "1"

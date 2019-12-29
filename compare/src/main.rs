@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use serde::{ Serialize, Deserialize };
 use battle::{ Replay, Battle };
-use bot::evaluation::Evaluator;
+use cold_clear::evaluation::Evaluator;
 use rand::prelude::*;
 use statrs::distribution::{ Binomial, Univariate };
 use libflate::deflate;
@@ -10,8 +10,8 @@ mod input;
 use input::BotInput;
 
 fn main() {
-    use bot::evaluation::Standard;
-    use bot::evaluation::changed;
+    use cold_clear::evaluation::Standard;
+    use cold_clear::evaluation::changed;
 
     let p1_eval = Standard::default();
 
@@ -19,7 +19,7 @@ fn main() {
 
     let (send, recv) = std::sync::mpsc::channel();
 
-    for _ in 0..6 {
+    for _ in 0..12 {
         let p1_eval = p1_eval.clone();
         let p2_eval = p2_eval.clone();
         let send = send.clone();
@@ -120,6 +120,6 @@ fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InfoReplay {
     pub replay: Replay,
-    pub p1_info_updates: VecDeque<Option<bot::Info>>,
-    pub p2_info_updates: VecDeque<Option<bot::Info>>
+    pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
 }

@@ -12,7 +12,7 @@ arrayvec = "0.4.11"
 ggez = "0.5.1"
 libtetris = { path = "../libtetris" }
 battle = { path = "../battle" }
-bot = { path = "../bot" }
+cold-clear = { path = "../bot" }
 serde = "1"
 bincode = "1"
 libflate = "0.1"

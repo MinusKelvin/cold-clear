@@ -1,6 +1,6 @@
 use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
 use battle::{ Battle, Replay, Event, PieceMoveExecutor };
-use bot::evaluation::Evaluator;
+use cold_clear::evaluation::Evaluator;
 use rand::prelude::*;
 use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
-    bot: bot::BotState<E>
+    bot: cold_clear::BotState<E>
 }
 
 const THINK_AMOUNT: usize = 10;
@@ -18,7 +18,7 @@ impl<E: Evaluator> BotInput<E> {
         let mut this = BotInput {
             controller: Controller::default(),
             executing: None,
-            bot: bot::BotState::new(board, Default::default(), eval)
+            bot: cold_clear::BotState::new(board, Default::default(), eval)
         };
         for _ in 0..180 {
             // equivalent of 3 realtime seconds of thinking
@@ -36,7 +36,9 @@ impl<E: Evaluator> BotInput<E> {
         }
     }
 
-    pub fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+    pub fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event]
+    ) -> Option<cold_clear::Info> {
         self.think();
 
         let mut info = None;
@@ -137,6 +139,6 @@ pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InfoReplay {
     pub replay: Replay,
-    pub p1_info_updates: VecDeque<Option<bot::Info>>,
-    pub p2_info_updates: VecDeque<Option<bot::Info>>
+    pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
 }

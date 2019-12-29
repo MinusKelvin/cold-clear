@@ -1,4 +1,4 @@
-type CCAsyncBot = bot::Interface;
+type CCAsyncBot = cold_clear::Interface;
 
 macro_rules! cenum {
     ($($(#[$a:meta])* enum $name:ident => $t:ty { $($item:ident => $to:ident),* })*) => {
@@ -55,7 +55,7 @@ cenum! {
         CC_DROP => SonicDrop
     }
 
-    enum CCMovementMode => bot::moves::MovementMode {
+    enum CCMovementMode => cold_clear::moves::MovementMode {
         CC_0G => ZeroG,
         CC_20G => TwentyG,
         CC_HARD_DROP_ONLY => HardDropOnly
@@ -122,17 +122,17 @@ struct CCWeights {
 
 #[no_mangle]
 extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut CCAsyncBot {
-    Box::into_raw(Box::new(bot::Interface::launch(
+    Box::into_raw(Box::new(cold_clear::Interface::launch(
         libtetris::Board::new(),
-        bot::Options {
+        cold_clear::Options {
             max_nodes: options.max_nodes,
             min_nodes: options.min_nodes,
             use_hold: options.use_hold,
             speculate: options.speculate,
             mode: options.mode.into(),
-            ..bot::Options::default()
+            ..cold_clear::Options::default()
         },
-        bot::evaluation::Standard {
+        cold_clear::evaluation::Standard {
             back_to_back: weights.back_to_back,
             bumpiness: weights.bumpiness,
             bumpiness_sq: weights.bumpiness_sq,
@@ -229,7 +229,7 @@ extern "C" fn cc_is_dead_async(bot: &mut CCAsyncBot) -> bool {
 
 #[no_mangle]
 extern "C" fn cc_default_options(options: &mut CCOptions) {
-    let o = bot::Options::default();
+    let o = cold_clear::Options::default();
     *options = CCOptions {
         max_nodes: o.max_nodes,
         min_nodes: o.min_nodes,
@@ -241,7 +241,7 @@ extern "C" fn cc_default_options(options: &mut CCOptions) {
 
 #[no_mangle]
 extern "C" fn cc_default_weights(weights: &mut CCWeights) {
-    let w = bot::evaluation::Standard::default();
+    let w = cold_clear::evaluation::Standard::default();
     *weights = CCWeights {
         back_to_back: w.back_to_back,
         bumpiness: w.bumpiness,

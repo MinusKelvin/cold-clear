@@ -27,8 +27,8 @@ impl Gui {
     pub fn update(
         &mut self,
         update: BattleUpdate,
-        p1_info_update: Option<bot::Info>,
-        p2_info_update: Option<bot::Info>,
+        p1_info_update: Option<cold_clear::Info>,
+        p2_info_update: Option<cold_clear::Info>,
         res: &mut Resources
     ) -> GameResult {
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
