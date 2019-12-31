@@ -165,8 +165,13 @@ impl Evaluator for Standard {
         transient_eval += self.top_half * (highest_point - 10).max(0);
         acc_eval += self.jeopardy * (highest_point - 10).max(0);
 
+        let ts
+            = board.next_bag().contains(Piece::T) as usize
+            + (board.next_bag().len() <= 3) as usize
+            + (board.hold_piece == Some(Piece::T)) as usize;
+
         let mut board = board.clone();
-        loop {
+        for _ in 0..ts {
             let result = if let Some((x, y)) = sky_tslot(&board) {
                 cutout_tslot(board.clone(), FallingPiece {
                     x, y,
