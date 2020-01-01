@@ -113,6 +113,7 @@ impl TreeState {
         self.next_speculation.clear();
         self.trees.clear();
         self.children.clear();
+        self.childs.clear();
         self.generation += 1;
 
         let pieces_used = if self.use_hold && self.board.hold_piece.is_none() {
