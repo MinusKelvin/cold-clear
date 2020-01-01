@@ -234,13 +234,7 @@ impl<E: Evaluator> BotState<E> {
             return false
         };
 
-        let mut plan = vec![(child.mv, child.lock.clone())];
-        let mut next = child.node;
-        while let Some(Some(tree::Children::Known(children))) = self.tree.get_children(next) {
-            let child = &children[0];
-            plan.push((child.mv, child.lock.clone()));
-            next = child.node;
-        }
+        let plan = self.tree.get_plan();
 
         let info = Info {
             nodes: self.tree.nodes,
