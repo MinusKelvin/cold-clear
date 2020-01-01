@@ -496,8 +496,6 @@ impl TreeState {
     }
 
     fn gc(&mut self) {
-        let t = std::time::Instant::now();
-
         let mut trees = Vec::with_capacity(self.trees.len());
         let mut children = Vec::with_capacity(self.children.len());
         let mut childs = Vec::with_capacity(self.childs.len());
@@ -552,16 +550,11 @@ impl TreeState {
             }
         }
 
-        let d = t.elapsed();
-        let t = std::time::Instant::now();
-
         self.trees = trees;
         self.children = children;
         self.childs = childs;
         self.generation += 1;
         self.nodes = self.trees.len();
-
-        println!("gc a: {:?}, b: {:?}", d, t.elapsed());
 
         fn copy(
             stack: &mut Vec<(usize, usize, bool)>,
