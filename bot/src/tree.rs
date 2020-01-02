@@ -13,6 +13,9 @@ pub struct TreeState {
     trees: Vec<Tree>,
     children: Vec<Option<Children>>,
     childs: Vec<Child>,
+    backbuffer_trees: Vec<Tree>,
+    backbuffer_children: Vec<Option<Children>>,
+    backbuffer_childs: Vec<Child>,
     next_speculation: HashSet<usize>,
     pieces: Pieces,
     use_hold: bool,
@@ -78,9 +81,12 @@ impl TreeState {
         let b = board.clone();
         let mut this = TreeState {
             root: 0,
-            trees: vec![],
-            children: vec![],
-            childs: vec![],
+            trees: Vec::with_capacity(2_000_000),
+            children: Vec::with_capacity(2_000_000),
+            childs: Vec::with_capacity(2_000_000),
+            backbuffer_trees: Vec::with_capacity(2_000_000),
+            backbuffer_children: Vec::with_capacity(2_000_000),
+            backbuffer_childs: Vec::with_capacity(2_000_000),
             next_speculation: HashSet::new(),
             boards: HashMap::new(),
             pieces: Pieces {
@@ -507,21 +513,21 @@ impl TreeState {
     }
 
     fn gc(&mut self) {
-        let mut trees = Vec::with_capacity(self.trees.len());
-        let mut children = Vec::with_capacity(self.children.len());
-        let mut childs = Vec::with_capacity(self.childs.len());
+        self.backbuffer_children.clear();
+        self.backbuffer_childs.clear();
+        self.backbuffer_trees.clear();
         self.boards.clear();
         self.next_speculation.clear();
 
         let mut stack = vec![(0, self.root, false)];
         // Indices in the trees/children arrays are allocated before we iterate in the loop.
-        trees.push(Tree {
+        self.backbuffer_trees.push(Tree {
             parents: SmallVec::new(),
             board: self.trees[self.root].board.clone(),
             marked: false,
             ..self.trees[self.root]
         });
-        children.push(None);
+        self.backbuffer_children.push(None);
         self.boards.insert(self.trees[self.root].board.clone(), 0);
         self.root = 0;
         while let Some((new, orig, parent_spec)) = stack.pop() {
@@ -535,9 +541,11 @@ impl TreeState {
                         new, false,
                         &mut self.boards,
                         &self.trees,
-                        &mut trees, &mut children, &mut childs
+                        &mut self.backbuffer_trees,
+                        &mut self.backbuffer_children,
+                        &mut self.backbuffer_childs
                     );
-                    children[new] = Some(Children::Known(start, len));
+                    self.backbuffer_children[new] = Some(Children::Known(start, len));
                 }
                 Some(Children::Speculation(possibilities)) => {
                     let mut c = EnumMap::new();
@@ -549,11 +557,13 @@ impl TreeState {
                                 new, true,
                                 &mut self.boards,
                                 &self.trees,
-                                &mut trees, &mut children, &mut childs
+                                &mut self.backbuffer_trees,
+                                &mut self.backbuffer_children,
+                                &mut self.backbuffer_childs
                             ));
                         }
                     }
-                    children[new] = Some(Children::Speculation(c));
+                    self.backbuffer_children[new] = Some(Children::Speculation(c));
                     if !parent_spec {
                         self.next_speculation.insert(new);
                     }
@@ -561,9 +571,9 @@ impl TreeState {
             }
         }
 
-        self.trees = trees;
-        self.children = children;
-        self.childs = childs;
+        std::mem::swap(&mut self.trees, &mut self.backbuffer_trees);
+        std::mem::swap(&mut self.children, &mut self.backbuffer_children);
+        std::mem::swap(&mut self.childs, &mut self.backbuffer_childs);
         self.generation += 1;
         self.nodes = self.trees.len();
 
@@ -576,29 +586,34 @@ impl TreeState {
         ) -> (usize, usize) {
             let begin = childs.len();
             for child in copying {
-                if let Some(&idx) = boards.get(&old_trees[child.node].board) {
-                    // Don't create a copy of a node that's already been copied
-                    childs.push(Child {
-                        node: idx,
-                        ..child.clone()
-                    });
-                    trees[idx].parents.push(new);
-                } else {
-                    // Copy Tree, mark node for copying
-                    let idx = trees.len();
-                    trees.push(Tree {
-                        parents: SmallVec::from_elem(new, 1),
-                        board: old_trees[child.node].board.clone(),
-                        marked: false,
-                        ..old_trees[child.node]
-                    });
-                    boards.insert(old_trees[child.node].board.clone(), idx);
-                    children.push(None);
-                    childs.push(Child {
-                        node: idx,
-                        ..child.clone()
-                    });
-                    stack.push((idx, child.node, is_spec));
+                use std::collections::hash_map::Entry;
+                match boards.entry(old_trees[child.node].board.clone()) {
+                    Entry::Occupied(entry) => {
+                        // Don't create a copy of a node that's already been copied
+                        let &idx = entry.get();
+                        childs.push(Child {
+                            node: idx,
+                            ..child.clone()
+                        });
+                        trees[idx].parents.push(new);
+                    }
+                    Entry::Vacant(entry) => {
+                        // Copy Tree, mark node for copying
+                        let idx = trees.len();
+                        trees.push(Tree {
+                            parents: SmallVec::from_elem(new, 1),
+                            board: old_trees[child.node].board.clone(),
+                            marked: false,
+                            ..old_trees[child.node]
+                        });
+                        entry.insert(idx);
+                        children.push(None);
+                        childs.push(Child {
+                            node: idx,
+                            ..child.clone()
+                        });
+                        stack.push((idx, child.node, is_spec));
+                    }
                 }
             }
             (begin, childs.len() - begin)
