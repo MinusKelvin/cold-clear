@@ -346,19 +346,29 @@ impl TreeState {
     }
 
     fn make_node(&mut self, board: SimplifiedBoard, parent: usize, eval: i32) -> usize {
-        if self.boards.contains_key(&board) {
-            let id = self.boards[&board];
-            self.trees[id].parents.push(parent);
-            id
-        } else {
-            self.create_tree(Tree {
-                board,
-                parents: SmallVec::from_elem(parent, 1),
-                evaluation: eval,
-                depth: 0,
-                marked: false,
-                death: false
-            })
+        use std::collections::hash_map::Entry;
+        match self.boards.entry(board.clone()) {
+            Entry::Occupied(entry) => {
+                let &id = entry.get();
+                self.trees[id].parents.push(parent);
+                id
+            }
+            Entry::Vacant(entry) => {
+                let tree = Tree {
+                    board,
+                    parents: SmallVec::from_elem(parent, 1),
+                    evaluation: eval,
+                    depth: 0,
+                    marked: false,
+                    death: false
+                };
+                let index = self.trees.len();
+                entry.insert(index);
+                self.trees.push(tree);
+                self.children.push(None);
+                self.nodes += 1;
+                index
+            }
         }
     }
 
