@@ -126,9 +126,9 @@ impl Game {
                 if self.config.spawn_delay == 0 {
                     events.push(Event::FrameBeforePieceSpawns);
                 }
-                let next_piece = self.board.advance_queue().unwrap();
                 let new_piece = self.board.generate_next_piece(piece_rng);
                 self.board.add_next_piece(new_piece);
+                let next_piece = self.board.advance_queue().unwrap();
                 if let Some(spawned) = FallingPiece::spawn(next_piece, &self.board) {
                     self.state = GameState::Falling(FallingState {
                         piece: spawned,

@@ -138,8 +138,8 @@ impl BoardDrawState {
                     self.state = State::Delay;
                 }
                 Event::PieceSpawned { new_in_queue } => {
-                    self.next_queue.pop_front();
                     self.next_queue.push_back(*new_in_queue);
+                    self.next_queue.pop_front();
                 }
                 Event::PieceFalling(piece, ghost) => {
                     self.state = State::Falling(*piece, *ghost);
