@@ -254,7 +254,13 @@ impl TreeState {
         for node in next_speculation {
             let childs = self.children[node].as_ref().unwrap();
             let (start, len) = if let Children::Speculation(possibilities) = childs {
-                possibilities[piece].expect("invalid next piece")
+                match possibilities[piece] {
+                    Some(v) => v,
+                    None => {
+                        println!("speculation machine broke");
+                        (0, 0)
+                    }
+                }
             } else {
                 unreachable!()
             };
