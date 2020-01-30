@@ -360,12 +360,27 @@ impl<E: Evaluator> Thinker<E> {
 fn run(
     recv: Receiver<BotMsg>,
     send: Sender<(Move, Info)>,
-    board: Board,
+    mut board: Board,
     evaluator: impl Evaluator + 'static,
     options: Options
 ) {
     if options.threads == 0 {
         panic!("Invalid number of threads: 0");
+    }
+
+    let mut do_move = false;
+
+    while board.next_queue().next().is_none() {
+        match recv.recv() {
+            Err(_) => return,
+            Ok(BotMsg::NewPiece(piece)) => board.add_next_piece(piece),
+            Ok(BotMsg::Reset { field, b2b, combo }) =>{
+                board.set_field(field);
+                board.combo = combo;
+                board.b2b_bonus = b2b;
+            }
+            Ok(BotMsg::NextMove) => do_move = true,
+        }
     }
 
     let mut bot = BotState::new(board, options, evaluator);
@@ -374,7 +389,6 @@ fn run(
 
     let (result_send, result_recv) = channel();
     let mut tasks = 0;
-    let mut do_move = false;
 
     while !bot.is_dead() {
         match recv.try_recv() {
