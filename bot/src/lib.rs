@@ -336,12 +336,15 @@ impl<E: Evaluator> Thinker<E> {
         &self, children: &mut Vec<ChildData>, board: &Board, spawned: FallingPiece, hold: bool
     ) {
         for mv in moves::find_moves(&board, spawned, self.options.mode) {
-            let can_be_hd = board.above_stack(&mv.location) &&
-            board.column_heights().iter().all(|&y| y < 18);
             let mut result = board.clone();
             let lock = result.lock_piece(mv.location);
-            // Don't add deaths by lock out, don't add useless mini tspins
-            if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
+            // Don't add deaths by lock out, ~~don't add useless mini tspins,~~
+            // don't add non-TSD line clears, don't add wasted Ts
+            if !lock.locked_out && (
+                lock.placement_kind == PlacementKind::MiniTspin2 ||
+                lock.placement_kind == PlacementKind::Tspin2 ||
+                !lock.placement_kind.is_clear()
+            ) && (mv.location.kind.0 != Piece::T || lock.placement_kind.is_clear()) {
                 let move_time = mv.inputs.time + if hold { 1 } else { 0 };
                 let evaluated = self.eval.evaluate(&lock, &result, move_time, spawned.kind.0);
                 children.push(ChildData {
