@@ -159,8 +159,11 @@ impl TreeState {
                         ));
                     }
                 },
-                Some(Children::Known(start, len)) =>
-                    current = pick(&self.trees, &self.childs[start..start+len]),
+                Some(Children::Known(start, len)) => if len != 0 {
+                    current = pick(&self.trees, &self.childs[start..start+len])
+                } else {
+                    return None
+                },
                 Some(Children::Speculation(c)) => {
                     let mut pick_from = ArrayVec::<[_; 7]>::new();
                     for (_, c) in c {
@@ -326,10 +329,7 @@ impl TreeState {
     }
 
     pub fn is_dead(&self) -> bool {
-        match &self.children[self.root] {
-            Some(children) => children.is_dead(),
-            None => false
-        }
+        self.trees[self.root].death
     }
 
     pub fn depth(&self) -> usize {
@@ -391,7 +391,8 @@ impl TreeState {
                     // We may have discovered some paths result in death, so remove those
                     let mut i = *start;
                     while i < *start+*len {
-                        if self.trees[self.childs[i].node].death {
+                        if self.trees[self.childs[i].node].death &&
+                                self.childs[i].lock.cleared_lines.is_empty() {
                             *len -= 1;
                             self.childs.swap(i, *start + *len);
                         } else {
@@ -443,7 +444,8 @@ impl TreeState {
                             // We may have discovered some paths result in death, so remove those
                             let mut i = *start;
                             while i < *start+*len {
-                                if self.trees[self.childs[i].node].death {
+                                if self.trees[self.childs[i].node].death &&
+                                        self.childs[i].lock.cleared_lines.is_empty() {
                                     *len -= 1;
                                     self.childs.swap(i, *start + *len);
                                 } else {
@@ -676,23 +678,5 @@ impl Pieces {
 impl Child {
     fn evaluation(&self, trees: &Vec<Tree>) -> i32 {
         self.accumulated + trees.get(self.node).unwrap().evaluation
-    }
-}
-
-impl Children {
-    fn is_dead(&self) -> bool {
-        match self {
-            &Children::Known(_, len) => len == 0,
-            &Children::Speculation(possibilities) => {
-                for (_, c) in possibilities {
-                    if let Some((_, len)) = c {
-                        if len != 0 {
-                            return false
-                        }
-                    }
-                }
-                true
-            }
-        }
     }
 }
