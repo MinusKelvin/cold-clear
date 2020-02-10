@@ -1,5 +1,4 @@
-use arrayvec::ArrayVec;
-use enumset::{ EnumSet, EnumSetType };
+use enumset::{ EnumSet, EnumSetType, enum_set };
 use enum_map::Enum;
 use serde::{ Serialize, Deserialize };
 
@@ -33,13 +32,13 @@ impl FallingPiece {
         }
     }
 
-    pub fn cells(&self) -> ArrayVec<[(i32, i32, EnumSet<Direction>); 4]> {
-        let x = self.x;
-        let y = self.y;
-        self.kind.cells()
-            .into_iter()
-            .map(move |(dx, dy, d)| (x + dx, y + dy, d))
-            .collect()
+    pub fn cells(&self) -> [(i32, i32, EnumSet<Direction>); 4] {
+        let mut cells = self.kind.cells();
+        for (dx, dy, _) in cells.iter_mut() {
+            *dx += self.x;
+            *dy += self.y;
+        }
+        cells
     }
 
     pub fn shift<R: Row>(&mut self, board: &Board<R>, dx: i32, dy: i32) -> bool {
@@ -57,8 +56,8 @@ impl FallingPiece {
 
     pub fn sonic_drop<R: Row>(&mut self, board: &Board<R>) -> bool {
         let drop_by = self.cells()
-            .into_iter()
-            .map(|(x, y, _)| y - board.column_heights()[x as usize])
+            .iter()
+            .map(|&(x, y, _)| y - board.column_heights()[x as usize])
             .min().unwrap();
         if drop_by > 0 {
             self.tspin = TspinStatus::None;
@@ -84,9 +83,11 @@ impl FallingPiece {
     fn rotate<R: Row>(&mut self, target: PieceState, board: &Board<R>) -> bool {
         let initial = *self;
         self.kind = target;
-        let kicks = initial.kind.rotation_points().into_iter()
-            .zip(target.rotation_points().into_iter())
-            .map(|((x1, y1), (x2, y2))| (x1 - x2, y1 - y2));
+        let initial_offsets = initial.kind.rotation_points();
+        let target_offsets = target.rotation_points();
+        let kicks = initial_offsets.iter()
+            .zip(target_offsets.iter())
+            .map(|(&(x1, y1), &(x2, y2))| (x1 - x2, y1 - y2));
 
         for (i, (dx, dy)) in kicks.enumerate() {
             self.x = initial.x + dx;
@@ -94,14 +95,14 @@ impl FallingPiece {
             if !board.obstructed(self) {
                 if target.0 == Piece::T && self.tspin != TspinStatus::PersistentFull {
                     let mut mini_corners = 0;
-                    for (dx, dy) in target.1.mini_tspin_corners() {
+                    for &(dx, dy) in &target.1.mini_tspin_corners() {
                         if board.occupied(self.x + dx, self.y + dy) {
                             mini_corners += 1;
                         }
                     }
 
                     let mut non_mini_corners = 0;
-                    for (dx, dy) in target.1.non_mini_tspin_corners() {
+                    for &(dx, dy) in &target.1.non_mini_tspin_corners() {
                         if board.occupied(self.x + dx, self.y + dy) {
                             non_mini_corners += 1;
                         }
@@ -200,24 +201,24 @@ impl RotationState {
         }
     }
 
-    pub fn mini_tspin_corners(self) -> ArrayVec<[(i32, i32); 2]> {
+    pub fn mini_tspin_corners(self) -> [(i32, i32); 2] {
         use RotationState::*;
         match self {
             North => [(-1, 1),  (1, 1)],
             East  => [(1, 1),   (1, -1)],
             South => [(1, -1),  (-1, -1)],
             West  => [(-1, -1), (-1, 1)]
-        }.into()
+        }
     }
 
-    pub fn non_mini_tspin_corners(self) -> ArrayVec<[(i32, i32); 2]> {
+    pub fn non_mini_tspin_corners(self) -> [(i32, i32); 2] {
         use RotationState::*;
         match self {
             South => [(-1, 1),  (1, 1)],
             West  => [(1, 1),   (1, -1)],
             North => [(1, -1),  (-1, -1)],
             East  => [(-1, -1), (-1, 1)]
-        }.into()
+        }
     }
 }
 
@@ -232,178 +233,212 @@ impl PieceState {
 
     /// Returns the cells this piece and orientation occupy relative to rotation point 1, as well
     /// as the connection directions, in no particular order.
-    pub fn cells(&self) -> ArrayVec<[(i32, i32, EnumSet<Direction>); 4]> {
+    pub fn cells(&self) -> [(i32, i32, EnumSet<Direction>); 4] {
         use Piece::*;
         use RotationState::*;
         use Direction::*;
-        fn only<T: EnumSetType>(t: T) -> EnumSet<T> {
-            EnumSet::only(t)
-        }
-        match (self.0, self.1) {
-            (I, North) => [
-                (-1, 0, only(Right)),
-                (0, 0, Left | Right),
-                (1, 0, Left | Right),
-                (2, 0, only(Left))
+        
+        const CELLS: [[(i32, i32, EnumSet<Direction>); 4]; 28] = [
+            [
+                (-1, 0, enum_set!(Right)),
+                (0, 0, enum_set!(Left | Right)),
+                (1, 0, enum_set!(Left | Right)),
+                (2, 0, enum_set!(Left))
             ],
-            (I, East)  => [
-                (1, -2, only(Up)),
-                (1, -1, Up | Down),
-                (1, 0, Up | Down),
-                (1, 1, only(Down))
+            [
+                (1, -2, enum_set!(Up)),
+                (1, -1, enum_set!(Up | Down)),
+                (1, 0, enum_set!(Up | Down)),
+                (1, 1, enum_set!(Down))
             ],
-            (I, South) => [
-                (-1, -1, only(Right)),
-                (0, -1, Left | Right),
-                (1, -1, Left | Right),
-                (2, -1, only(Left))
+            [
+                (-1, -1, enum_set!(Right)),
+                (0, -1, enum_set!(Left | Right)),
+                (1, -1, enum_set!(Left | Right)),
+                (2, -1, enum_set!(Left))
             ],
-            (I, West)  => [
-                (0, -2, only(Up)),
-                (0, -1, Up | Down),
-                (0, 0, Up | Down),
-                (0, 1, only(Down))
+            [
+                (0, -2, enum_set!(Up)),
+                (0, -1, enum_set!(Up | Down)),
+                (0, 0, enum_set!(Up | Down)),
+                (0, 1, enum_set!(Down))
             ],
             
-            (O, _) => [
-                (0, 0, Up | Right),
-                (0, 1, Down | Right),
-                (1, 0, Up | Left),
-                (1, 1, Down | Left)
+            [
+                (0, 0, enum_set!(Up | Right)),
+                (0, 1, enum_set!(Down | Right)),
+                (1, 0, enum_set!(Up | Left)),
+                (1, 1, enum_set!(Down | Left))
+            ],
+            [
+                (0, 0, enum_set!(Up | Right)),
+                (0, 1, enum_set!(Down | Right)),
+                (1, 0, enum_set!(Up | Left)),
+                (1, 1, enum_set!(Down | Left))
+            ],
+            [
+                (0, 0, enum_set!(Up | Right)),
+                (0, 1, enum_set!(Down | Right)),
+                (1, 0, enum_set!(Up | Left)),
+                (1, 1, enum_set!(Down | Left))
+            ],
+            [
+                (0, 0, enum_set!(Up | Right)),
+                (0, 1, enum_set!(Down | Right)),
+                (1, 0, enum_set!(Up | Left)),
+                (1, 1, enum_set!(Down | Left))
             ],
 
-            (T, North) => [
-                (-1, 0, only(Right)),
-                (0, 0, Left | Right | Up),
-                (1, 0, only(Left)),
-                (0, 1, only(Down))
+            [
+                (-1, 0, enum_set!(Right)),
+                (0, 0, enum_set!(Left | Right | Up)),
+                (1, 0, enum_set!(Left)),
+                (0, 1, enum_set!(Down))
             ],
-            (T, East)  => [
-                (0, 1, only(Down)),
-                (0, 0, Up | Down | Right),
-                (0, -1, only(Up)),
-                (1, 0, only(Left))
+            [
+                (0, 1, enum_set!(Down)),
+                (0, 0, enum_set!(Up | Down | Right)),
+                (0, -1, enum_set!(Up)),
+                (1, 0, enum_set!(Left))
             ],
-            (T, South) => [
-                (1, 0, only(Left)),
-                (0, 0, Left | Right | Down),
-                (-1, 0, only(Right)),
-                (0, -1, only(Up))
+            [
+                (1, 0, enum_set!(Left)),
+                (0, 0, enum_set!(Left | Right | Down)),
+                (-1, 0, enum_set!(Right)),
+                (0, -1, enum_set!(Up))
             ],
-            (T, West)  => [
-                (0, -1, only(Up)),
-                (0, 0, Left | Up | Down),
-                (0, 1, only(Down)),
-                (-1, 0, only(Right))
-            ],
-
-            (L, North) => [
-                (-1, 0, only(Right)),
-                (0, 0, Left | Right),
-                (1, 0, Left | Up),
-                (1, 1, only(Down))
-            ],
-            (L, East)  => [
-                (0, 1, only(Down)),
-                (0, 0, Up | Down),
-                (0, -1, Up | Right),
-                (1, -1, only(Left))
-            ],
-            (L, South) => [
-                (1, 0, only(Left)),
-                (0, 0, Left | Right),
-                (-1, 0, Right | Down),
-                (-1, -1, only(Up))
-            ],
-            (L, West)  => [
-                (0, -1, only(Up)),
-                (0, 0, Up | Down),
-                (0, 1, Down | Left),
-                (-1, 1, only(Right))
+            [
+                (0, -1, enum_set!(Up)),
+                (0, 0, enum_set!(Left | Up | Down)),
+                (0, 1, enum_set!(Down)),
+                (-1, 0, enum_set!(Right))
             ],
 
-            (J, North) => [
-                (-1, 0, Right | Up),
-                (0, 0, Left | Right),
-                (1, 0, only(Left)),
-                (-1, 1, only(Down))
+            [
+                (-1, 0, enum_set!(Right)),
+                (0, 0, enum_set!(Left | Right)),
+                (1, 0, enum_set!(Left | Up)),
+                (1, 1, enum_set!(Down))
             ],
-            (J, East)  => [
-                (0, 1, Down | Right),
-                (0, 0, Up | Down),
-                (0, -1, only(Up)),
-                (1, 1, only(Left))
+            [
+                (0, 1, enum_set!(Down)),
+                (0, 0, enum_set!(Up | Down)),
+                (0, -1, enum_set!(Up | Right)),
+                (1, -1, enum_set!(Left))
             ],
-            (J, South) => [
-                (1, 0, Down | Left),
-                (0, 0, Left | Right),
-                (-1, 0, only(Right)),
-                (1, -1, only(Up))
+            [
+                (1, 0, enum_set!(Left)),
+                (0, 0, enum_set!(Left | Right)),
+                (-1, 0, enum_set!(Right | Down)),
+                (-1, -1, enum_set!(Up))
             ],
-            (J, West)  => [
-                (0, -1, Left | Up),
-                (0, 0, Up | Down),
-                (0, 1, only(Down)),
-                (-1, -1, only(Right))
-            ],
-
-            (S, North) => [
-                (0, 0, Left | Up),
-                (0, 1, Down | Right),
-                (-1, 0, only(Right)),
-                (1, 1, only(Left))
-            ],
-            (S, East)  => [
-                (0, 0, Right | Up),
-                (1, 0, Down | Left),
-                (0, 1, only(Down)),
-                (1, -1, only(Up))
-            ],
-            (S, South) => [
-                (0, -1, Left | Up),
-                (0, 0, Down | Right),
-                (-1, -1, only(Right)),
-                (1, 0, only(Left))
-            ],
-            (S, West)  => [
-                (-1, 0, Right | Up),
-                (0, 0, Down | Left),
-                (-1, 1, only(Down)),
-                (0, -1, only(Up))
+            [
+                (0, -1, enum_set!(Up)),
+                (0, 0, enum_set!(Up | Down)),
+                (0, 1, enum_set!(Down | Left)),
+                (-1, 1, enum_set!(Right))
             ],
 
-            (Z, North) => [
-                (0, 0, Up | Right),
-                (0, 1, Down | Left),
-                (-1, 1, only(Right)),
-                (1, 0, only(Left))
+            [
+                (-1, 0, enum_set!(Right | Up)),
+                (0, 0, enum_set!(Left | Right)),
+                (1, 0, enum_set!(Left)),
+                (-1, 1, enum_set!(Down))
             ],
-            (Z, East)  => [
-                (0, 0, Right | Down),
-                (1, 0, Left | Up),
-                (1, 1, only(Down)),
-                (0, -1, only(Up))
+            [
+                (0, 1, enum_set!(Down | Right)),
+                (0, 0, enum_set!(Up | Down)),
+                (0, -1, enum_set!(Up)),
+                (1, 1, enum_set!(Left))
             ],
-            (Z, South) => [
-                (0, -1, Up | Right),
-                (0, 0, Down | Left),
-                (-1, 0, only(Right)),
-                (1, -1, only(Left))
+            [
+                (1, 0, enum_set!(Down | Left)),
+                (0, 0, enum_set!(Left | Right)),
+                (-1, 0, enum_set!(Right)),
+                (1, -1, enum_set!(Up))
             ],
-            (Z, West)  => [
-                (-1, 0, Right | Down),
-                (0, 0, Left | Up),
-                (0, 1, only(Down)),
-                (-1, -1, only(Up))
+            [
+                (0, -1, enum_set!(Left | Up)),
+                (0, 0, enum_set!(Up | Down)),
+                (0, 1, enum_set!(Down)),
+                (-1, -1, enum_set!(Right))
             ],
-        }.into()
+
+            [
+                (0, 0, enum_set!(Left | Up)),
+                (0, 1, enum_set!(Down | Right)),
+                (-1, 0, enum_set!(Right)),
+                (1, 1, enum_set!(Left))
+            ],
+            [
+                (0, 0, enum_set!(Right | Up)),
+                (1, 0, enum_set!(Down | Left)),
+                (0, 1, enum_set!(Down)),
+                (1, -1, enum_set!(Up))
+            ],
+            [
+                (0, -1, enum_set!(Left | Up)),
+                (0, 0, enum_set!(Down | Right)),
+                (-1, -1, enum_set!(Right)),
+                (1, 0, enum_set!(Left))
+            ],
+            [
+                (-1, 0, enum_set!(Right | Up)),
+                (0, 0, enum_set!(Down | Left)),
+                (-1, 1, enum_set!(Down)),
+                (0, -1, enum_set!(Up))
+            ],
+
+            [
+                (0, 0, enum_set!(Up | Right)),
+                (0, 1, enum_set!(Down | Left)),
+                (-1, 1, enum_set!(Right)),
+                (1, 0, enum_set!(Left))
+            ],
+            [
+                (0, 0, enum_set!(Right | Down)),
+                (1, 0, enum_set!(Left | Up)),
+                (1, 1, enum_set!(Down)),
+                (0, -1, enum_set!(Up))
+            ],
+            [
+                (0, -1, enum_set!(Up | Right)),
+                (0, 0, enum_set!(Down | Left)),
+                (-1, 0, enum_set!(Right)),
+                (1, -1, enum_set!(Left))
+            ],
+            [
+                (-1, 0, enum_set!(Right | Down)),
+                (0, 0, enum_set!(Left | Up)),
+                (0, 1, enum_set!(Down)),
+                (-1, -1, enum_set!(Up))
+            ],
+        ];
+
+        let piece_index = match self.0 {
+            I => 0,
+            O => 1,
+            T => 2,
+            L => 3,
+            J => 4,
+            S => 5,
+            Z => 6
+        };
+        let rotation_index = match self.1 {
+            North => 0,
+            East => 1,
+            South => 2,
+            West => 3
+        };
+        let index = piece_index * 4 + rotation_index;
+        CELLS[index]
     }
 
     /// Returns the five rotation points associated with this piece and orientation.
     /// 
     /// Note that the first point is always (0, 0). We include it here to make
     /// looping over the possible kicks easier.
-    pub fn rotation_points(&self) -> ArrayVec<[(i32, i32); 5]> {
+    pub fn rotation_points(&self) -> [(i32, i32); 5] {
         use Piece::*;
         use RotationState::*;
         match (self.0, self.1) {
@@ -419,7 +454,7 @@ impl PieceState {
             (_, East)  => [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
             (_, South) => [(0, 0); 5],
             (_, West)  => [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]
-        }.into()
+        }
     }
 }
 

@@ -8,9 +8,10 @@ edition = "2018"
 
 [dependencies]
 battle = { path = "../battle" }
-bot = { path = "../bot" }
+cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+bincode = "1"
+libflate = "0.1"
 rand = "0.7.0"
-crossbeam-channel = "0.4.0"

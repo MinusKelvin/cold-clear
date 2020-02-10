@@ -3,7 +3,7 @@ use crate::Resources;
 use ggez::{ Context, GameResult };
 use ggez::audio::SoundSource;
 use ggez::graphics::*;
-use battle::{ Event, Game };
+use battle::{ Event, Game, PlayerUpdate };
 
 pub struct Gui {
     player_1_graphics: BoardDrawState,
@@ -22,11 +22,11 @@ impl Gui {
 
     pub fn update(
         &mut self,
-        update: &[Event], time: u32,
-        p1_info_update: Option<bot::Info>,
+        update: PlayerUpdate, time: u32,
+        p1_info_update: Option<cold_clear::Info>,
         res: &mut Resources
     ) -> GameResult {
-        for event in update {
+        for event in &update.events {
             use battle::Event::*;
             match event {
                 PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {

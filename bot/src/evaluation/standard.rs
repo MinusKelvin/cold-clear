@@ -5,6 +5,7 @@ use serde::{ Serialize, Deserialize };
 use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Standard {
     pub back_to_back: i32,
     pub bumpiness: i32,
@@ -12,6 +13,7 @@ pub struct Standard {
     pub height: i32,
     pub top_half: i32,
     pub top_quarter: i32,
+    pub jeopardy: i32,
     pub cavity_cells: i32,
     pub cavity_cells_sq: i32,
     pub overhang_cells: i32,
@@ -44,36 +46,37 @@ pub struct Standard {
 impl Default for Standard {
     fn default() -> Self {
         Standard {
-            back_to_back: 50,
-            bumpiness: -10,
-            bumpiness_sq: -5,
-            height: -300,
-            top_half: 0,
-            top_quarter: 0,
-            cavity_cells: -80,
-            cavity_cells_sq: -10,
-            overhang_cells: -50,
-            overhang_cells_sq: -10,
-            covered_cells: 0,
-            covered_cells_sq: 0,
-            tslot: [20, 150, 300, -400],
-            well_depth: -150,
-            max_well_depth: 20,
-            well_column: [0, 0, 10, 50, 40, 40, 60, 10, 0, 0],
+            back_to_back: 52,
+            bumpiness: -24,
+            bumpiness_sq: -7,
+            height: -39,
+            top_half: -150,
+            top_quarter: -511,
+            jeopardy: -5,
+            cavity_cells: -158,
+            cavity_cells_sq: -7,
+            overhang_cells: -48,
+            overhang_cells_sq: 1,
+            covered_cells: -17,
+            covered_cells_sq: -1,
+            tslot: [8, 148, 192, 407],
+            well_depth: 57,
+            max_well_depth: 17,
+            well_column: [20, 23, 20, 50, 59, 21, 59, 10, -10, 24],
 
-            move_time: -1,
-            wasted_t: -500,
-            b2b_clear: 100,
-            clear1: -150,
+            move_time: -3,
+            wasted_t: -152,
+            b2b_clear: 104,
+            clear1: -143,
             clear2: -100,
-            clear3: -50,
-            clear4: 400,
-            tspin1: 130,
-            tspin2: 400,
-            tspin3: 600,
-            mini_tspin1: -150,
-            mini_tspin2: -100,
-            perfect_clear: 1000,
+            clear3: -58,
+            clear4: 390,
+            tspin1: 121,
+            tspin2: 410,
+            tspin3: 602,
+            mini_tspin1: -158,
+            mini_tspin2: -93,
+            perfect_clear: 999,
             combo_garbage: 150,
 
             sub_name: None
@@ -160,9 +163,15 @@ impl Evaluator for Standard {
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.top_quarter * (highest_point - 15).max(0);
         transient_eval += self.top_half * (highest_point - 10).max(0);
+        acc_eval += self.jeopardy * (highest_point - 10).max(0);
+
+        let ts
+            = board.next_bag().contains(Piece::T) as usize
+            + (board.next_bag().len() <= 3) as usize
+            + (board.hold_piece == Some(Piece::T)) as usize;
 
         let mut board = board.clone();
-        loop {
+        for _ in 0..ts {
             let result = if let Some((x, y)) = sky_tslot(&board) {
                 cutout_tslot(board.clone(), FallingPiece {
                     x, y,
@@ -182,6 +191,8 @@ impl Evaluator for Standard {
                 } else {
                     break
                 }
+            } else if let Some(twist) = fin_to_win(&board) {
+                cutout_tslot(board.clone(), twist.piece())
             } else {
                 break
             };
@@ -525,12 +536,13 @@ impl TstTwist {
 /// That is, if looks for these with sky above:
 /// 
 /// ```
-/// []....    ....[]
-/// ......    ......
-/// ..[]        []..
-/// ....        ....
-/// ..            ..
+/// []....{}    {}....[]
+/// ......{}    {}......
+/// ..[]            []..
+/// ....            ....
+/// ..                ..
 /// ```
+/// where the `{}` have the same occupied state
 fn tst_twist(board: &Board) -> Option<TstTwist> {
     for (x, hs) in board.column_heights().windows(3).enumerate() {
         let x = x as i32;
@@ -544,7 +556,8 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
                 !board.occupied(x, middle_h-1) &&
                 !board.occupied(x, middle_h-2) &&
                 !board.occupied(x+1, middle_h-2) &&
-                !board.occupied(x, middle_h-3);
+                !board.occupied(x, middle_h-3) &&
+                board.occupied(x+3, middle_h) == board.occupied(x+3, middle_h+1);
             if is_tst_slot {
                 return Some(TstTwist {
                     point_left: false,
@@ -566,7 +579,8 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
                 !board.occupied(x+2, middle_h-1) &&
                 !board.occupied(x+2, middle_h-2) &&
                 !board.occupied(x+1, middle_h-2) &&
-                !board.occupied(x+2, middle_h-3);
+                !board.occupied(x+2, middle_h-3) &&
+                board.occupied(x-1, middle_h) == board.occupied(x-1, middle_h+1);
             if is_tst_slot {
                 return Some(TstTwist {
                     point_left: true,
@@ -579,6 +593,56 @@ fn tst_twist(board: &Board) -> Option<TstTwist> {
                     ) >= 2
                 });
             }
+        }
+    }
+    None
+}
+
+/// Finds this thing:
+/// ```
+/// ....[][]
+/// ........
+///   ......[]
+///   []....
+///     []..[]
+/// ```
+/// and the mirror version, with sky above.
+fn fin_to_win(board: &Board) -> Option<TstTwist> {
+    for x in 0..7 {
+        // left-pointing fin
+        let h = board.column_heights()[x as usize + 1];
+        if board.column_heights()[x as usize] <= h+1 &&
+                board.occupied(x+1, h-1) &&
+                board.occupied(x+2, h+2) && board.occupied(x+2, h-2) &&
+                board.occupied(x+3, h+2) &&
+                board.occupied(x+4, h) && board.occupied(x+4, h-2) &&
+                !board.occupied(x+2, h+1) && !board.occupied(x+3, h+1) &&
+                !board.occupied(x+2, h) && !board.occupied(x+3, h) &&
+                !board.occupied(x+2, h-1) && !board.occupied(x+3, h-1) &&
+                !board.occupied(x+3, h-2) {
+            return Some(TstTwist {
+                point_left: true,
+                is_tslot: true,
+                x: x+3,
+                y: h-1
+            });
+        }
+        // right-pointing fin
+        let h = board.column_heights()[x as usize + 2];
+        if board.column_heights()[x as usize + 3] <= h+1 &&
+                board.occupied(x, h+2) && board.occupied(x+1, h+2) &&
+                board.occupied(x+1, h-2) && board.occupied(x+2, h-1) &&
+                board.occupied(x-1, h) && board.occupied(x-1, h-2) &&
+                !board.occupied(x, h+1) && !board.occupied(x+1, h+1) &&
+                !board.occupied(x, h) && !board.occupied(x+1, h) &&
+                !board.occupied(x, h-1) && !board.occupied(x+1, h-1) &&
+                !board.occupied(x, h-2) {
+            return Some(TstTwist {
+                point_left: false,
+                is_tslot: true,
+                x,
+                y: h-1
+            });
         }
     }
     None

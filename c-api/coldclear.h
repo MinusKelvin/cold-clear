@@ -35,7 +35,7 @@ typedef struct CCMove {
     /* Bot Info */
     uint32_t nodes;
     uint32_t depth;
-    int32_t evaluation;
+    uint32_t original_rank;
 } CCMove;
 
 typedef struct CCOptions {
@@ -53,6 +53,7 @@ typedef struct CCWeights {
     int32_t height;
     int32_t top_half;
     int32_t top_quarter;
+    int32_t jeopardy;
     int32_t cavity_cells;
     int32_t cavity_cells_sq;
     int32_t overhang_cells;
@@ -62,6 +63,7 @@ typedef struct CCWeights {
     int32_t tslot[4];
     int32_t well_depth;
     int32_t max_well_depth;
+    int32_t well_column[10];
 
     int32_t b2b_clear;
     int32_t clear1;
@@ -74,8 +76,9 @@ typedef struct CCWeights {
     int32_t mini_tspin1;
     int32_t mini_tspin2;
     int32_t perfect_clear;
-    int32_t combo_table[12];
+    int32_t combo_garbage;
     int32_t move_time;
+    int32_t wasted_t;
 } CCWeights;
 
 /* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag, using the

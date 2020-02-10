@@ -91,7 +91,7 @@ impl Evaluator for Misalike {
 
         // Line 114 to 119
         // This checks if a T piece or an I piece is in hold and changes score appropriately.
-        score -= match board.hold_piece() {
+        score -= match board.hold_piece {
             Some(Piece::T) => self.t_piece_in_hold,
             Some(Piece::I) => self.i_piece_in_hold,
             _ => 0

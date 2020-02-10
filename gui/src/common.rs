@@ -22,7 +22,7 @@ pub struct BoardDrawState {
     clear_splash: Option<(&'static str, u32)>,
     name: String,
     hard_drop_particles: Option<(u32, Vec<(f32, f32, f32)>)>,
-    info: Option<bot::Info>
+    info: Option<cold_clear::Info>
 }
 
 enum State {
@@ -51,7 +51,10 @@ impl BoardDrawState {
         }
     }
 
-    pub fn update(&mut self, update: &[Event], info_update: Option<bot::Info>, time: u32) {
+    pub fn update(
+        &mut self, update: PlayerUpdate, info_update: Option<cold_clear::Info>, time: u32
+    ) {
+        self.garbage_queue = update.garbage_queue;
         self.info = info_update.or(self.info.take());
         self.game_time = time;
         if let State::LineClearAnimation(_, ref mut frames) = self.state {
@@ -90,13 +93,13 @@ impl BoardDrawState {
                 }
             }
         }
-        for event in update {
+        for event in &update.events {
             match event {
                 Event::PiecePlaced { piece, locked, hard_drop_distance } => {
                     self.statistics.update(&locked);
                     if hard_drop_distance.is_some() {
                         let mut particles = vec![];
-                        for (x, y, _) in piece.cells() {
+                        for &(x, y, _) in &piece.cells() {
                             if y == 0 || self.board[y as usize - 1].get(x as usize) {
                                 for i in 0..5 {
                                     let r: f32 = thread_rng().gen();
@@ -108,7 +111,7 @@ impl BoardDrawState {
                         }
                         self.hard_drop_particles = Some((5, particles));
                     }
-                    for (x, y, _) in piece.cells() {
+                    for &(x, y, _) in &piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
                     if locked.cleared_lines.is_empty() {
@@ -135,8 +138,8 @@ impl BoardDrawState {
                     self.state = State::Delay;
                 }
                 Event::PieceSpawned { new_in_queue } => {
-                    self.next_queue.pop_front();
                     self.next_queue.push_back(*new_in_queue);
+                    self.next_queue.pop_front();
                 }
                 Event::PieceFalling(piece, ghost) => {
                     self.state = State::Falling(*piece, *ghost);
@@ -206,12 +209,12 @@ impl BoardDrawState {
         // Draw either the falling piece or the line clear animation
         match self.state {
             State::Falling(piece, ghost) => {
-                for (x,y,_) in ghost.cells() {
+                for &(x,y,_) in &ghost.cells() {
                     sprites.add(draw_tile(
                         x+3, y, 2, 0, cell_color_to_color(piece.kind.0.color())
                     ));
                 }
-                for (x,y,_) in piece.cells() {
+                for &(x,y,_) in &piece.cells() {
                     sprites.add(draw_tile(
                         x+3, y, 1, 0, cell_color_to_color(piece.kind.0.color())
                     ));
@@ -325,11 +328,11 @@ impl BoardDrawState {
                 None
             );
             queue_text(
-                ctx, &text("Eval", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
+                ctx, &text("O. Rank", scale*0.66, 0.0), [text_x-0.75*scale, y + 3.4*scale], None
             );
             queue_text(
                 ctx,
-                &text(format!("{}", info.evaluation), scale*0.66, -3.5*scale),
+                &text(format!("{}", info.original_rank), scale*0.66, -3.5*scale),
                 [text_x-0.75*scale, y + 3.4*scale],
                 None
             );
@@ -372,12 +375,12 @@ impl BoardDrawState {
                     y_map[i] = i as i32;
                 }
                 for (placement, lock) in &info.plan {
-                    for (x, y, d) in placement.location.cells() {
+                    for &(x, y, d) in &placement.cells() {
                         let (tx, ty) = dir_to_tile(d);
                         sprites.add(draw_tile(
                             x+3, y_map[y as usize],
                             tx, ty,
-                            cell_color_to_color(placement.location.kind.0.color())
+                            cell_color_to_color(placement.kind.0.color())
                         ));
                     }
                     let mut new_map = [0; 40];

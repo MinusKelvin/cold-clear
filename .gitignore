@@ -2,4 +2,5 @@
 **/*.rs.bk
 playout*
 Cargo.lock
-/tetris_ai*
+options.yaml
+replay.dat

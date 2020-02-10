@@ -2,13 +2,15 @@ use ggez::event::EventHandler;
 use ggez::{ Context, GameResult };
 use ggez::graphics;
 use ggez::timer;
+use ggez::input::gamepad::{ GamepadId, gamepad };
 use libtetris::Board;
-use battle::{ Game, GameConfig };
+use battle::{ Game, GameConfig, PlayerUpdate };
 use crate::interface::{ Gui, text };
 use crate::Resources;
 use rand::prelude::*;
 use crate::input::InputSource;
 use std::collections::VecDeque;
+use libflate::deflate;
 
 type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
 
@@ -18,10 +20,11 @@ pub struct LocalGame<'a> {
     rng: rand_pcg::Pcg64Mcg,
     p1_input_factory: Box<InputFactory>,
     p1_input: Box<dyn InputSource>,
-    p1_info_updates: VecDeque<Option<bot::Info>>,
+    p1_info_updates: VecDeque<Option<cold_clear::Info>>,
     state: State,
     resources: &'a mut Resources,
     config: GameConfig,
+    gamepad: Option<GamepadId>,
     time: u32
 }
 
@@ -48,7 +51,8 @@ impl<'a> LocalGame<'a> {
             p1_info_updates: VecDeque::new(),
             state: State::Starting(180),
             resources,
-            config
+            config,
+            gamepad: None
         }
     }
 }
@@ -90,8 +94,8 @@ impl EventHandler for LocalGame<'_> {
             };
 
             if do_update {
-                self.time += 1;
-                let p1_controller = self.p1_input.controller(ctx);
+                let gamepad = self.gamepad.map(|id| gamepad(ctx, id));
+                let p1_controller = self.p1_input.controller(ctx, gamepad);
 
                 let update = self.game.update(p1_controller, &mut self.rng, &mut thread_rng());
 
@@ -113,7 +117,12 @@ impl EventHandler for LocalGame<'_> {
                     }
                 }
 
-                self.gui.update(&update, self.time, p1_info_update, self.resources)?;
+                let update = PlayerUpdate {
+                    events: update,
+                    garbage_queue: 0,
+                };
+
+                self.gui.update(update, self.time, p1_info_update, self.resources)?;
             }
         }
 
@@ -133,5 +142,17 @@ impl EventHandler for LocalGame<'_> {
         graphics::set_window_title(ctx, &format!("Cold Clear (FPS: {:.0})", ggez::timer::fps(ctx)));
 
         graphics::present(ctx)
+    }
+
+    fn gamepad_button_down_event(
+        &mut self, _: &mut Context, _: ggez::event::Button, id: GamepadId
+    ) {
+        self.gamepad.get_or_insert(id);
+    }
+
+    fn gamepad_axis_event(
+        &mut self, _: &mut Context, _: ggez::event::Axis, _: f32, id: GamepadId
+    ) {
+        self.gamepad.get_or_insert(id);
     }
 }

@@ -1,4 +1,4 @@
-type CCAsyncBot = bot::Interface;
+type CCAsyncBot = cold_clear::Interface;
 
 macro_rules! cenum {
     ($($(#[$a:meta])* enum $name:ident => $t:ty { $($item:ident => $to:ident),* })*) => {
@@ -55,7 +55,7 @@ cenum! {
         CC_DROP => SonicDrop
     }
 
-    enum CCMovementMode => bot::moves::MovementMode {
+    enum CCMovementMode => cold_clear::moves::MovementMode {
         CC_0G => ZeroG,
         CC_20G => TwentyG,
         CC_HARD_DROP_ONLY => HardDropOnly
@@ -72,7 +72,7 @@ struct CCMove {
     movements: [CCMovement; 32],
     nodes: u32,
     depth: u32,
-    evaluation: i32,
+    original_rank: u32,
 }
 
 #[repr(C)]
@@ -92,6 +92,7 @@ struct CCWeights {
     height: i32,
     top_half: i32,
     top_quarter: i32,
+    jeopardy: i32,
     cavity_cells: i32,
     cavity_cells_sq: i32,
     overhang_cells: i32,
@@ -101,6 +102,7 @@ struct CCWeights {
     tslot: [i32; 4],
     well_depth: i32,
     max_well_depth: i32,
+    well_column: [i32; 10],
 
     b2b_clear: i32,
     clear1: i32,
@@ -113,29 +115,31 @@ struct CCWeights {
     mini_tspin1: i32,
     mini_tspin2: i32,
     perfect_clear: i32,
-    combo_table: [i32; 12],
+    combo_garbage: i32,
     move_time: i32,
+    wasted_t: i32,
 }
 
 #[no_mangle]
 extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut CCAsyncBot {
-    Box::into_raw(Box::new(bot::Interface::launch(
+    Box::into_raw(Box::new(cold_clear::Interface::launch(
         libtetris::Board::new(),
-        bot::Options {
+        cold_clear::Options {
             max_nodes: options.max_nodes,
             min_nodes: options.min_nodes,
             use_hold: options.use_hold,
             speculate: options.speculate,
             mode: options.mode.into(),
-            ..bot::Options::default()
+            ..cold_clear::Options::default()
         },
-        bot::evaluation::Standard {
+        cold_clear::evaluation::Standard {
             back_to_back: weights.back_to_back,
             bumpiness: weights.bumpiness,
             bumpiness_sq: weights.bumpiness_sq,
             height: weights.height,
             top_half: weights.top_half,
             top_quarter: weights.top_quarter,
+            jeopardy: weights.jeopardy,
             cavity_cells: weights.cavity_cells,
             cavity_cells_sq: weights.cavity_cells_sq,
             overhang_cells: weights.overhang_cells,
@@ -145,6 +149,7 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             tslot: weights.tslot,
             well_depth: weights.well_depth,
             max_well_depth: weights.max_well_depth,
+            well_column: weights.well_column,
 
             b2b_clear: weights.b2b_clear,
             clear1: weights.clear1,
@@ -157,8 +162,9 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             mini_tspin1: weights.mini_tspin1,
             mini_tspin2: weights.mini_tspin2,
             perfect_clear: weights.perfect_clear,
-            combo_table: weights.combo_table,
+            combo_garbage: weights.combo_garbage,
             move_time: weights.move_time,
+            wasted_t: weights.wasted_t,
 
             sub_name: None
         }
@@ -192,7 +198,7 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> bool {
     if let Some((m, info)) = bot.poll_next_move() {
         let mut expected_x = [0; 4];
         let mut expected_y = [0; 4];
-        for (i, (x, y, _)) in m.expected_location.cells().into_iter().enumerate() {
+        for (i, &(x, y, _)) in m.expected_location.cells().iter().enumerate() {
             expected_x[i] = x as u8;
             expected_y[i] = y as u8;
         }
@@ -208,7 +214,7 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> bool {
             movements,
             nodes: info.nodes as u32,
             depth: info.depth as u32,
-            evaluation: info.evaluation,
+            original_rank: info.original_rank as u32,
         };
         true
     } else {
@@ -223,7 +229,7 @@ extern "C" fn cc_is_dead_async(bot: &mut CCAsyncBot) -> bool {
 
 #[no_mangle]
 extern "C" fn cc_default_options(options: &mut CCOptions) {
-    let o = bot::Options::default();
+    let o = cold_clear::Options::default();
     *options = CCOptions {
         max_nodes: o.max_nodes,
         min_nodes: o.min_nodes,
@@ -235,7 +241,7 @@ extern "C" fn cc_default_options(options: &mut CCOptions) {
 
 #[no_mangle]
 extern "C" fn cc_default_weights(weights: &mut CCWeights) {
-    let w = bot::evaluation::Standard::default();
+    let w = cold_clear::evaluation::Standard::default();
     *weights = CCWeights {
         back_to_back: w.back_to_back,
         bumpiness: w.bumpiness,
@@ -243,6 +249,7 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
         height: w.height,
         top_half: w.top_half,
         top_quarter: w.top_quarter,
+        jeopardy: w.jeopardy,
         cavity_cells: w.cavity_cells,
         cavity_cells_sq: w.cavity_cells_sq,
         overhang_cells: w.overhang_cells,
@@ -252,6 +259,7 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
         tslot: w.tslot,
         well_depth: w.well_depth,
         max_well_depth: w.max_well_depth,
+        well_column: w.well_column,
 
         b2b_clear: w.b2b_clear,
         clear1: w.clear1,
@@ -264,7 +272,8 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
         mini_tspin1: w.mini_tspin1,
         mini_tspin2: w.mini_tspin2,
         perfect_clear: w.perfect_clear,
-        combo_table: w.combo_table,
+        combo_garbage: w.combo_garbage,
         move_time: w.move_time,
+        wasted_t: w.wasted_t
     }
 }

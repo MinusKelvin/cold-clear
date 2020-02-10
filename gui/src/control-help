@@ -1,8 +1,0 @@
-# The names of most keys are unsurprising, but if you can't guess one you can
-# find a list of the key names here:
-# https://docs.rs/ggez/0.5.1/ggez/input/keyboard/enum.KeyCode.html
-# Examples of key names that aren't so obvious: LShift, RControl, Key1, Numpad0
-#
-# If this file can't be loaded, the default controls will be used and an error
-# message will be printed to the console, which you can see by running this
-# program from a shell.

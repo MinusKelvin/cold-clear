@@ -1,7 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use rand::prelude::*;
-use crate::{ Controller, GameConfig };
+use crate::GameConfig;
 
 pub struct Game {
     pub board: Board<ColoredRow>,
@@ -122,13 +122,17 @@ impl Game {
 
         match self.state {
             GameState::SpawnDelay(0) => {
-                let next_piece = self.board.advance_queue().unwrap();
+                let mut events = vec![];
+                if self.config.spawn_delay == 0 {
+                    events.push(Event::FrameBeforePieceSpawns);
+                }
                 let new_piece = self.board.generate_next_piece(piece_rng);
                 self.board.add_next_piece(new_piece);
+                let next_piece = self.board.advance_queue().unwrap();
                 if let Some(spawned) = FallingPiece::spawn(next_piece, &self.board) {
                     self.state = GameState::Falling(FallingState {
                         piece: spawned,
-                        lowest_y: spawned.cells().into_iter().map(|(_,y,_)| y).min().unwrap(),
+                        lowest_y: spawned.cells().iter().map(|&(_,y,_)| y).min().unwrap(),
                         rotation_move_count: 0,
                         gravity: self.config.gravity,
                         lock_delay: 30,
@@ -136,14 +140,13 @@ impl Game {
                     });
                     let mut ghost = spawned;
                     ghost.sonic_drop(&self.board);
-                    vec![
-                        Event::PieceSpawned { new_in_queue: new_piece },
-                        Event::PieceFalling(spawned, ghost)
-                    ]
+                    events.push(Event::PieceSpawned { new_in_queue: new_piece });
+                    events.push(Event::PieceFalling(spawned, ghost));
                 } else {
                     self.state = GameState::GameOver;
-                    vec![Event::GameOver]
+                    events.push(Event::GameOver);
                 }
+                events
             }
             GameState::SpawnDelay(ref mut delay) => {
                 *delay -= 1;
@@ -180,7 +183,7 @@ impl Game {
                         if let Some(spawned) = FallingPiece::spawn(piece, &self.board) {
                             *falling = FallingState {
                                 piece: spawned,
-                                lowest_y: spawned.cells().into_iter().map(|(_,y,_)| y).min().unwrap(),
+                                lowest_y: spawned.cells().iter().map(|&(_,y,_)| y).min().unwrap(),
                                 rotation_move_count: 0,
                                 gravity: self.config.gravity,
                                 lock_delay: 30,
@@ -228,25 +231,21 @@ impl Game {
                 }
 
                 // Shift
-                if self.used.left {
-                    if falling.piece.shift(&self.board, -1, 0) {
-                        self.used.left = false;
-                        falling.rotation_move_count += 1;
-                        falling.lock_delay = self.config.lock_delay;
-                        events.push(Event::PieceMoved);
-                    }
+                while self.used.left && falling.piece.shift(&self.board, -1, 0) {
+                    self.used.left = self.config.auto_repeat_rate == 0 && self.das_delay == 0;
+                    falling.rotation_move_count += 1;
+                    falling.lock_delay = self.config.lock_delay;
+                    events.push(Event::PieceMoved);
                 }
-                if self.used.right {
-                    if falling.piece.shift(&self.board, 1, 0) {
-                        self.used.right = false;
-                        falling.rotation_move_count += 1;
-                        falling.lock_delay = self.config.lock_delay;
-                        events.push(Event::PieceMoved);
-                    }
+                while self.used.right && falling.piece.shift(&self.board, 1, 0) {
+                    self.used.right = self.config.auto_repeat_rate == 0 && self.das_delay == 0;
+                    falling.rotation_move_count += 1;
+                    falling.lock_delay = self.config.lock_delay;
+                    events.push(Event::PieceMoved);
                 }
 
                 // 15 move lock rule reset
-                let low_y = falling.piece.cells().into_iter().map(|(_,y,_)| y).min().unwrap();
+                let low_y = falling.piece.cells().iter().map(|&(_,y,_)| y).min().unwrap();
                 if low_y < falling.lowest_y {
                     falling.rotation_move_count = 0;
                     falling.lowest_y = low_y;
@@ -256,7 +255,7 @@ impl Game {
                 if falling.rotation_move_count >= self.config.move_lock_rule {
                     let mut p = falling.piece;
                     p.sonic_drop(&self.board);
-                    let low_y = p.cells().into_iter().map(|(_,y,_)| y).min().unwrap();
+                    let low_y = p.cells().iter().map(|&(_,y,_)| y).min().unwrap();
                     // I don't think the 15 move lock rule applies if the piece can fall to a lower
                     // y position than it has ever reached before.
                     if low_y >= falling.lowest_y {
@@ -303,16 +302,18 @@ impl Game {
                     } else if self.config.gravity > self.config.soft_drop_speed as i32 * 100 {
                         // Soft drop
                         if self.used.soft_drop {
-                            if falling.soft_drop_delay == 0 {
+                            while falling.soft_drop_delay == 0 {
                                 falling.piece.shift(&self.board, 0, -1);
                                 falling.soft_drop_delay = self.config.soft_drop_speed;
                                 falling.gravity = self.config.gravity;
                                 events.push(Event::PieceMoved);
+                                events.push(Event::SoftDropped);
                                 if self.board.on_stack(&falling.piece) {
                                     events.push(Event::StackTouched);
+                                    break
                                 }
-                                events.push(Event::SoftDropped);
-                            } else {
+                            }
+                            if falling.soft_drop_delay != 0 {
                                 falling.soft_drop_delay -= 1;
                             }
                         } else {

@@ -1,6 +1,6 @@
-use libtetris::{ Board, ColoredRow, FallingPiece };
-use battle::{ Battle, Replay, Controller, Event, PieceMoveExecutor };
-use bot::evaluation::Evaluator;
+use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
+use battle::{ Battle, Replay, Event, PieceMoveExecutor };
+use cold_clear::evaluation::Evaluator;
 use rand::prelude::*;
 use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
-    bot: bot::BotState<E>
+    bot: cold_clear::BotState<E>
 }
 
 const THINK_AMOUNT: usize = 10;
@@ -18,7 +18,7 @@ impl<E: Evaluator> BotInput<E> {
         let mut this = BotInput {
             controller: Controller::default(),
             executing: None,
-            bot: bot::BotState::new(board, Default::default(), eval)
+            bot: cold_clear::BotState::new(board, Default::default(), eval)
         };
         for _ in 0..180 {
             // equivalent of 3 realtime seconds of thinking
@@ -29,14 +29,16 @@ impl<E: Evaluator> BotInput<E> {
 
     fn think(&mut self) {
         for _ in 0..THINK_AMOUNT {
-            if !self.bot.think() {
+            if self.bot.think() != Some(true) {
                 // can't think anymore
                 break
             }
         }
     }
 
-    pub fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<bot::Info> {
+    pub fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event]
+    ) -> Option<cold_clear::Info> {
         self.think();
 
         let mut info = None;
@@ -45,13 +47,14 @@ impl<E: Evaluator> BotInput<E> {
                 Event::PieceSpawned { new_in_queue } => {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
-                        if let Some((mv, inf)) = self.bot.next_move() {
+                        let exec = &mut self.executing;
+                        self.bot.next_move(|mv, inf| {
                             info = Some(inf);
-                            self.executing = Some((
+                            *exec = Some((
                                 mv.expected_location,
                                 PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
                             ));
-                        }
+                        });
                     }
                 }
                 Event::GarbageAdded(_) => {
@@ -75,7 +78,8 @@ impl<E: Evaluator> BotInput<E> {
 
 pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
-        Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+        Default::default(), Default::default(),
+        thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
     battle.replay.p1_name = format!("Cold Clear\n{}", p1.name());
@@ -135,6 +139,6 @@ pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InfoReplay {
     pub replay: Replay,
-    pub p1_info_updates: VecDeque<Option<bot::Info>>,
-    pub p2_info_updates: VecDeque<Option<bot::Info>>
+    pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
 }

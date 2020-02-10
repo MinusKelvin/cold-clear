@@ -1,16 +1,17 @@
 use std::collections::VecDeque;
 use serde::{ Serialize, Deserialize };
 use battle::{ Replay, Battle };
-use bot::evaluation::Evaluator;
+use cold_clear::evaluation::Evaluator;
 use rand::prelude::*;
 use statrs::distribution::{ Binomial, Univariate };
+use libflate::deflate;
 
 mod input;
 use input::BotInput;
 
 fn main() {
-    use bot::evaluation::Standard;
-    use bot::evaluation::changed;
+    use cold_clear::evaluation::Standard;
+    use cold_clear::evaluation::changed;
 
     let p1_eval = Standard::default();
 
@@ -18,7 +19,7 @@ fn main() {
 
     let (send, recv) = std::sync::mpsc::channel();
 
-    for _ in 0..2 {
+    for _ in 0..12 {
         let p1_eval = p1_eval.clone();
         let p2_eval = p2_eval.clone();
         let send = send.clone();
@@ -32,7 +33,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 3000;
+    let games = 5000;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
@@ -43,8 +44,11 @@ fn main() {
                     p2_wins += 1;
                 }
 
-                let f = std::fs::File::create("recent-game.json").unwrap();
-                serde_json::to_writer(std::io::BufWriter::new(f), &replay).unwrap();
+                let mut encoder = deflate::Encoder::new(
+                    std::fs::File::create("recent-game.dat"
+                ).unwrap());
+                bincode::serialize_into(&mut encoder, &replay).unwrap();
+                encoder.finish().unwrap();
 
                 println!("{} of {}", p1_wins + p2_wins, games);
                 println!("{} - {}", p1_wins, p2_wins);
@@ -59,7 +63,8 @@ fn main() {
 
 fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
     let mut battle = Battle::new(
-        Default::default(), thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+        Default::default(), Default::default(),
+        thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
     battle.replay.p1_name = format!("Cold Clear\n{}", p1.name());
@@ -115,6 +120,6 @@ fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InfoReplay {
     pub replay: Replay,
-    pub p1_info_updates: VecDeque<Option<bot::Info>>,
-    pub p2_info_updates: VecDeque<Option<bot::Info>>
+    pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
 }

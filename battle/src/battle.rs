@@ -2,7 +2,8 @@ use rand_pcg::Pcg64Mcg;
 use rand::prelude::*;
 use std::collections::VecDeque;
 use serde::{ Serialize, Deserialize };
-use crate::{ Game, GameConfig, Controller, Event };
+use crate::{ Game, GameConfig, Event };
+use libtetris::Controller;
 
 pub struct Battle {
     pub player_1: Game,
@@ -18,7 +19,7 @@ pub struct Battle {
 
 impl Battle {
     pub fn new(
-        config: GameConfig,
+        p1_config: GameConfig, p2_config: GameConfig,
         p1_seed: <Pcg64Mcg as SeedableRng>::Seed,
         p2_seed: <Pcg64Mcg as SeedableRng>::Seed,
         garbage_seed: <Pcg64Mcg as SeedableRng>::Seed
@@ -26,18 +27,18 @@ impl Battle {
         let mut p1_rng = Pcg64Mcg::from_seed(p1_seed);
         let mut p2_rng = Pcg64Mcg::from_seed(p2_seed);
         let garbage_rng = Pcg64Mcg::from_seed(garbage_seed);
-        let player_1 = Game::new(config, &mut p1_rng);
-        let player_2 = Game::new(config, &mut p2_rng);
+        let player_1 = Game::new(p1_config, &mut p1_rng);
+        let player_2 = Game::new(p2_config, &mut p2_rng);
         Battle {
             replay: Replay {
                 p1_name: String::new(), p2_name: String::new(),
-                config, p1_seed, p2_seed, garbage_seed,
+                p1_config, p2_config, p1_seed, p2_seed, garbage_seed,
                 updates: VecDeque::new()
             },
             player_1, player_2,
             p1_rng, p2_rng, garbage_rng,
             time: 0,
-            margin_time: config.margin_time,
+            margin_time: p1_config.margin_time,
             multiplier: 1.0,
         }
     }
@@ -102,6 +103,7 @@ pub struct Replay {
     pub p1_seed: <Pcg64Mcg as SeedableRng>::Seed,
     pub p2_seed: <Pcg64Mcg as SeedableRng>::Seed,
     pub garbage_seed: <Pcg64Mcg as SeedableRng>::Seed,
-    pub config: GameConfig,
+    pub p1_config: GameConfig,
+    pub p2_config: GameConfig,
     pub updates: VecDeque<(Controller, Controller)>
 }
