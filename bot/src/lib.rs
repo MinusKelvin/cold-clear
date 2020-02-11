@@ -1,4 +1,4 @@
-use std::sync::mpsc::{ Sender, Receiver, TryRecvError, TrySendError, channel, sync_channel };
+use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
 use std::sync::Arc;
 use serde::{ Serialize, Deserialize };
 use enum_map::EnumMap;
@@ -93,8 +93,8 @@ impl Interface {
     /// 
     /// Once a move is chosen, the bot will update its internal state to the result of the piece
     /// being placed correctly and the move will become available by calling `poll_next_move`.
-    pub fn request_next_move(&mut self) {
-        if self.send.send(BotMsg::NextMove).is_err() {
+    pub fn request_next_move(&mut self, incoming: u32) {
+        if self.send.send(BotMsg::NextMove(incoming)).is_err() {
             self.dead = true;
         }
     }
@@ -148,7 +148,7 @@ enum BotMsg {
         combo: u32
     },
     NewPiece(Piece),
-    NextMove
+    NextMove(u32)
 }
 
 pub struct BotState<E: Evaluator> {
@@ -223,16 +223,16 @@ impl<E: Evaluator> BotState<E> {
         self.tree.nodes > self.options.min_nodes
     }
 
-    pub fn next_move(&mut self, f: impl FnOnce(Move, Info)) -> bool {
+    pub fn next_move(&mut self, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
         if self.tree.nodes < self.options.min_nodes {
             return false
         }
 
-        let child = if let Some(child) = self.tree.best_move() {
-            child
-        } else {
+        let candidates = self.tree.get_next_candidates();
+        if candidates.is_empty() {
             return false
-        };
+        }
+        let child = self.eval.pick_move(candidates, incoming);
 
         let plan = self.tree.get_plan();
 
@@ -256,7 +256,7 @@ impl<E: Evaluator> BotState<E> {
 
         f(mv, info);
 
-        self.tree.advance_move();
+        self.tree.advance_move(child.mv);
 
         true
     }
@@ -368,7 +368,7 @@ fn run(
         panic!("Invalid number of threads: 0");
     }
 
-    let mut do_move = false;
+    let mut do_move = None;
 
     while board.next_queue().next().is_none() {
         match recv.recv() {
@@ -379,7 +379,7 @@ fn run(
                 board.combo = combo;
                 board.b2b_bonus = b2b;
             }
-            Ok(BotMsg::NextMove) => do_move = true,
+            Ok(BotMsg::NextMove(incoming)) => do_move = Some(incoming),
         }
     }
 
@@ -396,12 +396,12 @@ fn run(
             Err(TryRecvError::Empty) => {}
             Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
             Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
-            Ok(BotMsg::NextMove) => do_move = true,
+            Ok(BotMsg::NextMove(incoming)) => do_move = Some(incoming),
         }
 
-        if do_move {
-            if bot.next_move(|mv, info| { send.send((mv, info)).ok(); }) {
-                do_move = false;
+        if let Some(incoming) = do_move {
+            if bot.next_move(incoming, |mv, info| { send.send((mv, info)).ok(); }) {
+                do_move = None;
             }
         }
 

@@ -49,6 +49,15 @@ pub struct ChildData {
     pub hold: bool
 }
 
+pub struct MoveCandidate {
+    pub mv: FallingPiece,
+    pub lock: LockResult,
+    pub board: Board,
+    pub evaluation: i32,
+    pub hold: bool,
+    pub original_rank: usize
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Child {
     pub mv: FallingPiece,
@@ -276,16 +285,21 @@ impl TreeState {
         self.update(to_update);
     }
 
-    /// Retrieve the current choice for best move.
-    pub fn best_move(&self) -> Option<Child> {
-        if let &Children::Known(start, len) = self.children[self.root].as_ref()? {
-            if len == 0 {
-                None
-            } else {
-                Some(self.childs[start].clone())
-            }
+    /// Retrieve the best next moves, sorted from best to worst.
+    pub fn get_next_candidates(&self) -> Vec<MoveCandidate> {
+        if let Some(Children::Known(start, len)) = self.children[self.root] {
+            self.childs[start..start+len].iter()
+                .map(|c| MoveCandidate {
+                    board: self.pieces.rebuild_board(&self.trees[c.node].board),
+                    lock: c.lock.clone(),
+                    evaluation: c.accumulated + self.trees[c.node].evaluation,
+                    hold: c.hold,
+                    mv: c.mv,
+                    original_rank: c.original_rank
+                })
+                .collect()
         } else {
-            panic!("Not enough next pieces to choose a move")
+            vec![]
         }
     }
 
@@ -303,11 +317,13 @@ impl TreeState {
         plan
     }
 
-    /// Be sure to call `best_move` and check that it is `Some` before calling this.
-    pub fn advance_move(&mut self) {
-        let child = match self.children[self.root].as_ref().unwrap() {
-            &Children::Known(start, _) => &self.childs[start],
-            Children::Speculation(_) => unreachable!()
+    pub fn advance_move(&mut self, mv: FallingPiece) {
+        let child = if let Some(Children::Known(start, len)) = self.children[self.root] {
+            self.childs[start..start+len].iter()
+                .find(|c| c.mv == mv)
+                .expect("Tried to do a move that can't be done")
+        } else {
+            panic!("Not enough thinking or not enough next pieces to advance a move");
         };
         self.root = child.node;
         let next = self.board.advance_queue().unwrap();
@@ -674,7 +690,7 @@ impl Pieces {
 }
 
 impl Child {
-    fn evaluation(&self, trees: &Vec<Tree>) -> i32 {
+    fn evaluation(&self, trees: &[Tree]) -> i32 {
         self.accumulated + trees.get(self.node).unwrap().evaluation
     }
 }

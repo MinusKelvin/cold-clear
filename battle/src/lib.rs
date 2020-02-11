@@ -31,8 +31,8 @@ impl Default for GameConfig {
         // Use something approximating Puyo Puyo Tetris
         GameConfig {
             spawn_delay: 7,
-            line_clear_delay: 45,
-            delayed_auto_shift: 12,
+            line_clear_delay: 35,
+            delayed_auto_shift: 9,
             auto_repeat_rate: 2,
             soft_drop_speed: 2,
             lock_delay: 30,

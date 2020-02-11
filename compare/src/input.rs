@@ -47,7 +47,7 @@ impl<E: Evaluator> BotInput<E> {
     }
 
     pub fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event]
+        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
     ) -> Option<cold_clear::Info> {
         self.think();
 
@@ -58,7 +58,7 @@ impl<E: Evaluator> BotInput<E> {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
                         let exec = &mut self.executing;
-                        self.bot.next_move(|mv, inf| {
+                        self.bot.next_move(incoming, |mv, inf| {
                             info = Some(inf);
                             *exec = Some((
                                 mv.expected_location,

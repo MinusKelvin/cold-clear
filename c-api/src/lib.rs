@@ -189,8 +189,8 @@ extern "C" fn cc_add_next_piece_async(bot: &mut CCAsyncBot, piece: CCPiece) {
 }
 
 #[no_mangle]
-extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot) {
-    bot.request_next_move();
+extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
+    bot.request_next_move(incoming);
 }
 
 #[no_mangle]

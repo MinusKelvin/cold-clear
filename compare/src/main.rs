@@ -79,8 +79,14 @@ fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
     let p1_won;
     'battle: loop {
         let update = battle.update(p1.controller, p2.controller);
-        p1_info_updates.push_back(p1.update(&battle.player_1.board, &update.player_1.events));
-        p2_info_updates.push_back(p2.update(&battle.player_2.board, &update.player_2.events));
+        p1_info_updates.push_back(p1.update(
+            &battle.player_1.board, &update.player_1.events,
+            battle.player_1.garbage_queue + battle.player_2.attacking
+        ));
+        p2_info_updates.push_back(p2.update(
+            &battle.player_2.board, &update.player_2.events,
+            battle.player_2.garbage_queue + battle.player_1.attacking
+        ));
 
         for event in &update.player_1.events {
             use battle::Event::*;

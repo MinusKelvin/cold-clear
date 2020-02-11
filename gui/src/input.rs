@@ -8,7 +8,9 @@ use serde::{ Serialize, Deserialize };
 
 pub trait InputSource {
     fn controller(&mut self, ctx: &Context, gamepad: Option<Gamepad>) -> Controller;
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<cold_clear::Info>;
+    fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
+    ) -> Option<cold_clear::Info>;
 }
 
 pub struct BotInput {
@@ -32,7 +34,9 @@ impl InputSource for BotInput {
         self.controller
     }
 
-    fn update(&mut self, board: &Board<ColoredRow>, events: &[Event]) -> Option<cold_clear::Info> {
+    fn update(
+        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
+    ) -> Option<cold_clear::Info> {
         for event in events {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
@@ -40,7 +44,7 @@ impl InputSource for BotInput {
                 }
                 Event::FrameBeforePieceSpawns => {
                     if self.executing.is_none() {
-                        self.interface.request_next_move();
+                        self.interface.request_next_move(incoming);
                     }
                 }
                 Event::GarbageAdded(_) => {
@@ -137,7 +141,7 @@ impl InputSource for UserInput {
         }
     }
 
-    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event]) -> Option<cold_clear::Info> {
+    fn update(&mut self, _: &Board<ColoredRow>, _: &[Event], _: u32) -> Option<cold_clear::Info> {
         None
     }
 }

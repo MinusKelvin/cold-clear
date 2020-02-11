@@ -134,8 +134,11 @@ void cc_add_next_piece_async(CCAsyncBot *bot, CCPiece piece);
  * 
  * Once a move is chosen, the bot will update its internal state to the result of the piece
  * being placed correctly and the move will become available by calling `cc_poll_next_move`.
+ * 
+ * The incoming parameter specifies the number of lines of garbage the bot is expected to receive
+ * after placing the next piece.
  */
-void cc_request_next_move(CCAsyncBot *bot);
+void cc_request_next_move(CCAsyncBot *bot, uint32_t incoming);
 
 /* Checks to see if the bot has provided the previously requested move yet.
  * 

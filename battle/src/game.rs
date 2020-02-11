@@ -12,7 +12,7 @@ pub struct Game {
     used: Controller,
     das_delay: u32,
     pub garbage_queue: u32,
-    attacking: u32
+    pub attacking: u32
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
