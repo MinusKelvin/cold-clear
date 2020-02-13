@@ -140,11 +140,11 @@ impl EventHandler for LocalGame<'_> {
 
                 let p1_info_update = self.p1_input.update(
                     &self.battle.player_1.board, &update.player_1.events,
-                    self.battle.player_1.garbage_queue + self.battle.player_2.attacking
+                    self.battle.player_1.garbage_queue
                 );
                 let p2_info_update = self.p2_input.update(
                     &self.battle.player_2.board, &update.player_2.events,
-                    self.battle.player_2.garbage_queue + self.battle.player_1.attacking
+                    self.battle.player_2.garbage_queue
                 );
 
                 self.p1_info_updates.push_back(p1_info_update.clone());

@@ -33,7 +33,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 5000;
+    let games = 10000;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
@@ -81,11 +81,11 @@ fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
         let update = battle.update(p1.controller, p2.controller);
         p1_info_updates.push_back(p1.update(
             &battle.player_1.board, &update.player_1.events,
-            battle.player_1.garbage_queue + battle.player_2.attacking
+            battle.player_1.garbage_queue
         ));
         p2_info_updates.push_back(p2.update(
             &battle.player_2.board, &update.player_2.events,
-            battle.player_2.garbage_queue + battle.player_1.attacking
+            battle.player_2.garbage_queue
         ));
 
         for event in &update.player_1.events {

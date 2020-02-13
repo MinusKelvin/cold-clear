@@ -40,6 +40,7 @@ pub struct Standard {
     pub move_time: i32,
     pub wasted_t: i32,
 
+    pub use_bag: bool,
     pub sub_name: Option<String>
 }
 
@@ -79,6 +80,7 @@ impl Default for Standard {
             perfect_clear: 999,
             combo_garbage: 150,
 
+            use_bag: true,
             sub_name: None
         }
     }
@@ -92,6 +94,22 @@ impl Evaluator for Standard {
             info.push_str(extra);
         }
         info
+    }
+
+    fn pick_move(&self, candidates: Vec<MoveCandidate>, incoming: u32) -> MoveCandidate {
+        let mut backup = None;
+        for mv in candidates.into_iter() {
+            if mv.board.column_heights()[3..6].iter()
+                    .all(|h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20) {
+                return mv
+            }
+
+            if backup.is_none() {
+                backup = Some(mv)
+            }
+        }
+
+        return backup.unwrap();
     }
 
     fn evaluate(
@@ -165,10 +183,13 @@ impl Evaluator for Standard {
         transient_eval += self.top_half * (highest_point - 10).max(0);
         acc_eval += self.jeopardy * (highest_point - 10).max(0);
 
-        let ts
-            = board.next_bag().contains(Piece::T) as usize
-            + (board.next_bag().len() <= 3) as usize
-            + (board.hold_piece == Some(Piece::T)) as usize;
+        let ts = if self.use_bag {
+            board.next_bag().contains(Piece::T) as usize
+                + (board.next_bag().len() <= 3) as usize
+                + (board.hold_piece == Some(Piece::T)) as usize
+        } else {
+            1 + (board.hold_piece == Some(Piece::T)) as usize
+        };
 
         let mut board = board.clone();
         for _ in 0..ts {

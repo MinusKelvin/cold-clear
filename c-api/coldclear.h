@@ -79,6 +79,8 @@ typedef struct CCWeights {
     int32_t combo_garbage;
     int32_t move_time;
     int32_t wasted_t;
+
+    bool use_bag;
 } CCWeights;
 
 /* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag, using the

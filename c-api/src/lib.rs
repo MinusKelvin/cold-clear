@@ -118,6 +118,8 @@ struct CCWeights {
     combo_garbage: i32,
     move_time: i32,
     wasted_t: i32,
+
+    use_bag: bool,
 }
 
 #[no_mangle]
@@ -166,6 +168,7 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             move_time: weights.move_time,
             wasted_t: weights.wasted_t,
 
+            use_bag: weights.use_bag,
             sub_name: None
         }
     )))
@@ -274,6 +277,8 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
         perfect_clear: w.perfect_clear,
         combo_garbage: w.combo_garbage,
         move_time: w.move_time,
-        wasted_t: w.wasted_t
+        wasted_t: w.wasted_t,
+
+        use_bag: w.use_bag
     }
 }
