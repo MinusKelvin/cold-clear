@@ -130,6 +130,7 @@ impl TreeState {
         self.children.clear();
         self.childs.clear();
         self.generation += 1;
+        self.nodes = 0;
 
         let pieces_used = if self.use_hold && self.board.hold_piece.is_none() {
             self.pieces.pieces_used + 1
