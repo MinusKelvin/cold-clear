@@ -5,17 +5,18 @@ use smallvec::SmallVec;
 use enumset::EnumSet;
 use enum_map::EnumMap;
 use rand::prelude::*;
+use crate::evaluation::Evaluation;
 
-pub struct TreeState {
+pub struct TreeState<E, R> {
     pub board: Board,
     root: usize,
     boards: HashMap<SimplifiedBoard, usize>,
-    trees: Vec<Tree>,
+    trees: Vec<Tree<E>>,
     children: Vec<Option<Children>>,
-    childs: Vec<Child>,
-    backbuffer_trees: Vec<Tree>,
+    childs: Vec<Child<R>>,
+    backbuffer_trees: Vec<Tree<E>>,
     backbuffer_children: Vec<Option<Children>>,
-    backbuffer_childs: Vec<Child>,
+    backbuffer_childs: Vec<Child<R>>,
     next_speculation: HashSet<usize>,
     pieces: Pieces,
     use_hold: bool,
@@ -31,40 +32,41 @@ struct Pieces {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct NodeId(u32, usize);
 
-struct Tree {
+#[derive(Clone)]
+struct Tree<E> {
     board: SimplifiedBoard,
     parents: SmallVec<[usize; 4]>,
     depth: usize,
-    evaluation: i32,
+    evaluation: E,
     marked: bool,
     death: bool
 }
 
-pub struct ChildData {
+pub struct ChildData<E, R> {
     pub mv: FallingPiece,
     pub lock: LockResult,
     pub board: Board,
-    pub accumulated: i32,
-    pub evaluation: i32,
+    pub accumulated: R,
+    pub evaluation: E,
     pub hold: bool
 }
 
-pub struct MoveCandidate {
+pub struct MoveCandidate<E> {
     pub mv: FallingPiece,
     pub lock: LockResult,
     pub board: Board,
-    pub evaluation: i32,
+    pub evaluation: E,
     pub hold: bool,
     pub original_rank: usize
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Child {
+pub struct Child<R> {
     pub mv: FallingPiece,
     pub lock: LockResult,
     pub node: usize,
     pub original_rank: usize,
-    accumulated: i32,
+    accumulated: R,
     pub hold: bool
 }
 
@@ -84,7 +86,7 @@ struct SimplifiedBoard {
     back_to_back: bool,
 }
 
-impl TreeState {
+impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
     /// Requires that there is at least one next piece if `use_hold` is true.
     pub fn create(board: Board, use_hold: bool) -> Self {
         let b = board.clone();
@@ -111,7 +113,7 @@ impl TreeState {
         this.root = this.create_tree(Tree {
             board: sb,
             parents: SmallVec::new(),
-            evaluation: 0,
+            evaluation: E::default(),
             depth: 0,
             marked: false,
             death: false
@@ -141,7 +143,7 @@ impl TreeState {
         self.root = self.create_tree(Tree {
             board: sb,
             parents: SmallVec::new(),
-            evaluation: 0,
+            evaluation: E::default(),
             depth: 0,
             marked: false,
             death: false
@@ -188,7 +190,7 @@ impl TreeState {
     }
 
     /// To be called when a worker has generated and evaluated the children of the node.
-    pub fn update_known(&mut self, node: NodeId, children: Vec<ChildData>) {
+    pub fn update_known(&mut self, node: NodeId, children: Vec<ChildData<E, R>>) {
         if node.0 != self.generation {
             // Since a move can be taken between find_leaf and update_whatever calls,
             // we need to check if that's happened. It's possible that the specified node already
@@ -207,7 +209,7 @@ impl TreeState {
 
     /// To be called when a worker has generated and evaluated the children of the node.
     pub fn update_speculated(
-        &mut self, node: NodeId, mut children: EnumMap<Piece, Option<Vec<ChildData>>>
+        &mut self, node: NodeId, mut children: EnumMap<Piece, Option<Vec<ChildData<E, R>>>>
     ) {
         if node.0 != self.generation {
             return
@@ -287,13 +289,13 @@ impl TreeState {
     }
 
     /// Retrieve the best next moves, sorted from best to worst.
-    pub fn get_next_candidates(&self) -> Vec<MoveCandidate> {
+    pub fn get_next_candidates(&self) -> Vec<MoveCandidate<E>> {
         if let Some(Children::Known(start, len)) = self.children[self.root] {
             self.childs[start..start+len].iter()
                 .map(|c| MoveCandidate {
                     board: self.pieces.rebuild_board(&self.trees[c.node].board),
                     lock: c.lock.clone(),
-                    evaluation: c.accumulated + self.trees[c.node].evaluation,
+                    evaluation: self.trees[c.node].evaluation.clone() + c.accumulated.clone(),
                     hold: c.hold,
                     mv: c.mv,
                     original_rank: c.original_rank
@@ -353,9 +355,11 @@ impl TreeState {
         self.trees[self.root].depth
     }
 
-    fn build_children(&mut self, parent: usize, mut children: Vec<ChildData>) -> (usize, usize) {
+    fn build_children(
+        &mut self, parent: usize, mut children: Vec<ChildData<E, R>>
+    ) -> (usize, usize) {
         let pieces_used = self.trees[parent].board.pieces_used;
-        children.sort_by_key(|c| -c.evaluation);
+        children.sort_by_key(|c| std::cmp::Reverse(c.evaluation.clone() + c.accumulated.clone()));
         let start = self.childs.len();
         for (i, data) in children.into_iter().enumerate() {
             let node = self.make_node(
@@ -374,7 +378,7 @@ impl TreeState {
         (start, self.childs.len() - start)
     }
 
-    fn make_node(&mut self, board: SimplifiedBoard, parent: usize, eval: i32) -> usize {
+    fn make_node(&mut self, board: SimplifiedBoard, parent: usize, eval: E) -> usize {
         use std::collections::hash_map::Entry;
         match self.boards.entry(board.clone()) {
             Entry::Occupied(entry) => {
@@ -423,7 +427,7 @@ impl TreeState {
                     } else {
                         let children = &mut self.childs[*start .. *start+*len];
                         let trees = &self.trees;
-                        children.sort_by_key(|c| -c.evaluation(trees));
+                        children.sort_by_key(|c| std::cmp::Reverse(c.evaluation(trees)));
                         let best = children[0].evaluation(trees);
                         let depth = children.iter()
                             .map(|c| trees[c.node].depth)
@@ -441,8 +445,8 @@ impl TreeState {
                 Children::Speculation(possibilities) => {
                     let mut count = 0;
                     let mut deaths = 0;
-                    let mut worst = std::i32::MAX;
-                    let mut total = 0;
+                    let mut worst = None;
+                    let mut total = E::default();
                     let mut depth = 0;
                     let trees = &self.trees;
                     // The value of a speculation node is the expected value of the path. Since the
@@ -471,15 +475,17 @@ impl TreeState {
                                 deaths += 1;
                             } else {
                                 let children = &mut self.childs[*start .. *start+*len];
-                                children.sort_by_key(|c| -c.evaluation(trees));
+                                children.sort_by_key(|c| std::cmp::Reverse(c.evaluation(trees)));
                                 let best = children[0].evaluation(&trees);
                                 let d = children.iter()
                                     .map(|c| trees.get(c.node).unwrap().depth)
                                     .max().unwrap() + 1;
                                 depth = d.max(depth);
-                                total += best;
-                                if best < worst {
-                                    worst = best;
+                                total = total + best.clone();
+                                match worst {
+                                    None => worst = Some(best),
+                                    Some(v) if v < best => worst = Some(best),
+                                    _ => {}
                                 }
                             }
                         }
@@ -490,7 +496,7 @@ impl TreeState {
                         add_parents(&mut to_update, &self.trees[node].parents);
                         self.nodes -= 1;
                     } else {
-                        total += (worst - 1000) * deaths;
+                        total = total + worst.unwrap().modify_death() * deaths;
                         let evaluation = total / count;
                         let tree = self.trees.get_mut(node).unwrap();
                         // Parents only need to be updated if our evaluation/depth changed
@@ -505,7 +511,7 @@ impl TreeState {
         }
     }
 
-    fn create_tree(&mut self, tree: Tree) -> usize {
+    fn create_tree(&mut self, tree: Tree<E>) -> usize {
         let index = self.trees.len();
         self.boards.insert(tree.board.clone(), index);
         self.trees.push(tree);
@@ -546,9 +552,8 @@ impl TreeState {
         // Indices in the trees/children arrays are allocated before we iterate in the loop.
         self.backbuffer_trees.push(Tree {
             parents: SmallVec::new(),
-            board: self.trees[self.root].board.clone(),
             marked: false,
-            ..self.trees[self.root]
+            ..self.trees[self.root].clone()
         });
         self.backbuffer_children.push(None);
         self.boards.insert(self.trees[self.root].board.clone(), 0);
@@ -600,12 +605,14 @@ impl TreeState {
         self.generation += 1;
         self.nodes = self.trees.len();
 
-        fn copy(
+        fn copy<E: Clone, R: Clone>(
             stack: &mut Vec<(usize, usize, bool)>,
-            copying: &[Child], new: usize, is_spec: bool,
+            copying: &[Child<R>], new: usize, is_spec: bool,
             boards: &mut HashMap<SimplifiedBoard, usize>,
-            old_trees: &[Tree],
-            trees: &mut Vec<Tree>, children: &mut Vec<Option<Children>>, childs: &mut Vec<Child>
+            old_trees: &[Tree<E>],
+            trees: &mut Vec<Tree<E>>,
+            children: &mut Vec<Option<Children>>,
+            childs: &mut Vec<Child<R>>
         ) -> (usize, usize) {
             let begin = childs.len();
             for child in copying {
@@ -627,7 +634,7 @@ impl TreeState {
                             parents: SmallVec::from_elem(new, 1),
                             board: old_trees[child.node].board.clone(),
                             marked: false,
-                            ..old_trees[child.node]
+                            ..old_trees[child.node].clone()
                         });
                         entry.insert(idx);
                         children.push(None);
@@ -652,14 +659,12 @@ fn add_parents(to_update: &mut VecDeque<usize>, parents: &[usize]) {
     }
 }
 
-fn pick(trees: &[Tree], children: &[Child]) -> usize {
+fn pick<E: Evaluation<R>, R: Clone>(trees: &[Tree<E>], children: &[Child<R>]) -> usize {
     let minimum_evaluation = children.iter()
-        .map(|c| trees[c.node].evaluation)
+        .map(|c| c.evaluation(trees))
         .min().expect("no min");
-    let weights = children.iter().enumerate().map(|(i, c)| {
-        let e = (trees[c.node].evaluation - minimum_evaluation) as i64 + 10;
-        e * e / (i + 1) as i64
-    });
+    let weights = children.iter().enumerate()
+        .map(|(i, c)| c.evaluation(trees).weight(&minimum_evaluation, i));
     let sampler = rand::distributions::WeightedIndex::new(weights).unwrap();
     let index = thread_rng().sample(sampler);
     children[index].node
@@ -690,9 +695,9 @@ impl Pieces {
     }
 }
 
-impl Child {
-    fn evaluation(&self, trees: &[Tree]) -> i32 {
-        self.accumulated + trees.get(self.node).unwrap().evaluation
+impl<R: Clone> Child<R> {
+    fn evaluation<E: Evaluation<R>>(&self, trees: &[Tree<E>]) -> E {
+        trees.get(self.node).unwrap().evaluation.clone() + self.accumulated.clone()
     }
 }
 

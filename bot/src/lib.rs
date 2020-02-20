@@ -152,7 +152,7 @@ enum BotMsg {
 }
 
 pub struct BotState<E: Evaluator> {
-    tree: TreeState,
+    tree: TreeState<E::Value, E::Reward>,
     options: Options,
     eval: Arc<E>,
 }
@@ -164,9 +164,9 @@ pub struct Thinker<E: Evaluator> {
     eval: Arc<E>
 }
 
-pub enum ThinkResult {
-    Known(NodeId, Vec<ChildData>),
-    Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData>>>),
+pub enum ThinkResult<E: Evaluator> {
+    Known(NodeId, Vec<ChildData<E::Value, E::Reward>>),
+    Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData<E::Value, E::Reward>>>>),
     Unmark(NodeId)
 }
 
@@ -198,7 +198,7 @@ impl<E: Evaluator> BotState<E> {
         }
     }
 
-    pub fn finish_thinking(&mut self, result: ThinkResult) {
+    pub fn finish_thinking(&mut self, result: ThinkResult<E>) {
         match result {
             ThinkResult::Known(node, children) => self.tree.update_known(node, children),
             ThinkResult::Speculated(node, children) => self.tree.update_speculated(node, children),
@@ -263,7 +263,7 @@ impl<E: Evaluator> BotState<E> {
 }
 
 impl<E: Evaluator> Thinker<E> {
-    pub fn think(self) -> ThinkResult {
+    pub fn think(self) -> ThinkResult<E> {
         if let Err(possibilities) = self.board.get_next_piece() {
             // Next unknown (implies hold is known) => Speculate
             if self.options.speculate {
@@ -305,7 +305,7 @@ impl<E: Evaluator> Thinker<E> {
         }
     }
 
-    fn make_children(&self, mut board: Board) -> Vec<ChildData> {
+    fn make_children(&self, mut board: Board) -> Vec<ChildData<E::Value, E::Reward>> {
         let mut children = vec![];
 
         let next = board.advance_queue().unwrap();
@@ -333,7 +333,11 @@ impl<E: Evaluator> Thinker<E> {
     }
 
     fn add_children(
-        &self, children: &mut Vec<ChildData>, board: &Board, spawned: FallingPiece, hold: bool
+        &self,
+        children: &mut Vec<ChildData<E::Value, E::Reward>>,
+        board: &Board,
+        spawned: FallingPiece,
+        hold: bool
     ) {
         for mv in moves::find_moves(&board, spawned, self.options.mode) {
             let can_be_hd = board.above_stack(&mv.location) &&
@@ -343,10 +347,12 @@ impl<E: Evaluator> Thinker<E> {
             // Don't add deaths by lock out, don't add useless mini tspins
             if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
                 let move_time = mv.inputs.time + if hold { 1 } else { 0 };
-                let evaluated = self.eval.evaluate(&lock, &result, move_time, spawned.kind.0);
+                let (evaluation, accumulated) = self.eval.evaluate(
+                    &lock, &result, move_time, spawned.kind.0
+                );
                 children.push(ChildData {
-                    accumulated: evaluated.accumulated,
-                    evaluation: evaluated.transient,
+                    evaluation,
+                    accumulated,
                     board: result,
                     hold,
                     mv: mv.location,

@@ -1,6 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use super::*;
+use super::standard::Value;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Misalike {
@@ -15,6 +16,9 @@ pub struct Misalike {
 }
 
 impl Evaluator for Misalike {
+    type Value = super::standard::Value;
+    type Reward = i32;
+
     fn name(&self) -> String {
         let mut s = "Misalike\n".to_owned();
         if let Some(sub_name) = &self.sub_name {
@@ -24,7 +28,7 @@ impl Evaluator for Misalike {
         s
     }
 
-    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32, _: Piece) -> Evaluation {
+    fn evaluate(&self, lock: &LockResult, board: &Board, move_time: u32, _: Piece) -> (Value, i32) {
         // Context: We're trying to translate this function from MisaMino:
         // https://github.com/misakamm/MisaMino/blob/master/tetris_ai/tetris_ai.cpp#L45
         // Note: the board is y-down; high y = low on the board, low y = high on the board
