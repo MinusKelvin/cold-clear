@@ -88,7 +88,7 @@ impl Default for Standard {
 
 impl Evaluator for Standard {
     type Value = Value;
-    type Reward = i32;
+    type Reward = Reward;
 
     fn name(&self) -> String {
         let mut info = "Standard".to_owned();
@@ -109,8 +109,10 @@ impl Evaluator for Standard {
                 return mv
             }
 
-            if backup.is_none() {
-                backup = Some(mv)
+            match backup {
+                None => backup = Some(mv),
+                Some(c) if c.evaluation.spike < mv.evaluation.spike => backup = Some(mv),
+                _ => {}
             }
         }
 
@@ -119,19 +121,23 @@ impl Evaluator for Standard {
 
     fn evaluate(
         &self, lock: &LockResult, board: &Board, move_time: u32, placed: Piece
-    ) -> (Value, i32) {
+    ) -> (Value, Reward) {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
+        let mut atk = 0;
 
         if lock.perfect_clear {
             acc_eval += self.perfect_clear;
+            atk += 10;
         } else {
             if lock.b2b {
                 acc_eval += self.b2b_clear;
+                atk += 1;
             }
             if let Some(combo) = lock.combo {
                 let combo = combo.min(11) as usize;
                 acc_eval += self.combo_garbage * libtetris::COMBO_GARBAGE[combo] as i32;
+                atk += libtetris::COMBO_GARBAGE[combo] as i32;
             }
             match lock.placement_kind {
                 PlacementKind::Clear1 => {
@@ -139,27 +145,34 @@ impl Evaluator for Standard {
                 }
                 PlacementKind::Clear2 => {
                     acc_eval += self.clear2;
+                    atk += 1;
                 }
                 PlacementKind::Clear3 => {
                     acc_eval += self.clear3;
+                    atk += 2;
                 }
                 PlacementKind::Clear4 => {
                     acc_eval += self.clear4;
+                    atk += 4;
                 }
                 PlacementKind::Tspin1 => {
                     acc_eval += self.tspin1;
+                    atk += 2;
                 }
                 PlacementKind::Tspin2 => {
                     acc_eval += self.tspin2;
+                    atk += 4;
                 }
                 PlacementKind::Tspin3 => {
                     acc_eval += self.tspin3;
+                    atk += 6;
                 }
                 PlacementKind::MiniTspin1 => {
                     acc_eval += self.mini_tspin1;
                 }
                 PlacementKind::MiniTspin2 => {
                     acc_eval += self.mini_tspin2;
+                    atk += 1;
                 }
                 _ => {}
             }
@@ -276,7 +289,13 @@ impl Evaluator for Standard {
             transient_eval += self.covered_cells_sq * covered_cells_sq;
         }
 
-        (Value(transient_eval), acc_eval)
+        (Value {
+            value: transient_eval,
+            spike: 0
+        }, Reward {
+            value: acc_eval,
+            attack: if lock.placement_kind.is_clear() { atk } else { -1 }
+        })
     }
 }
 
@@ -706,44 +725,72 @@ fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub struct Reward {
+    value: i32,
+    attack: i32
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
-pub struct Value(i32);
+pub struct Value {
+    value: i32,
+    spike: i32
+}
 
 impl std::ops::Add for Value {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
-        Value(self.0 + rhs.0)
+        Value {
+            value: self.value + rhs.value,
+            spike: self.spike + rhs.spike
+        }
     }
 }
 
-impl std::ops::Add<i32> for Value {
+impl std::ops::Add<Reward> for Value {
     type Output = Self;
-    fn add(self, rhs: i32) -> Self {
-        Value(self.0 + rhs)
+    fn add(self, rhs: Reward) -> Self {
+        Value {
+            value: self.value + rhs.value,
+            spike: if rhs.attack == -1 {
+                0
+            } else {
+                self.spike + rhs.attack
+            }
+        }
     }
 }
 
 impl std::ops::Div<usize> for Value {
     type Output = Self;
     fn div(self, rhs: usize) -> Self {
-        Value(self.0 / rhs as i32)
+        Value {
+            value: self.value / rhs as i32,
+            spike: self.spike / rhs as i32
+        }
     }
 }
 
 impl std::ops::Mul<usize> for Value {
     type Output = Self;
     fn mul(self, rhs: usize) -> Self {
-        Value(self.0 * rhs as i32)
+        Value {
+            value: self.value * rhs as i32,
+            spike: self.spike * rhs as i32
+        }
     }
 }
 
-impl Evaluation<i32> for Value {
+impl Evaluation<Reward> for Value {
     fn modify_death(self) -> Self {
-        Value(self.0 - 1000)
+        Value {
+            value: self.value - 1000,
+            spike: 0
+        }
     }
 
     fn weight(self, min: &Value, rank: usize) -> i64 {
-        let e = (self.0 - min.0) as i64 + 10;
+        let e = (self.value - min.value) as i64 + 10;
         e * e / (rank + 1) as i64
     }
 }

@@ -1,7 +1,6 @@
 use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use super::*;
-use super::standard::Value;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Misalike {
@@ -16,7 +15,7 @@ pub struct Misalike {
 }
 
 impl Evaluator for Misalike {
-    type Value = super::standard::Value;
+    type Value = Value;
     type Reward = i32;
 
     fn name(&self) -> String {
@@ -238,5 +237,47 @@ impl Evaluator for Misalike {
         
 
         unimplemented!()
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
+pub struct Value(i32);
+
+impl std::ops::Add for Value {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        Value(self.0 + rhs.0)
+    }
+}
+
+impl std::ops::Add<i32> for Value {
+    type Output = Self;
+    fn add(self, rhs: i32) -> Self {
+        Value(self.0 + rhs)
+    }
+}
+
+impl std::ops::Div<usize> for Value {
+    type Output = Self;
+    fn div(self, rhs: usize) -> Self {
+        Value(self.0 / rhs as i32)
+    }
+}
+
+impl std::ops::Mul<usize> for Value {
+    type Output = Self;
+    fn mul(self, rhs: usize) -> Self {
+        Value(self.0 * rhs as i32)
+    }
+}
+
+impl Evaluation<i32> for Value {
+    fn modify_death(self) -> Self {
+        Value(self.0 - 1000)
+    }
+
+    fn weight(self, min: &Value, rank: usize) -> i64 {
+        let e = (self.0 - min.0) as i64 + 10;
+        e * e / (rank + 1) as i64
     }
 }
