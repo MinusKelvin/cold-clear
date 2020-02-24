@@ -44,6 +44,7 @@ typedef struct CCOptions {
     bool speculate;
     size_t min_nodes;
     size_t max_nodes;
+    size_t threads;
 } CCOptions;
 
 typedef struct CCWeights {

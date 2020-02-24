@@ -82,6 +82,7 @@ struct CCOptions {
     speculate: bool,
     min_nodes: usize,
     max_nodes: usize,
+    threads: usize,
 }
 
 #[repr(C)]
@@ -132,7 +133,7 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             use_hold: options.use_hold,
             speculate: options.speculate,
             mode: options.mode.into(),
-            ..cold_clear::Options::default()
+            threads: options.threads
         },
         cold_clear::evaluation::Standard {
             back_to_back: weights.back_to_back,
@@ -239,6 +240,7 @@ extern "C" fn cc_default_options(options: &mut CCOptions) {
         use_hold: o.use_hold,
         speculate: o.speculate,
         mode: o.mode.into(),
+        threads: o.threads
     }
 }
 
