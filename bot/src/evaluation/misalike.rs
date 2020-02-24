@@ -280,4 +280,8 @@ impl Evaluation<i32> for Value {
         let e = (self.0 - min.0) as i64 + 10;
         e * e / (rank + 1) as i64
     }
+
+    fn improve(&mut self, other: Value) {
+        self.0 = self.0.max(other.0);
+    }
 }

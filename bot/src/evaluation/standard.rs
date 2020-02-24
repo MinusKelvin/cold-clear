@@ -793,4 +793,9 @@ impl Evaluation<Reward> for Value {
         let e = (self.value - min.value) as i64 + 10;
         e * e / (rank + 1) as i64
     }
+
+    fn improve(&mut self, new_result: Self) {
+        self.value = self.value.max(new_result.value);
+        self.spike = self.spike.max(new_result.spike);
+    }
 }

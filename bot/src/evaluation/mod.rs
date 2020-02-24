@@ -32,4 +32,6 @@ pub trait Evaluation<R> : Eq + Ord + Default + Clone
 {
     fn modify_death(self) -> Self;
     fn weight(self, min: &Self, rank: usize) -> i64;
+
+    fn improve(&mut self, other: Self);
 }

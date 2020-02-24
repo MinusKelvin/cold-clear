@@ -428,15 +428,17 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                         let children = &mut self.childs[*start .. *start+*len];
                         let trees = &self.trees;
                         children.sort_by_key(|c| std::cmp::Reverse(c.evaluation(trees)));
-                        let best = children[0].evaluation(trees);
-                        let depth = children.iter()
-                            .map(|c| trees[c.node].depth)
-                            .max().unwrap() + 1;
+                        let mut improved = trees[node].evaluation.clone();
+                        let mut depth = 0;
+                        for c in children {
+                            improved.improve(c.evaluation(trees));
+                            depth = depth.max(trees[c.node].depth + 1);
+                        }
 
                         let tree = &mut self.trees[node];
                         // Parents only need to be updated if our evaluation/depth changed
-                        if best != tree.evaluation || depth > tree.depth {
-                            tree.evaluation = best;
+                        if improved != tree.evaluation || depth > tree.depth {
+                            tree.evaluation = improved;
                             tree.depth = depth.max(tree.depth);
                             add_parents(&mut to_update, &tree.parents);
                         }
@@ -476,12 +478,13 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                             } else {
                                 let children = &mut self.childs[*start .. *start+*len];
                                 children.sort_by_key(|c| std::cmp::Reverse(c.evaluation(trees)));
-                                let best = children[0].evaluation(&trees);
-                                let d = children.iter()
-                                    .map(|c| trees.get(c.node).unwrap().depth)
-                                    .max().unwrap() + 1;
-                                depth = d.max(depth);
-                                total = total + best.clone();
+                                let best = children[0].evaluation(trees);
+                                let mut improved = trees[node].evaluation.clone();
+                                for c in children {
+                                    improved.improve(c.evaluation(trees));
+                                    depth = depth.max(trees[c.node].depth + 1);
+                                }
+                                total = total + improved;
                                 match worst {
                                     None => worst = Some(best),
                                     Some(v) if v < best => worst = Some(best),
