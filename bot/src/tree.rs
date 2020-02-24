@@ -428,7 +428,7 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                         let children = &mut self.childs[*start .. *start+*len];
                         let trees = &self.trees;
                         children.sort_by_key(|c| std::cmp::Reverse(c.evaluation(trees)));
-                        let mut improved = trees[node].evaluation.clone();
+                        let mut improved = children[0].evaluation(trees);
                         let mut depth = 0;
                         for c in children {
                             improved.improve(c.evaluation(trees));
@@ -479,7 +479,7 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                                 let children = &mut self.childs[*start .. *start+*len];
                                 children.sort_by_key(|c| std::cmp::Reverse(c.evaluation(trees)));
                                 let best = children[0].evaluation(trees);
-                                let mut improved = trees[node].evaluation.clone();
+                                let mut improved = best.clone();
                                 for c in children {
                                     improved.improve(c.evaluation(trees));
                                     depth = depth.max(trees[c.node].depth + 1);
