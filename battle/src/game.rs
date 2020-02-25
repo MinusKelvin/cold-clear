@@ -162,7 +162,9 @@ impl Game {
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
                 let mut events = vec![Event::EndOfLineClearDelay];
-                self.deal_garbage(&mut events, garbage_rng);
+                if !self.config.garbage_blocking {
+                    self.deal_garbage(&mut events, garbage_rng);
+                }
                 events
             }
             GameState::LineClearDelay(ref mut delay) => {

@@ -23,7 +23,8 @@ pub struct GameConfig {
 
     pub next_queue_size: u32,
     pub max_garbage_add: u32,
-    pub move_lock_rule: u32
+    pub move_lock_rule: u32,
+    pub garbage_blocking: bool
 }
 
 impl Default for GameConfig {
@@ -40,7 +41,8 @@ impl Default for GameConfig {
             gravity: 4500,
             next_queue_size: 5,
             max_garbage_add: 10,
-            move_lock_rule: 15
+            move_lock_rule: 15,
+            garbage_blocking: false
         }
     }
 }
