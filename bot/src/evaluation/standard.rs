@@ -124,20 +124,16 @@ impl Evaluator for Standard {
     ) -> (Value, Reward) {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
-        let mut atk = 0;
 
         if lock.perfect_clear {
             acc_eval += self.perfect_clear;
-            atk += 10;
         } else {
             if lock.b2b {
                 acc_eval += self.b2b_clear;
-                atk += 1;
             }
             if let Some(combo) = lock.combo {
                 let combo = combo.min(11) as usize;
                 acc_eval += self.combo_garbage * libtetris::COMBO_GARBAGE[combo] as i32;
-                atk += libtetris::COMBO_GARBAGE[combo] as i32;
             }
             match lock.placement_kind {
                 PlacementKind::Clear1 => {
@@ -145,34 +141,27 @@ impl Evaluator for Standard {
                 }
                 PlacementKind::Clear2 => {
                     acc_eval += self.clear2;
-                    atk += 1;
                 }
                 PlacementKind::Clear3 => {
                     acc_eval += self.clear3;
-                    atk += 2;
                 }
                 PlacementKind::Clear4 => {
                     acc_eval += self.clear4;
-                    atk += 4;
                 }
                 PlacementKind::Tspin1 => {
                     acc_eval += self.tspin1;
-                    atk += 2;
                 }
                 PlacementKind::Tspin2 => {
                     acc_eval += self.tspin2;
-                    atk += 4;
                 }
                 PlacementKind::Tspin3 => {
                     acc_eval += self.tspin3;
-                    atk += 6;
                 }
                 PlacementKind::MiniTspin1 => {
                     acc_eval += self.mini_tspin1;
                 }
                 PlacementKind::MiniTspin2 => {
                     acc_eval += self.mini_tspin2;
-                    atk += 1;
                 }
                 _ => {}
             }
@@ -294,7 +283,7 @@ impl Evaluator for Standard {
             spike: 0
         }, Reward {
             value: acc_eval,
-            attack: if lock.placement_kind.is_clear() { atk } else { -1 }
+            attack: if lock.placement_kind.is_clear() { lock.garbage_sent as i32 } else { -1 }
         })
     }
 }
