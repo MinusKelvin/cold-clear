@@ -29,15 +29,20 @@ impl<E: Evaluator> BotInput<E> {
 
     fn think(&mut self) {
         for _ in 0..THINK_AMOUNT {
-            if self.bot.think() != Some(true) {
-                // can't think anymore
-                break
+            match self.bot.think() {
+                Ok(thinker) => {
+                    self.bot.finish_thinking(thinker.think());
+                }
+                Err(_) => {
+                    // can't think anymore
+                    break
+                }
             }
         }
     }
 
     pub fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event]
+        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
     ) -> Option<cold_clear::Info> {
         self.think();
 
@@ -48,7 +53,7 @@ impl<E: Evaluator> BotInput<E> {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
                         let exec = &mut self.executing;
-                        self.bot.next_move(|mv, inf| {
+                        self.bot.next_move(incoming, |mv, inf| {
                             info = Some(inf);
                             *exec = Some((
                                 mv.expected_location,
@@ -94,8 +99,16 @@ pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, 
     let p1_won;
     'battle: loop {
         let update = battle.update(p1.controller, p2.controller);
-        p1_info_updates.push_back(p1.update(&battle.player_1.board, &update.player_1.events));
-        p2_info_updates.push_back(p2.update(&battle.player_2.board, &update.player_2.events));
+        p1_info_updates.push_back(p1.update(
+            &battle.player_1.board,
+            &update.player_1.events,
+            battle.player_1.garbage_queue
+        ));
+        p2_info_updates.push_back(p2.update(
+            &battle.player_2.board,
+            &update.player_2.events,
+            battle.player_2.garbage_queue
+        ));
 
         for event in &update.player_1.events {
             use battle::Event::*;

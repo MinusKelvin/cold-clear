@@ -141,7 +141,8 @@ struct Population<E: Mutateable> {
 
 fn new_population<E: Mutateable>() -> Population<E> {
     let mut members = vec![];
-    for num in 0..20 {
+    members.push(E::default());
+    for num in 0..19 {
         members.push(E::generate(format!("Gen 0 #{}", num)));
     }
     Population {

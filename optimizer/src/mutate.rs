@@ -1,7 +1,7 @@
 use cold_clear::evaluation::Standard;
 use rand::prelude::*;
 
-pub trait Mutateable {
+pub trait Mutateable : Default {
     fn generate(sub_name: String) -> Self;
 
     fn crossover(parent1: &Self, parent2: &Self, sub_name: String) -> Self;
@@ -18,6 +18,7 @@ impl Mutateable for Standard {
             height: thread_rng().gen_range(-999, 1000),
             top_half: thread_rng().gen_range(-999, 1000),
             top_quarter: thread_rng().gen_range(-999, 1000),
+            jeopardy: thread_rng().gen_range(-999, 1000),
             cavity_cells: thread_rng().gen_range(-999, 1000),
             cavity_cells_sq: thread_rng().gen_range(-999, 1000),
             overhang_cells: thread_rng().gen_range(-999, 1000),
@@ -60,6 +61,7 @@ impl Mutateable for Standard {
             perfect_clear: thread_rng().gen_range(-999, 1000),
             combo_garbage: thread_rng().gen_range(-999, 1000),
 
+            use_bag: true,
             sub_name: Some(sub_name)
         }
     }
@@ -72,6 +74,7 @@ impl Mutateable for Standard {
             height: crossover_gene(parent1.height, parent2.height),
             top_half: crossover_gene(parent1.top_half, parent2.top_half),
             top_quarter: crossover_gene(parent1.top_quarter, parent2.top_quarter),
+            jeopardy: crossover_gene(parent1.jeopardy, parent2.jeopardy),
             cavity_cells: crossover_gene(parent1.cavity_cells, parent2.cavity_cells),
             cavity_cells_sq: crossover_gene(parent1.cavity_cells_sq, parent2.cavity_cells_sq),
             overhang_cells: crossover_gene(parent1.overhang_cells, parent2.overhang_cells),
@@ -114,6 +117,7 @@ impl Mutateable for Standard {
             perfect_clear: crossover_gene(parent1.perfect_clear, parent2.perfect_clear),
             combo_garbage: crossover_gene(parent1.combo_garbage, parent2.combo_garbage),
 
+            use_bag: true,
             sub_name: Some(sub_name)
         }
     }
