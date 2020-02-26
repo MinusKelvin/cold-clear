@@ -423,7 +423,6 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                         // Path is death; prune
                         self.trees[node].death = true;
                         add_parents(&mut to_update, &self.trees[node].parents);
-                        self.nodes -= 1;
                     } else {
                         let children = &mut self.childs[*start .. *start+*len];
                         let trees = &self.trees;
@@ -497,7 +496,6 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                         // Path is death; prune
                         self.trees[node].death = true;
                         add_parents(&mut to_update, &self.trees[node].parents);
-                        self.nodes -= 1;
                     } else {
                         total = total + worst.unwrap().modify_death() * deaths;
                         let evaluation = total / count;
