@@ -46,3 +46,22 @@ impl Default for GameConfig {
         }
     }
 }
+
+impl GameConfig {
+    pub fn fast_config() -> Self {
+        GameConfig {
+            spawn_delay: 0,
+            line_clear_delay: 0,
+            delayed_auto_shift: 8,
+            auto_repeat_rate: 0,
+            soft_drop_speed: 0,
+            lock_delay: 30,
+            margin_time: None,
+            gravity: 4500,
+            next_queue_size: 5,
+            max_garbage_add: 20,
+            move_lock_rule: 15,
+            garbage_blocking: true
+        }
+    }
+}

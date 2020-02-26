@@ -1,5 +1,5 @@
 use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
-use battle::{ Battle, Replay, Event, PieceMoveExecutor };
+use battle::{ Battle, Replay, Event, PieceMoveExecutor, GameConfig };
 use cold_clear::evaluation::Evaluator;
 use rand::prelude::*;
 use serde::{ Serialize, Deserialize };
@@ -83,7 +83,7 @@ impl<E: Evaluator> BotInput<E> {
 
 pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
-        Default::default(), Default::default(),
+        GameConfig::fast_config(), GameConfig::fast_config(),
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
