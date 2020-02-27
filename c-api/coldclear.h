@@ -167,3 +167,6 @@ void cc_default_options(CCOptions *options);
 
 /* Returns the default weights in the weights parameter */
 void cc_default_weights(CCWeights *weights);
+
+/* Resturns the fast game config weights in the weights parameter */
+void cc_fast_weights(CCWeights *weights);

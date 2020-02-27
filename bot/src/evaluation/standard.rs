@@ -86,6 +86,46 @@ impl Default for Standard {
     }
 }
 
+impl Standard {
+    pub fn fast_config() -> Self {
+        Standard {
+            back_to_back: 46,
+            bumpiness: -24,
+            bumpiness_sq: -45,
+            height: -39,
+            top_half: -130,
+            top_quarter: -499,
+            jeopardy: -8,
+            cavity_cells: -161,
+            cavity_cells_sq: -27,
+            overhang_cells: -47,
+            overhang_cells_sq: -11,
+            covered_cells: -26,
+            covered_cells_sq: 1,
+            tslot: [-1, 168, 292, 288],
+            well_depth: 91,
+            max_well_depth: -6,
+            well_column: [29, -1, -51, 31, 61, 11, 58, 23, -16, 11],
+            b2b_clear: 89,
+            clear1: -163,
+            clear2: -117,
+            clear3: -37,
+            clear4: 394,
+            tspin1: 126,
+            tspin2: 434,
+            tspin3: 620,
+            mini_tspin1: -187,
+            mini_tspin2: -764,
+            perfect_clear: 974,
+            combo_garbage: 159,
+            move_time: 1,
+            wasted_t: -152,
+            use_bag: true,
+            sub_name: None
+        }
+    }
+}
+
 impl Evaluator for Standard {
     type Value = Value;
     type Reward = Reward;

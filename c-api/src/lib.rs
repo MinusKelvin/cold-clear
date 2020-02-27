@@ -244,9 +244,7 @@ extern "C" fn cc_default_options(options: &mut CCOptions) {
     }
 }
 
-#[no_mangle]
-extern "C" fn cc_default_weights(weights: &mut CCWeights) {
-    let w = cold_clear::evaluation::Standard::default();
+fn put_weights(weights: &mut CCWeights, w: cold_clear::evaluation::Standard) {
     *weights = CCWeights {
         back_to_back: w.back_to_back,
         bumpiness: w.bumpiness,
@@ -283,4 +281,14 @@ extern "C" fn cc_default_weights(weights: &mut CCWeights) {
 
         use_bag: w.use_bag
     }
+}
+
+#[no_mangle]
+extern "C" fn cc_default_weights(weights: &mut CCWeights) {
+    put_weights(weights, cold_clear::evaluation::Standard::default())
+}
+
+#[no_mangle]
+extern "C" fn cc_fast_weights(weights: &mut CCWeights) {
+    put_weights(weights, cold_clear::evaluation::Standard::fast_config())
 }

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use serde::{ Serialize, Deserialize };
-use battle::{ Replay, Battle };
+use battle::{ Replay, Battle, GameConfig };
 use cold_clear::evaluation::Evaluator;
 use rand::prelude::*;
 use statrs::distribution::{ Binomial, Univariate };
@@ -13,9 +13,9 @@ fn main() {
     use cold_clear::evaluation::Standard;
     use cold_clear::evaluation::changed;
 
-    let p1_eval = Standard::default();
+    let p1_eval = Standard::fast_config();
 
-    let p2_eval = changed::Standard::default();
+    let p2_eval = changed::Standard::fast_config();
 
     let (send, recv) = std::sync::mpsc::channel();
 
@@ -63,7 +63,7 @@ fn main() {
 
 fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
     let mut battle = Battle::new(
-        Default::default(), Default::default(),
+        GameConfig::fast_config(), GameConfig::fast_config(),
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
