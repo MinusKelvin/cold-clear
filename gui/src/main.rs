@@ -116,23 +116,8 @@ fn main() {
             let p2_game_config = p2_config.game;
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(move |board| {
-                    // let evaluator = evaluation::changed::Standard {
-                    //     ..Default::default()
-                    // };
-                    // let name = format!("Cold Clear\n{}", evaluator.name());
-                    // (Box::new(BotInput::new(cold_clear::Interface::launch(
-                    //     board,
-                    //     cold_clear::Options {
-                    //         ..Default::default()
-                    //     },
-                    //     evaluator
-                    // ))), name)
-                    p1_config.to_player(board)
-                }),
-                Box::new(move |board| {
-                    p2_config.to_player(board)
-                }),
+                Box::new(move |board| p1_config.to_player(board)),
+                Box::new(move |board| p2_config.to_player(board)),
                 p1_game_config, p2_game_config
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
@@ -180,8 +165,8 @@ struct PlayerConfig {
     bot_config: BotConfig
 }
 impl PlayerConfig {
-    pub fn to_player(&self, board: libtetris::board::Board) -> (Box<dyn input::InputSource>, String) {
-        use cold_clear::evaluation::{ Evaluator };
+    pub fn to_player(&self, board: libtetris::Board) -> (Box<dyn input::InputSource>, String) {
+        use cold_clear::evaluation::Evaluator;
         use crate::input::BotInput;
         if self.is_bot {
             let name = format!("Cold Clear\n{}", self.bot_config.weights.name());
