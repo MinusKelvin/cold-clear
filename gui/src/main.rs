@@ -103,10 +103,8 @@ fn main() {
             event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
         }
         None => {
-            use cold_clear::evaluation::{ self, Evaluator };
-            use crate::input::BotInput;
             let Options {
-                controls, bot_options, bot_config, p1_config, p2_config
+                p1_config, p2_config
             } = match read_options() {
                 Ok(options) => options,
                 Err(e) => {
@@ -114,31 +112,13 @@ fn main() {
                     Options::default()
                 }
             };
+            let p1_game_config = p1_config.game;
+            let p2_game_config = p2_config.game;
             let mut local_game = LocalGame::new(
                 &mut resources,
-                Box::new(move |board| {
-                    // let evaluator = evaluation::changed::Standard {
-                    //     ..Default::default()
-                    // };
-                    // let name = format!("Cold Clear\n{}", evaluator.name());
-                    // (Box::new(BotInput::new(cold_clear::Interface::launch(
-                    //     board,
-                    //     cold_clear::Options {
-                    //         ..Default::default()
-                    //     },
-                    //     evaluator
-                    // ))), name)
-                    (Box::new(controls), "Human".to_owned())
-                }),
-                Box::new(move |board| {
-                    let name = format!("Cold Clear\n{}", bot_config.name());
-                    (Box::new(BotInput::new(cold_clear::Interface::launch(
-                        board,
-                        bot_options,
-                        bot_config.clone()
-                    ))), name)
-                }),
-                p1_config, p2_config
+                Box::new(move |board| p1_config.to_player(board)),
+                Box::new(move |board| p2_config.to_player(board)),
+                p1_game_config, p2_game_config
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }
@@ -160,11 +140,48 @@ fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Options {
+    #[serde(rename = "p1")]
+    p1_config: PlayerConfig,
+    #[serde(rename = "p2")]
+    p2_config: PlayerConfig
+}
+impl Default for Options {
+    fn default() -> Self {
+        let mut p2_config = PlayerConfig::default();
+        p2_config.is_bot = true;
+        Options {
+            p1_config: PlayerConfig::default(),
+            p2_config
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+struct PlayerConfig {
     controls: UserInput,
-    p1_config: GameConfig,
-    p2_config: GameConfig,
-    bot_config: cold_clear::evaluation::Standard,
-    bot_options: cold_clear::Options
+    game: GameConfig,
+    is_bot: bool,
+    bot_config: BotConfig
+}
+impl PlayerConfig {
+    pub fn to_player(&self, board: libtetris::Board) -> (Box<dyn input::InputSource>, String) {
+        use cold_clear::evaluation::Evaluator;
+        use crate::input::BotInput;
+        if self.is_bot {
+            let name = format!("Cold Clear\n{}", self.bot_config.weights.name());
+            (Box::new(BotInput::new(cold_clear::Interface::launch(
+                board,
+                self.bot_config.options,
+                self.bot_config.weights.clone()
+            ))), name)
+        } else {
+            (Box::new(self.controls), "Human".to_owned())
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+struct BotConfig {
+    weights: cold_clear::evaluation::Standard,
+    options: cold_clear::Options
 }
