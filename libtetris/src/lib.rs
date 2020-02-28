@@ -1,4 +1,4 @@
-mod board;
+pub mod board;
 mod piece;
 mod lock_data;
 
