@@ -63,13 +63,13 @@ impl Battle {
             p1,
             &mut self.p1_rng,
             &mut self.garbage_rng,
-            self.turn_based || self.p1_turn
+            !self.turn_based || self.p1_turn
         );
         let p2_events = self.player_2.update(
             p2,
             &mut self.p2_rng,
             &mut self.garbage_rng,
-            self.turn_based || !self.p1_turn
+            !self.turn_based || !self.p1_turn
         );
 
         for event in &p1_events {
