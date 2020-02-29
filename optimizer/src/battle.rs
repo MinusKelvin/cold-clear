@@ -84,6 +84,7 @@ impl<E: Evaluator> BotInput<E> {
 pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
         GameConfig::fast_config(), GameConfig::fast_config(),
+        false,
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 

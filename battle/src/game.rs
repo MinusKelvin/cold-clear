@@ -74,7 +74,7 @@ impl Game {
     }
 
     pub fn update(
-        &mut self, current: Controller, piece_rng: &mut impl Rng, garbage_rng: &mut impl Rng
+        &mut self, current: Controller, piece_rng: &mut impl Rng, garbage_rng: &mut impl Rng, paused: bool
     ) -> Vec<Event> {
         update_input(&mut self.used.left, self.prev.left, current.left);
         update_input(&mut self.used.right, self.prev.right, current.right);
@@ -149,13 +149,15 @@ impl Game {
                 events
             }
             GameState::SpawnDelay(ref mut delay) => {
-                *delay -= 1;
                 let mut events = vec![];
-                if *delay == 0 {
-                    events.push(Event::FrameBeforePieceSpawns);
-                }
-                if *delay + 1 == self.config.spawn_delay {
-                    events.push(Event::SpawnDelayStart);
+                if !paused {
+                    *delay -= 1;
+                    if *delay == 0 {
+                        events.push(Event::FrameBeforePieceSpawns);
+                    }
+                    if *delay + 1 == self.config.spawn_delay {
+                        events.push(Event::SpawnDelayStart);
+                    }
                 }
                 events
             }

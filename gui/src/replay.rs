@@ -30,6 +30,7 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
         ).unwrap();
         let battle = Battle::new(
             replay.p1_config, replay.p2_config,
+            replay.turn_based,
             replay.p1_seed, replay.p2_seed,
             replay.garbage_seed
         );
@@ -79,6 +80,7 @@ impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
                     let InfoReplay { replay, p1_info_updates, p2_info_updates } = replay;
                     let battle = Battle::new(
                         replay.p1_config, replay.p2_config,
+                        replay.turn_based,
                         replay.p1_seed, replay.p2_seed,
                         replay.garbage_seed
                     );

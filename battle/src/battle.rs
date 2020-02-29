@@ -6,6 +6,8 @@ use crate::{ Game, GameConfig, Event };
 use libtetris::Controller;
 
 pub struct Battle {
+    pub turn_based: bool,
+    p1_turn: bool,
     pub player_1: Game,
     pub player_2: Game,
     p1_rng: Pcg64Mcg,
@@ -20,6 +22,7 @@ pub struct Battle {
 impl Battle {
     pub fn new(
         p1_config: GameConfig, p2_config: GameConfig,
+        turn_based: bool,
         p1_seed: <Pcg64Mcg as SeedableRng>::Seed,
         p2_seed: <Pcg64Mcg as SeedableRng>::Seed,
         garbage_seed: <Pcg64Mcg as SeedableRng>::Seed
@@ -30,7 +33,10 @@ impl Battle {
         let player_1 = Game::new(p1_config, &mut p1_rng);
         let player_2 = Game::new(p2_config, &mut p2_rng);
         Battle {
+            turn_based,
+            p1_turn: true,
             replay: Replay {
+                turn_based,
                 p1_name: String::new(), p2_name: String::new(),
                 p1_config, p2_config, p1_seed, p2_seed, garbage_seed,
                 updates: VecDeque::new()
@@ -52,18 +58,40 @@ impl Battle {
         }
 
         self.replay.updates.push_back((p1, p2));
-
-        let p1_events = self.player_1.update(p1, &mut self.p1_rng, &mut self.garbage_rng);
-        let p2_events = self.player_2.update(p2, &mut self.p2_rng, &mut self.garbage_rng);
+        
+        let p1_events = self.player_1.update(
+            p1,
+            &mut self.p1_rng,
+            &mut self.garbage_rng,
+            self.turn_based && !self.p1_turn
+        );
+        let p2_events = self.player_2.update(
+            p2,
+            &mut self.p2_rng,
+            &mut self.garbage_rng,
+            self.turn_based && self.p1_turn
+        );
 
         for event in &p1_events {
-            if let &Event::GarbageSent(amt) = event {
-                self.player_2.garbage_queue += (amt as f32 * self.multiplier) as u32;
+            match event {
+                &Event::GarbageSent(amt) => {
+                    self.player_2.garbage_queue += (amt as f32 * self.multiplier) as u32;
+                },
+                &Event::PiecePlaced { .. } => {
+                    self.p1_turn = false;
+                }
+                _ => {}
             }
         }
         for event in &p2_events {
-            if let &Event::GarbageSent(amt) = event {
-                self.player_1.garbage_queue += (amt as f32 * self.multiplier) as u32;
+            match event {
+                &Event::GarbageSent(amt) => {
+                    self.player_1.garbage_queue += (amt as f32 * self.multiplier) as u32;
+                },
+                &Event::PiecePlaced { .. } => {
+                    self.p1_turn = true;
+                }
+                _ => {}
             }
         }
 
@@ -103,6 +131,7 @@ pub struct Replay {
     pub p1_seed: <Pcg64Mcg as SeedableRng>::Seed,
     pub p2_seed: <Pcg64Mcg as SeedableRng>::Seed,
     pub garbage_seed: <Pcg64Mcg as SeedableRng>::Seed,
+    pub turn_based: bool,
     pub p1_config: GameConfig,
     pub p2_config: GameConfig,
     pub updates: VecDeque<(Controller, Controller)>

@@ -104,7 +104,7 @@ fn main() {
         }
         None => {
             let Options {
-                p1_config, p2_config
+                turn_based, p1_config, p2_config
             } = match read_options() {
                 Ok(options) => options,
                 Err(e) => {
@@ -118,7 +118,8 @@ fn main() {
                 &mut resources,
                 Box::new(move |board| p1_config.to_player(board)),
                 Box::new(move |board| p2_config.to_player(board)),
-                p1_game_config, p2_game_config
+                p1_game_config, p2_game_config,
+                turn_based
             );
             event::run(&mut ctx, &mut events, &mut local_game).unwrap();
         }
@@ -142,6 +143,7 @@ fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Options {
+    turn_based: bool,
     #[serde(rename = "p1")]
     p1_config: PlayerConfig,
     #[serde(rename = "p2")]
@@ -152,6 +154,7 @@ impl Default for Options {
         let mut p2_config = PlayerConfig::default();
         p2_config.is_bot = true;
         Options {
+            turn_based: false,
             p1_config: PlayerConfig::default(),
             p2_config
         }

@@ -44,10 +44,13 @@ impl<'a> LocalGame<'a> {
         resources: &'a mut Resources,
         p1: Box<InputFactory>,
         p2: Box<InputFactory>,
-        p1_config: GameConfig, p2_config: GameConfig
+        p1_config: GameConfig, p2_config: GameConfig,
+        turn_based: bool
     ) -> Self {
         let mut battle = Battle::new(
-            p1_config, p2_config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+            p1_config, p2_config,
+            turn_based,
+            thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
         let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
         let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
@@ -94,6 +97,7 @@ impl EventHandler for LocalGame<'_> {
 
                     self.battle = Battle::new(
                         self.p1_config, self.p2_config,
+                        self.battle.turn_based,
                         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
                     );
 
