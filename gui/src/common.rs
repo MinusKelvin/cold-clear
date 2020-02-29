@@ -276,7 +276,7 @@ impl BoardDrawState {
             ("Lines", format!("{}", self.statistics.lines)),
             ("Attack", format!("{}", self.statistics.attack)),
             ("APM", format!("{:.1}", self.statistics.attack as f32 / seconds * 60.0)),
-            ("APP", format!("{:.1}", self.statistics.attack as f32 / self.statistics.pieces as f32)),
+            ("APP", format!("{:.3}", self.statistics.attack as f32 / self.statistics.pieces as f32)),
             ("Max Ren", format!("{}", self.statistics.max_combo)),
             ("Single", format!("{}", self.statistics.singles)),
             ("Double", format!("{}", self.statistics.doubles)),
