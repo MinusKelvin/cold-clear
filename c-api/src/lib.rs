@@ -13,6 +13,7 @@ macro_rules! cenum {
 
         impl From<$name> for $t {
             fn from(v: $name) -> $t {
+                #[allow(unreachable_patterns)]
                 match v {
                     $(
                         $name::$item => <$t>::$to,
@@ -24,6 +25,7 @@ macro_rules! cenum {
 
         impl From<$t> for $name {
             fn from(v: $t) -> $name {
+                #[allow(unreachable_patterns)]
                 match v {
                     $(
                         <$t>::$to => $name::$item,

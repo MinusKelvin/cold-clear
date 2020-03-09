@@ -22,9 +22,7 @@ pub struct Resources {
     sprites: SpriteBatch,
 
     move_sound: Option<audio::Source>,
-    stack_touched: Option<audio::Source>,
     hard_drop: Option<audio::Source>,
-    tspin: Option<audio::Source>,
     line_clear: Option<audio::Source>
 }
 
@@ -77,20 +75,10 @@ fn main() {
             eprintln!("Error loading sound effect for movement: {}", e);
             Err(e)
         }).ok(),
-        stack_touched: None,
-        // stack_touched: audio::Source::new(&mut ctx, "/stack-touched.ogg").or_else(|e| {
-        //     eprintln!("Error loading sound effect for stack touched: {}", e);
-        //     Err(e)
-        // }).ok(),
         hard_drop: audio::Source::new(&mut ctx, "/hard-drop.ogg").or_else(|e| {
             eprintln!("Error loading sound effect for hard drop: {}", e);
             Err(e)
         }).ok(),
-        tspin: None,
-        // tspin: audio::Source::new(&mut ctx, "/tspin.ogg").or_else(|e| {
-        //     eprintln!("Error loading sound effect for T-spin: {}", e);
-        //     Err(e)
-        // }).ok(),
         line_clear: audio::Source::new(&mut ctx, "/line-clear.ogg").or_else(|e| {
             eprintln!("Error loading sound effect for line clear: {}", e);
             Err(e)

@@ -341,7 +341,7 @@ impl Game {
         dist: Option<i32>
     ) {
         self.did_hold = false;
-        let locked = self.board.lock_piece(falling.piece);;
+        let locked = self.board.lock_piece(falling.piece);
 
         events.push(Event::PiecePlaced {
             piece: falling.piece,
