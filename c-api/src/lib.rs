@@ -82,9 +82,9 @@ struct CCOptions {
     mode: CCMovementMode,
     use_hold: bool,
     speculate: bool,
-    min_nodes: usize,
-    max_nodes: usize,
-    threads: usize,
+    min_nodes: u32,
+    max_nodes: u32,
+    threads: u32,
 }
 
 #[repr(C)]

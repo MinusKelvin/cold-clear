@@ -18,9 +18,9 @@ pub struct Options {
     pub mode: crate::moves::MovementMode,
     pub use_hold: bool,
     pub speculate: bool,
-    pub min_nodes: usize,
-    pub max_nodes: usize,
-    pub threads: usize
+    pub min_nodes: u32,
+    pub max_nodes: u32,
+    pub threads: u32
 }
 
 impl Default for Options {
@@ -30,7 +30,7 @@ impl Default for Options {
             use_hold: true,
             speculate: true,
             min_nodes: 0,
-            max_nodes: std::usize::MAX,
+            max_nodes: 4_000_000_000,
             threads: 1
         }
     }
@@ -238,7 +238,7 @@ impl<E: Evaluator> BotState<E> {
 
         let info = Info {
             nodes: self.tree.nodes,
-            depth: self.tree.depth(),
+            depth: self.tree.depth() as u32,
             original_rank: child.original_rank,
             plan,
         };
@@ -355,8 +355,7 @@ impl<E: Evaluator> Thinker<E> {
                     accumulated,
                     board: result,
                     hold,
-                    mv: mv.location,
-                    lock,
+                    mv: mv.location
                 });
             }
         }
@@ -391,7 +390,9 @@ fn run(
 
     let mut bot = BotState::new(board, options, evaluator);
 
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(options.threads).build().unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(options.threads as usize)
+        .build().unwrap();
 
     let (result_send, result_recv) = channel();
     let mut tasks = 0;
@@ -436,8 +437,8 @@ fn run(
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct Info {
-    pub nodes: usize,
-    pub depth: usize,
-    pub original_rank: usize,
+    pub nodes: u32,
+    pub depth: u32,
+    pub original_rank: u32,
     pub plan: Vec<(FallingPiece, LockResult)>
 }

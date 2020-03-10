@@ -42,9 +42,9 @@ typedef struct CCOptions {
     CCMovementMode mode;
     bool use_hold;
     bool speculate;
-    size_t min_nodes;
-    size_t max_nodes;
-    size_t threads;
+    uint32_t min_nodes;
+    uint32_t max_nodes;
+    uint32_t threads;
 } CCOptions;
 
 typedef struct CCWeights {
