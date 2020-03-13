@@ -445,11 +445,11 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 fn sky_tslot(board: &Board) -> Option<(i32, i32)> {
     fn filledness(board: &Board, x: i32, y: i32) -> usize {
         let mut filled = 0;
-        for cy in y-1..y+1 {
+        'yloop: for cy in y-1..y+1 {
             for rx in 0..10 {
                 if rx < x-1 || rx > x+1 {
                     if !board.occupied(rx, cy) {
-                        break
+                        continue 'yloop;
                     }
                 }
             }
