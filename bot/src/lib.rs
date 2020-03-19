@@ -139,6 +139,14 @@ impl Interface {
             self.dead = true;
         }
     }
+
+    /// Specifies a line that Cold Clear should analyze before making any moves. The path is
+    /// sensitive to T-spin status.
+    pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {
+        if self.send.send(BotMsg::ForceAnalysisLine(path)).is_err() {
+            self.dead = true;
+        }
+    }
 }
 
 enum BotMsg {
@@ -148,13 +156,15 @@ enum BotMsg {
         combo: u32
     },
     NewPiece(Piece),
-    NextMove(u32)
+    NextMove(u32),
+    ForceAnalysisLine(Vec<FallingPiece>)
 }
 
 pub struct BotState<E: Evaluator> {
     tree: TreeState<E::Value, E::Reward>,
     options: Options,
     eval: Arc<E>,
+    forced_analysis_lines: Vec<Vec<FallingPiece>>
 }
 
 pub struct Thinker<E: Evaluator> {
@@ -175,7 +185,8 @@ impl<E: Evaluator> BotState<E> {
         BotState {
             tree: TreeState::create(board, options.use_hold),
             options,
-            eval: Arc::new(eval)
+            eval: Arc::new(eval),
+            forced_analysis_lines: vec![],
         }
     }
 
@@ -184,7 +195,9 @@ impl<E: Evaluator> BotState<E> {
     /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find 
     pub fn think(&mut self) -> Result<Thinker<E>, bool> {
         if self.tree.nodes < self.options.max_nodes && !self.tree.is_dead() {
-            if let Some((node, board)) = self.tree.find_and_mark_leaf() {
+            if let Some((node, board)) = self.tree.find_and_mark_leaf(
+                &mut self.forced_analysis_lines
+            ) {
                 return Ok(Thinker {
                     node, board,
                     options: self.options,
@@ -216,11 +229,27 @@ impl<E: Evaluator> BotState<E> {
     }
 
     pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
-        self.tree.reset(field, b2b, combo);
+        let plan = self.tree.get_plan();
+        if let Some(garbage_lines) = self.tree.reset(field, b2b, combo) {
+            for path in &mut self.forced_analysis_lines {
+                for mv in path {
+                    mv.y += garbage_lines;
+                }
+            }
+            let mut prev_best_path = vec![];
+            for mv in plan {
+                let mut mv = mv.0;
+                mv.y += garbage_lines;
+                prev_best_path.push(mv);
+            }
+            self.forced_analysis_lines.push(prev_best_path);
+        } else {
+            self.forced_analysis_lines.clear();
+        }
     }
 
     pub fn min_thinking_reached(&self) -> bool {
-        self.tree.nodes > self.options.min_nodes
+        self.tree.nodes > self.options.min_nodes && self.forced_analysis_lines.is_empty()
     }
 
     pub fn next_move(&mut self, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
@@ -259,6 +288,10 @@ impl<E: Evaluator> BotState<E> {
         self.tree.advance_move(child.mv);
 
         true
+    }
+
+    pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {
+        self.forced_analysis_lines.push(path);
     }
 }
 
@@ -385,6 +418,7 @@ fn run(
                 board.b2b_bonus = b2b;
             }
             Ok(BotMsg::NextMove(incoming)) => do_move = Some(incoming),
+            Ok(BotMsg::ForceAnalysisLine(path)) => {}
         }
     }
 
@@ -404,6 +438,7 @@ fn run(
             Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
             Ok(BotMsg::Reset { field, b2b, combo }) => bot.reset(field, b2b, combo),
             Ok(BotMsg::NextMove(incoming)) => do_move = Some(incoming),
+            Ok(BotMsg::ForceAnalysisLine(path)) => bot.force_analysis_line(path)
         }
 
         if let Some(incoming) = do_move {

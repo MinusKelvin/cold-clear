@@ -119,7 +119,31 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
         this
     }
 
-    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) {
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) -> Option<i32> {
+        let garbage_lines;
+        if b2b == self.board.b2b_bonus && combo == self.board.combo {
+            let mut b = Board::<u16>::new();
+            b.set_field(field);
+            let dif = self.board.column_heights().iter()
+                .zip(b.column_heights().iter())
+                .map(|(&y1, &y2)| y2 - y1)
+                .min().unwrap();
+            let mut is_garbage_receive = true;
+            for y in 0..(40 - dif) {
+                if b.get_row(y + dif) != self.board.get_row(y) {
+                    is_garbage_receive = false;
+                    break;
+                }
+            }
+            if is_garbage_receive {
+                garbage_lines = Some(dif);
+            } else {
+                garbage_lines = None;
+            }
+        } else {
+            garbage_lines = None;
+        }
+
         self.board.set_field(field);
         self.board.combo = combo;
         self.board.b2b_bonus = b2b;
@@ -146,17 +170,35 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
             marked: false,
             death: false
         });
+
+        garbage_lines
     }
 
     /// To be called by a worker looking to expand the tree. `update_known`, `update_speculated`, or
     /// `unmark` should be called to provide the generated children. If this returns `None`, the
     /// leaf found is already being expanded by another worker, and you should try again later.
-    pub fn find_and_mark_leaf(&mut self) -> Option<(NodeId, Board)> {
+    pub fn find_and_mark_leaf(
+        &mut self, forced_analysis_lines: &mut Vec<Vec<FallingPiece>>
+    ) -> Option<(NodeId, Board)> {
         if self.is_dead() {
             return None
         }
-        let mut current = 0;
-        loop {
+
+        for i in 0..forced_analysis_lines.len() {
+            if let Some((node, board, done)) = self.descend(&forced_analysis_lines[i]) {
+                if done {
+                    forced_analysis_lines.remove(i);
+                }
+                return Some((node, board))
+            }
+        }
+
+        self.descend(&[]).map(|(n,b,_)| (n,b))
+    }
+
+    fn descend(&mut self, mut path: &[FallingPiece]) -> Option<(NodeId, Board, bool)> {
+        let mut current = self.root;
+        'descend: loop {
             match self.children[current as usize] {
                 None => {
                     if self.trees[current as usize].marked {
@@ -165,12 +207,25 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                         self.trees[current as usize].marked = true;
                         return Some((
                             NodeId(self.generation, current),
-                            self.pieces.rebuild_board(&self.trees[current as usize].board)
+                            self.pieces.rebuild_board(&self.trees[current as usize].board),
+                            path.is_empty()
                         ));
                     }
                 },
-                Some(Children::Known(start, len)) =>
-                    current = pick(&self.trees, &self.childs[start as usize..(start+len) as usize]),
+                Some(Children::Known(start, len)) => {
+                    let range = start as usize..(start + len) as usize;
+                    if let [next, rest @ ..] = path {
+                        for c in &self.childs[range.clone()] {
+                            if c.mv == *next {
+                                current = c.node;
+                                path = rest;
+                                continue 'descend;
+                            }
+                        }
+                    }
+                    current = pick(&self.trees, &self.childs[range]);
+                    path = &[];
+                }
                 Some(Children::Speculation(c)) => {
                     let mut pick_from = ArrayVec::<[_; 7]>::new();
                     for (_, c) in c {
@@ -182,6 +237,7 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                     }
                     let &(start, len) = pick_from.choose(&mut thread_rng()).unwrap();
                     current = pick(&self.trees, &self.childs[start as usize..(start+len) as usize]);
+                    path = &[];
                 }
             }
         }
