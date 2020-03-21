@@ -179,7 +179,14 @@ impl PlayerDrawState {
                 }
             }
             State::LineClearAnimation(ref lines, frame) => {
-                // TODO
+                let frame = (frame as usize).min(res.sprites.line_clear.len() - 1);
+                for &y in lines {
+                    res.sprite_batch.draw(
+                        &res.sprites.line_clear[frame],
+                        point2(offset_x + 8.5, y as f32 + 3.25),
+                        [0xFF; 4]
+                    );
+                }
             }
             _ => {}
         }
@@ -207,7 +214,7 @@ impl PlayerDrawState {
             "Statistics", offset_x + 1.75, 19.1, Alignment::Center, [0xFF; 4], 0.6, 0
         );
         let seconds = self.game_time as f32 / 60.0;
-        let lines = vec![
+        let mut lines = vec![
             ("Pieces", format!("{}", self.statistics.pieces)),
             ("PPS", format!("{:.1}", self.statistics.pieces as f32 / seconds)),
             ("Lines", format!("{}", self.statistics.lines)),
@@ -228,6 +235,13 @@ impl PlayerDrawState {
             ("T-Spin 3", format!("{}", self.statistics.tspin_triples)),
             ("Perfect", format!("{}", self.statistics.perfect_clears))
         ];
+        if let Some(ref info) = self.info {
+            // Bot info
+            lines.push(("", "".to_owned()));
+            lines.push(("Depth", format!("{}", info.depth)));
+            lines.push(("Nodes", format!("{}", info.nodes)));
+            lines.push(("O. Rank", format!("{}", info.original_rank)));
+        }
         let mut labels = String::new();
         let mut values = String::new();
         for (label, value) in lines {
@@ -239,7 +253,43 @@ impl PlayerDrawState {
         res.text.draw_text(&labels, offset_x+0.2, 18.4, Alignment::Left, [0xFF; 4], 0.45, 0);
         res.text.draw_text(&values, offset_x+3.3, 18.4, Alignment::Right, [0xFF; 4], 0.45, 0);
 
-        // TODO: Draw bot info
+        if let Some(ref info) = self.info {
+            let mut has_pc = false;
+            for (_, l) in &info.plan {
+                if l.perfect_clear {
+                    has_pc = true;
+                }
+            }
+
+            // Draw bot plan
+            let mut y_map = [0; 40];
+            for i in 0..40 {
+                y_map[i] = i as i32;
+            }
+            for (placement, lock) in &info.plan {
+                for &(x, y, d) in &placement.cells() {
+                    res.sprite_batch.draw(
+                        &res.sprites.plan[d.to_bits() as usize],
+                        point2(offset_x + x as f32 + 4.0, y_map[y as usize] as f32 + 3.25),
+                        cell_color_to_color(placement.kind.0.color())
+                    );
+                }
+                let mut new_map = [0; 40];
+                let mut j = 0;
+                for i in 0..40 {
+                    if !lock.cleared_lines.contains(&i) {
+                        new_map[j] = y_map[i as usize];
+                        j += 1;
+                    }
+                }
+                y_map = new_map;
+
+                if !has_pc && lock.placement_kind.is_hard() && lock.placement_kind.is_clear()
+                        || lock.perfect_clear {
+                    break
+                }
+            }
+        }
 
         // Draw player name
         res.text.draw_text(
