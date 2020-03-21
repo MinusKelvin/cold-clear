@@ -10,7 +10,7 @@ pub struct Resources {
 impl Resources {
     pub fn load() -> Self {
         let mut text = TextRenderer::new();
-        text.screen_size = (35.0, 23.0);
+        text.screen_size = (40.0, 23.0);
         text.add_style(vec![
             Font::from_bytes(include_bytes!("font/NotoSerif-Regular.ttf") as &[_]).unwrap()
         ]);

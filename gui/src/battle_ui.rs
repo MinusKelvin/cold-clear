@@ -64,11 +64,11 @@ impl BattleUi {
     }
 
     pub fn draw(&self, res: &mut Resources) {
-        self.player_1_graphics.draw(res, -17.5);
-        self.player_2_graphics.draw(res, 0.0);
+        self.player_1_graphics.draw(res, 0.0+1.0);
+        self.player_2_graphics.draw(res, 20.0+1.0);
 
         res.sprite_batch.render(Transform3D::ortho(
-            -17.5, 17.5,
+            0.0, 40.0,
             0.0, 23.0,
             -1.0, 1.0
         ));

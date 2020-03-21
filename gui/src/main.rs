@@ -26,13 +26,13 @@ impl game_util::Game for CCGui<'_> {
 
     fn render(&mut self, _: f64, smooth_delta: f64) {
         let dpi = self.context.window().get_hidpi_factor();
-        const TARGET_ASPECT: f64 = 35.0 / 23.0;
+        const TARGET_ASPECT: f64 = 40.0 / 23.0;
         let vp = if self.lsize.width / self.lsize.height < TARGET_ASPECT {
             LogicalSize::new(self.lsize.width, self.lsize.width / TARGET_ASPECT)
         } else {
             LogicalSize::new(self.lsize.height * TARGET_ASPECT, self.lsize.height)
         };
-        self.res.text.dpi = (dpi * vp.width / 35.0) as f32;
+        self.res.text.dpi = (dpi * vp.width / 40.0) as f32;
 
         unsafe {
             let (rw, rh): (u32, _) = self.lsize.to_physical(dpi).into();
@@ -46,13 +46,6 @@ impl game_util::Game for CCGui<'_> {
 
         self.state.render(&mut self.res);
 
-        self.res.text.draw_text(
-            "Hello World!",
-            1.0, 1.0,
-            [0xFF; 4],
-            0.8,
-            0
-        );
         self.res.text.render();
 
         self.context.window().set_title(
@@ -101,12 +94,12 @@ fn main() {
                 board,
                 cold_clear::Options::default(),
                 cold_clear::evaluation::Standard::default()
-            ))), "".to_string())),
+            ))), "Cold Clear".to_string())),
             Box::new(move |board| (Box::new(input::BotInput::new(cold_clear::Interface::launch(
                 board,
                 cold_clear::Options::default(),
                 cold_clear::evaluation::Standard::default()
-            ))), "".to_string())),
+            ))), "Cold Clear".to_string())),
             battle::GameConfig::default(), battle::GameConfig::default()
         ))
     };

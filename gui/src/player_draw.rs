@@ -1,4 +1,5 @@
 use game_util::prelude::*;
+use game_util::Alignment;
 use std::collections::VecDeque;
 use libtetris::*;
 use battle::{ PlayerUpdate, Event };
@@ -149,7 +150,7 @@ impl PlayerDrawState {
                     } else {
                         &res.sprites.filled
                     },
-                    point2(offset_x + x as f32 + 3.0, y as f32 + 2.75),
+                    point2(offset_x + x as f32 + 4.0, y as f32 + 3.25),
                     cell_color_to_color(if self.dead && cell_color != CellColor::Empty {
                         CellColor::Unclearable
                     } else {
@@ -157,6 +158,121 @@ impl PlayerDrawState {
                     })
                 );
             }
+        }
+
+        // Draw either the falling piece or the line clear animation
+        match self.state {
+            State::Falling(piece, ghost) => {
+                for &(x,y,_) in &ghost.cells() {
+                    res.sprite_batch.draw(
+                        &res.sprites.ghost,
+                        point2(offset_x + x as f32 + 4.0, y as f32 + 3.25),
+                        cell_color_to_color(piece.kind.0.color())
+                    );
+                }
+                for &(x,y,_) in &piece.cells() {
+                    res.sprite_batch.draw(
+                        &res.sprites.filled,
+                        point2(offset_x + x as f32 + 4.0, y as f32 + 3.25),
+                        cell_color_to_color(piece.kind.0.color())
+                    );
+                }
+            }
+            State::LineClearAnimation(ref lines, frame) => {
+                // TODO
+            }
+            _ => {}
+        }
+
+        // Draw hold piece and next queue
+        res.text.draw_text("Hold", offset_x + 2.0, 21.85, Alignment::Center, [0xFF; 4], 0.7, 0);
+        if let Some(piece) = self.hold_piece {
+            res.sprite_batch.draw(
+                &res.sprites.piece[piece as usize],
+                point2(offset_x + 2.0, 20.75),
+                cell_color_to_color(piece.color())
+            );
+        }
+        res.text.draw_text("Next", offset_x + 15.0, 21.85, Alignment::Center, [0xFF; 4], 0.7, 0);
+        for (i, &piece) in self.next_queue.iter().enumerate() {
+            res.sprite_batch.draw(
+                &res.sprites.piece[piece as usize],
+                point2(offset_x + 15.0, 20.75 - 2.0 * i as f32),
+                cell_color_to_color(piece.color())
+            );
+        }
+
+        // Draw statistics
+        res.text.draw_text(
+            "Statistics", offset_x + 1.75, 19.1, Alignment::Center, [0xFF; 4], 0.6, 0
+        );
+        let seconds = self.game_time as f32 / 60.0;
+        let lines = vec![
+            ("Pieces", format!("{}", self.statistics.pieces)),
+            ("PPS", format!("{:.1}", self.statistics.pieces as f32 / seconds)),
+            ("Lines", format!("{}", self.statistics.lines)),
+            ("Attack", format!("{}", self.statistics.attack)),
+            ("APM", format!("{:.1}", self.statistics.attack as f32 / seconds * 60.0)),
+            ("APP", format!("{:.3}", self.statistics.attack as f32 / self.statistics.pieces as f32)),
+            ("Max Ren", format!("{}", self.statistics.max_combo)),
+            ("Single", format!("{}", self.statistics.singles)),
+            ("Double", format!("{}", self.statistics.doubles)),
+            ("Triple", format!("{}", self.statistics.triples)),
+            ("Tetris", format!("{}", self.statistics.tetrises)),
+            // ("Mini T0", format!("{}", self.statistics.mini_tspin_zeros)),
+            // ("Mini T1", format!("{}", self.statistics.mini_tspin_singles)),
+            // ("Mini T2", format!("{}", self.statistics.mini_tspin_doubles)),
+            ("T-Spin 0", format!("{}", self.statistics.tspin_zeros)),
+            ("T-Spin 1", format!("{}", self.statistics.tspin_singles)),
+            ("T-Spin 2", format!("{}", self.statistics.tspin_doubles)),
+            ("T-Spin 3", format!("{}", self.statistics.tspin_triples)),
+            ("Perfect", format!("{}", self.statistics.perfect_clears))
+        ];
+        let mut labels = String::new();
+        let mut values = String::new();
+        for (label, value) in lines {
+            labels.push_str(label);
+            labels.push('\n');
+            values.push_str(&value);
+            values.push('\n');
+        }
+        res.text.draw_text(&labels, offset_x+0.2, 18.4, Alignment::Left, [0xFF; 4], 0.45, 0);
+        res.text.draw_text(&values, offset_x+3.3, 18.4, Alignment::Right, [0xFF; 4], 0.45, 0);
+
+        // TODO: Draw bot info
+
+        // Draw player name
+        res.text.draw_text(
+            &self.name,
+            offset_x + 15.0, 21.0 - 2.0 * self.next_queue.len() as f32,
+            Alignment::Center,
+            [0xFF; 4], 0.45, 0
+        );
+
+        // Draw clear info stuff
+        if let Some(timer) = self.back_to_back_splash {
+            res.text.draw_text(
+                "Back-To-Back",
+                offset_x + 4.0, 1.65,
+                Alignment::Left,
+                [0xFF, 0xFF, 0xFF, (timer.min(15) * 0xFF / 15) as u8], 0.75, 0
+            );
+        }
+        if let Some((combo, timer)) = self.combo_splash {
+            res.text.draw_text(
+                &format!("{} Combo", combo),
+                offset_x + 13.0, 1.65,
+                Alignment::Right,
+                [0xFF, 0xFF, 0xFF, (timer.min(15) * 0xFF / 15) as u8], 0.75, 0
+            );
+        }
+        if let Some((txt, timer)) = self.clear_splash {
+            res.text.draw_text(
+                txt,
+                offset_x + 8.5, 0.65,
+                Alignment::Center,
+                [0xFF, 0xFF, 0xFF, (timer.min(15) * 0xFF / 15) as u8], 0.75, 0
+            );
         }
     }
 }
