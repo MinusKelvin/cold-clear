@@ -1,175 +1,121 @@
-#![windows_subsystem = "windows"]
+use game_util::prelude::*;
+use game_util::GameloopCommand;
+use game_util::glutin::*;
+use game_util::glutin::dpi::LogicalSize;
 
-use ggez::ContextBuilder;
-use ggez::event;
-use ggez::graphics::{ Image };
-use ggez::graphics::spritebatch::SpriteBatch;
-use ggez::audio;
-use battle::GameConfig;
-use serde::{ Serialize, Deserialize };
-
-mod common;
-mod local;
+mod player_draw;
+mod battle_ui;
+mod res;
+mod realtime;
 mod input;
-mod interface;
-mod replay;
 
-use local::LocalGame;
-use replay::ReplayGame;
-use crate::input::UserInput;
+use realtime::RealtimeGame;
 
-pub struct Resources {
-    sprites: SpriteBatch,
+struct CCGui<'a> {
+    context: &'a WindowedContext<PossiblyCurrent>,
+    lsize: LogicalSize,
+    res: res::Resources,
+    state: Box<dyn State>
+}
 
-    move_sound: Option<audio::Source>,
-    hard_drop: Option<audio::Source>,
-    line_clear: Option<audio::Source>
+impl game_util::Game for CCGui<'_> {
+    fn update(&mut self) -> GameloopCommand {
+        self.state.update();
+        GameloopCommand::Continue
+    }
+
+    fn render(&mut self, _: f64, smooth_delta: f64) {
+        let dpi = self.context.window().get_hidpi_factor();
+        const TARGET_ASPECT: f64 = 35.0 / 23.0;
+        let vp = if self.lsize.width / self.lsize.height < TARGET_ASPECT {
+            LogicalSize::new(self.lsize.width, self.lsize.width / TARGET_ASPECT)
+        } else {
+            LogicalSize::new(self.lsize.height * TARGET_ASPECT, self.lsize.height)
+        };
+        self.res.text.dpi = (dpi * vp.width / 35.0) as f32;
+
+        unsafe {
+            let (rw, rh): (u32, _) = self.lsize.to_physical(dpi).into();
+            let (rw, rh) = (rw as i32, rh as i32);
+            let (w, h): (u32, _) = vp.to_physical(dpi).into();
+            let (w, h) = (w as i32, h as i32);
+
+            gl::Viewport((rw - w) / 2, (rh - h) / 2, w, h);
+            gl::ClearBufferfv(gl::COLOR, 0, [0.0f32; 4].as_ptr());
+        }
+
+        self.state.render(&mut self.res);
+
+        self.res.text.draw_text(
+            "Hello World!",
+            1.0, 1.0,
+            [0xFF; 4],
+            0.8,
+            0
+        );
+        self.res.text.render();
+
+        self.context.window().set_title(
+            &format!("Cold Clear (FPS: {:.0})", 1.0/smooth_delta)
+        );
+
+        self.context.swap_buffers().unwrap();
+    }
+
+    fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
+        match event {
+            WindowEvent::CloseRequested => return GameloopCommand::Exit,
+            WindowEvent::Resized(new_size) => {
+                self.lsize = new_size;
+                self.context.resize(new_size.to_physical(
+                    self.context.window().get_hidpi_factor()
+                ));
+            }
+            _ => {}
+        }
+        GameloopCommand::Continue
+    }
 }
 
 fn main() {
-    let mut replay = false;
-    let mut replay_file = None;
-    for arg in std::env::args() {
-        if replay {
-            replay_file = Some(arg);
-            break
-        }
-        if arg == "--help" {
-            println!("Cold Clear gameplay interface");
-            println!("Options:");
-            println!("  --play    <path>       View a replay");
-            return
-        } else if arg == "--play" {
-            replay = true;
-        }
-    }
-    if replay && replay_file.is_none() {
-        eprintln!("--play requires argument");
-        return
+    let mut events = EventsLoop::new();
+
+    let (context, lsize) = game_util::create_context(
+        WindowBuilder::new()
+            .with_title("Cold Clear")
+            .with_dimensions((1280.0, 720.0).into()),
+        0, true, &mut events
+    );
+
+    unsafe {
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
     }
 
-    let mut cb = ContextBuilder::new("cold-clear", "MinusKelvin");
-    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let mut path = std::path::PathBuf::from(manifest_dir);
-        path.push("resources");
-        println!("Adding path {:?}", path);
-        cb = cb.add_resource_path(path);
-    }
-
-    let (mut ctx, mut events) = cb
-        .window_setup(ggez::conf::WindowSetup {
-            title: "Cold Clear".to_owned(),
-            ..Default::default()
-        })
-        .window_mode(ggez::conf::WindowMode {
-            width: 1024.0,
-            height: 576.0,
-            resizable: true,
-            ..Default::default()
-        })
-        .build().unwrap();
-
-    let mut resources = Resources {
-        sprites: SpriteBatch::new(Image::new(&mut ctx, "/sprites.png").unwrap()),
-        move_sound: audio::Source::new(&mut ctx, "/move.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for movement: {}", e);
-            Err(e)
-        }).ok(),
-        hard_drop: audio::Source::new(&mut ctx, "/hard-drop.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for hard drop: {}", e);
-            Err(e)
-        }).ok(),
-        line_clear: audio::Source::new(&mut ctx, "/line-clear.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for line clear: {}", e);
-            Err(e)
-        }).ok(),
+    let mut game = CCGui {
+        context: &context,
+        lsize,
+        res: res::Resources::load(),
+        state: Box::new(RealtimeGame::new(
+            Box::new(move |board| (Box::new(input::BotInput::new(cold_clear::Interface::launch(
+                board,
+                cold_clear::Options::default(),
+                cold_clear::evaluation::Standard::default()
+            ))), "".to_string())),
+            Box::new(move |board| (Box::new(input::BotInput::new(cold_clear::Interface::launch(
+                board,
+                cold_clear::Options::default(),
+                cold_clear::evaluation::Standard::default()
+            ))), "".to_string())),
+            battle::GameConfig::default(), battle::GameConfig::default()
+        ))
     };
 
-    match replay_file {
-        Some(file) => {
-            let mut replay_game = ReplayGame::new(&mut resources, file);
-            event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
-        }
-        None => {
-            let Options {
-                p1_config, p2_config
-            } = match read_options() {
-                Ok(options) => options,
-                Err(e) => {
-                    eprintln!("An error occured while loading options: {}", e);
-                    Options::default()
-                }
-            };
-            let p1_game_config = p1_config.game;
-            let p2_game_config = p2_config.game;
-            let mut local_game = LocalGame::new(
-                &mut resources,
-                Box::new(move |board| p1_config.to_player(board)),
-                Box::new(move |board| p2_config.to_player(board)),
-                p1_game_config, p2_game_config
-            );
-            event::run(&mut ctx, &mut events, &mut local_game).unwrap();
-        }
-    }
+    game_util::gameloop(&mut events, &mut game, 60.0, true);
 }
 
-fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
-    match std::fs::read_to_string("options.yaml") {
-        Ok(options) => Ok(serde_yaml::from_str(&options)?),
-        Err(e) => if e.kind() == std::io::ErrorKind::NotFound {
-            let ser = serde_yaml::to_string(&Options::default())?;
-            let mut s = include_str!("options-header").to_owned();
-            s.push_str(&ser);
-            std::fs::write("options.yaml", &s)?;
-            Ok(Options::default())
-        } else {
-            Err(e.into())
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct Options {
-    #[serde(rename = "p1")]
-    p1_config: PlayerConfig,
-    #[serde(rename = "p2")]
-    p2_config: PlayerConfig
-}
-impl Default for Options {
-    fn default() -> Self {
-        let mut p2_config = PlayerConfig::default();
-        p2_config.is_bot = true;
-        Options {
-            p1_config: PlayerConfig::default(),
-            p2_config
-        }
-    }
-}
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-struct PlayerConfig {
-    controls: UserInput,
-    game: GameConfig,
-    is_bot: bool,
-    bot_config: BotConfig
-}
-impl PlayerConfig {
-    pub fn to_player(&self, board: libtetris::Board) -> (Box<dyn input::InputSource>, String) {
-        use cold_clear::evaluation::Evaluator;
-        use crate::input::BotInput;
-        if self.is_bot {
-            let name = format!("Cold Clear\n{}", self.bot_config.weights.name());
-            (Box::new(BotInput::new(cold_clear::Interface::launch(
-                board,
-                self.bot_config.options,
-                self.bot_config.weights.clone()
-            ))), name)
-        } else {
-            (Box::new(self.controls), "Human".to_owned())
-        }
-    }
-}
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-struct BotConfig {
-    weights: cold_clear::evaluation::Standard,
-    options: cold_clear::Options
+trait State {
+    fn update(&mut self) -> Option<Box<dyn State>>;
+    fn render(&mut self, res: &mut res::Resources);
+    fn event(&mut self, event: WindowEvent) -> Option<Box<dyn State>>;
 }
