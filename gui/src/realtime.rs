@@ -1,8 +1,9 @@
-use game_util::glutin::WindowEvent;
+use game_util::glutin::{ WindowEvent, VirtualKeyCode };
 use battle::{ Battle, GameConfig };
 use libtetris::Board;
-use std::collections::VecDeque;
+use std::collections::{ HashSet, VecDeque };
 use rand::prelude::*;
+use gilrs::Gamepad;
 use crate::res::Resources;
 use crate::battle_ui::BattleUi;
 use crate::input::InputSource;
@@ -62,7 +63,9 @@ impl RealtimeGame {
 }
 
 impl crate::State for RealtimeGame {
-    fn update(&mut self) -> Option<Box<dyn crate::State>> {
+    fn update(
+        &mut self, keys: &HashSet<VirtualKeyCode>, p1: Option<Gamepad>, p2: Option<Gamepad>
+    ) -> Option<Box<dyn crate::State>> {
         let do_update = match self.state {
             State::GameOver(0) => {
                 self.battle = Battle::new(
@@ -105,8 +108,8 @@ impl crate::State for RealtimeGame {
         };
 
         if do_update {
-            let p1_controller = self.p1_input.controller();
-            let p2_controller = self.p2_input.controller();
+            let p1_controller = self.p1_input.controller(keys, p1);
+            let p2_controller = self.p2_input.controller(keys, p2.or(p1));
 
             let update = self.battle.update(p1_controller, p2_controller);
 
