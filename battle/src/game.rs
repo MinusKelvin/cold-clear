@@ -10,7 +10,9 @@ pub struct Game {
     did_hold: bool,
     prev: Controller,
     used: Controller,
-    das_delay: u32,
+    left_das: u32,
+    right_das: u32,
+    going_right: bool,
     pub garbage_queue: u32,
     pub attacking: u32
 }
@@ -66,7 +68,9 @@ impl Game {
             prev: Default::default(),
             used: Default::default(),
             did_hold: false,
-            das_delay: config.delayed_auto_shift,
+            left_das: config.delayed_auto_shift,
+            right_das: config.delayed_auto_shift,
+            going_right: false,
             state: GameState::SpawnDelay(config.spawn_delay),
             garbage_queue: 0,
             attacking: 0
@@ -85,37 +89,52 @@ impl Game {
         self.used.hard_drop = !self.prev.hard_drop && current.hard_drop;
         self.used.soft_drop = current.soft_drop;
 
-        let switched_left_right = (current.left != self.prev.left) &&
-            (current.right != self.prev.right);
+        if !self.prev.left && current.left {
+            self.going_right = false;
+            self.used.right = false;
+        } else if !self.prev.right && current.right {
+            self.going_right = true;
+            self.used.left = false;
+        }
 
-        if current.left != current.right && !switched_left_right {
-            if self.used.left || self.used.right {
-                // While movement is buffered, don't let the time
-                // until the next shift fall below the auto-repeat rate.
-                // Otherwise we might rapidly shift twice when a piece spawns.
-                if self.das_delay > self.config.auto_repeat_rate {
-                    self.das_delay -= 1;
+        if current.left {
+            if self.used.left || current.right && self.going_right {
+                if self.left_das > self.config.auto_repeat_rate {
+                    self.left_das -= 1;
+                } else {
+                    self.left_das = self.config.auto_repeat_rate;
                 }
-            } else if self.das_delay == 0 {
-                // Apply auto-shift
-                self.das_delay = self.config.auto_repeat_rate;
-                self.used.left = current.left;
-                self.used.right = current.right;
             } else {
-                self.das_delay -= 1;
+                if self.left_das != 0 {
+                    self.left_das -= 1;
+                }
+                if self.left_das == 0 {
+                    self.used.left = true;
+                    self.left_das = self.config.auto_repeat_rate;
+                }
             }
         } else {
-            // Reset delayed auto shift
-            self.das_delay = self.config.delayed_auto_shift;
-            self.used.left = false;
-            self.used.right = false;
+            self.left_das = self.config.delayed_auto_shift;
+        }
 
-            // Redo button presses
-            if current.left && !self.prev.left {
-                self.used.left = true;
-            } else if current.right && !self.prev.right {
-                self.used.right = true;
+        if current.right {
+            if self.used.right || current.left && !self.going_right {
+                if self.right_das > self.config.auto_repeat_rate {
+                    self.right_das -= 1;
+                } else {
+                    self.right_das = self.config.auto_repeat_rate;
+                }
+            } else {
+                if self.right_das != 0 {
+                    self.right_das -= 1;
+                }
+                if self.right_das == 0 {
+                    self.used.right = true;
+                    self.right_das = self.config.auto_repeat_rate;
+                }
             }
+        } else {
+            self.right_das = self.config.delayed_auto_shift;
         }
 
         self.prev = current;
@@ -234,13 +253,13 @@ impl Game {
 
                 // Shift
                 while self.used.left && falling.piece.shift(&self.board, -1, 0) {
-                    self.used.left = self.config.auto_repeat_rate == 0 && self.das_delay == 0;
+                    self.used.left = self.config.auto_repeat_rate == 0 && self.left_das == 0;
                     falling.rotation_move_count += 1;
                     falling.lock_delay = self.config.lock_delay;
                     events.push(Event::PieceMoved);
                 }
                 while self.used.right && falling.piece.shift(&self.board, 1, 0) {
-                    self.used.right = self.config.auto_repeat_rate == 0 && self.das_delay == 0;
+                    self.used.right = self.config.auto_repeat_rate == 0 && self.right_das == 0;
                     falling.rotation_move_count += 1;
                     falling.lock_delay = self.config.lock_delay;
                     events.push(Event::PieceMoved);
