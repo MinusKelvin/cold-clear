@@ -140,8 +140,7 @@ impl Interface {
         }
     }
 
-    /// Specifies a line that Cold Clear should analyze before making any moves. The path is
-    /// sensitive to T-spin status.
+    /// Specifies a line that Cold Clear should analyze before making any moves.
     pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {
         if self.send.send(BotMsg::ForceAnalysisLine(path)).is_err() {
             self.dead = true;
@@ -253,7 +252,7 @@ impl<E: Evaluator> BotState<E> {
     }
 
     pub fn next_move(&mut self, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
-        if self.tree.nodes < self.options.min_nodes {
+        if !self.min_thinking_reached() {
             return false
         }
 

@@ -216,7 +216,7 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
                     let range = start as usize..(start + len) as usize;
                     if let [next, rest @ ..] = path {
                         for c in &self.childs[range.clone()] {
-                            if c.mv == *next {
+                            if c.mv.cells() == next.cells() {
                                 current = c.node;
                                 path = rest;
                                 continue 'descend;
