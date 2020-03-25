@@ -29,7 +29,7 @@ impl BotInput {
 }
 
 impl InputSource for BotInput {
-    fn controller(&self, keys: &HashSet<VirtualKeyCode>, gamepad: Option<Gamepad>) -> Controller {
+    fn controller(&self, _keys: &HashSet<VirtualKeyCode>, _gamepad: Option<Gamepad>) -> Controller {
         self.controller
     }
 

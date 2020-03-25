@@ -24,6 +24,7 @@ impl BattleUi {
 
     pub fn update(
         &mut self,
+        res: &mut Resources,
         update: BattleUpdate,
         p1_info_update: Option<cold_clear::Info>,
         p2_info_update: Option<cold_clear::Info>
@@ -31,30 +32,21 @@ impl BattleUi {
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
             use battle::Event::*;
             match event {
-                // TODO: sound playback
-                // PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
-                //     if let Some(move_sound) = &mut res.move_sound {
-                //         move_sound.play_detached()?;
-                //     }
-                //     self.move_sound_play = 2;
-                // }
-                // PiecePlaced { hard_drop_distance, locked, .. } => {
-                //     if hard_drop_distance.is_some() {
-                //         if let Some(hard_drop) = &mut res.hard_drop {
-                //             hard_drop.play_detached()?;
-                //         }
-                //     }
-                //     if locked.placement_kind.is_clear() {
-                //         if let Some(line_clear) = &mut res.line_clear {
-                //             line_clear.play_detached()?;
-                //         }
-                //     }
-                // }
+                PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
+                    if res.move_sound_sink.len() <= 1 {
+                        res.move_sound_sink.append(res.move_sound.sound());
+                    }
+                }
+                PiecePlaced { hard_drop_distance, locked, .. } => {
+                    if hard_drop_distance.is_some() {
+                        res.hard_drop.play();
+                    }
+                    if locked.placement_kind.is_clear() {
+                        res.line_clear.play();
+                    }
+                }
                 _ => {}
             }
-        }
-        if self.move_sound_play != 0 {
-            self.move_sound_play -= 1;
         }
 
         self.player_1_graphics.update(update.player_1, p1_info_update, update.time);

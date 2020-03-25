@@ -1,4 +1,4 @@
-use game_util::glutin::{ WindowEvent, VirtualKeyCode };
+use game_util::glutin::VirtualKeyCode;
 use battle::{ Battle, GameConfig };
 use libtetris::Board;
 use std::collections::{ HashSet, VecDeque };
@@ -65,7 +65,11 @@ impl RealtimeGame {
 
 impl crate::State for RealtimeGame {
     fn update(
-        &mut self, keys: &HashSet<VirtualKeyCode>, p1: Option<Gamepad>, p2: Option<Gamepad>
+        &mut self,
+        res: &mut Resources,
+        keys: &HashSet<VirtualKeyCode>,
+        p1: Option<Gamepad>,
+        p2: Option<Gamepad>
     ) -> Option<Box<dyn crate::State>> {
         let do_update = match self.state {
             State::GameOver(0) => {
@@ -162,7 +166,7 @@ impl crate::State for RealtimeGame {
                 }
             }
 
-            self.ui.update(update, p1_info_update, p2_info_update);
+            self.ui.update(res, update, p1_info_update, p2_info_update);
         }
 
         None

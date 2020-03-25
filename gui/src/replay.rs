@@ -46,13 +46,17 @@ impl ReplayGame {
 
 impl crate::State for ReplayGame {
     fn update(
-        &mut self, keys: &HashSet<VirtualKeyCode>, p1: Option<Gamepad>, p2: Option<Gamepad>
+        &mut self,
+        res: &mut Resources,
+        _keys: &HashSet<VirtualKeyCode>,
+        _p1: Option<Gamepad>,
+        _p2: Option<Gamepad>
     ) -> Option<Box<dyn crate::State>> {
         if self.start_delay == 0 {
             if let Some((p1_controller, p2_controller)) = self.updates.pop_front() {
                 let update = self.battle.update(p1_controller, p2_controller);
                 self.ui.update(
-                    update,
+                    res, update,
                     self.p1_info_updates.pop_front().flatten(),
                     self.p2_info_updates.pop_front().flatten()
                 );

@@ -32,7 +32,7 @@ impl game_util::Game for CCGui<'_> {
         let gilrs = &self.gilrs;
         let p1 = self.p1.map(|id| gilrs.gamepad(id));
         let p2 = self.p2.map(|id| gilrs.gamepad(id));
-        if let Some(new_state) = self.state.update(&self.keys, p1, p2) {
+        if let Some(new_state) = self.state.update(&mut self.res, &self.keys, p1, p2) {
             self.state = new_state;
         }
         GameloopCommand::Continue
@@ -86,7 +86,7 @@ impl game_util::Game for CCGui<'_> {
     }
 
     fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
-        if let Some(new_state) = self.state.event(&event) {
+        if let Some(new_state) = self.state.event(&mut self.res, &event) {
             self.state = new_state;
         }
         match event {
@@ -179,10 +179,16 @@ fn main() {
 
 trait State {
     fn update(
-        &mut self, keys: &HashSet<VirtualKeyCode>, p1: Option<Gamepad>, p2: Option<Gamepad>
+        &mut self,
+        res: &mut res::Resources,
+        keys: &HashSet<VirtualKeyCode>,
+        p1: Option<Gamepad>,
+        p2: Option<Gamepad>
     ) -> Option<Box<dyn State>>;
     fn render(&mut self, res: &mut res::Resources);
-    fn event(&mut self, event: &WindowEvent) -> Option<Box<dyn State>> { None }
+    fn event(
+        &mut self, res: &mut res::Resources, _event: &WindowEvent
+    ) -> Option<Box<dyn State>> { None }
 }
 
 fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
