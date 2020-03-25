@@ -187,7 +187,7 @@ trait State {
     ) -> Option<Box<dyn State>>;
     fn render(&mut self, res: &mut res::Resources);
     fn event(
-        &mut self, res: &mut res::Resources, _event: &WindowEvent
+        &mut self, _res: &mut res::Resources, _event: &WindowEvent
     ) -> Option<Box<dyn State>> { None }
 }
 

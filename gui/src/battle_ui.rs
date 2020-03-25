@@ -6,8 +6,7 @@ use crate::res::Resources;
 pub struct BattleUi {
     player_1_graphics: PlayerDrawState,
     player_2_graphics: PlayerDrawState,
-    time: u32,
-    move_sound_play: u32
+    time: u32
 }
 
 impl BattleUi {
@@ -15,8 +14,7 @@ impl BattleUi {
         BattleUi {
             player_1_graphics: PlayerDrawState::new(battle.player_1.board.next_queue(), p1_name),
             player_2_graphics: PlayerDrawState::new(battle.player_2.board.next_queue(), p2_name),
-            time: 0,
-            move_sound_play: 0
+            time: 0
         }
     }
 
@@ -30,7 +28,7 @@ impl BattleUi {
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
             use battle::Event::*;
             match event {
-                PieceMoved | SoftDropped | PieceRotated => if self.move_sound_play == 0 {
+                PieceMoved | SoftDropped | PieceRotated => {
                     if res.move_sound_sink.len() <= 1 {
                         res.move_sound_sink.append(res.move_sound.sound());
                     }
@@ -53,6 +51,13 @@ impl BattleUi {
     }
 
     pub fn draw(&self, res: &mut Resources) {
+        res.text.draw_text(
+            &format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
+            20.0, 1.5,
+            game_util::Alignment::Center,
+            [0xFF; 4], 1.0, 0
+        );
+
         self.player_1_graphics.draw(res, 0.0+1.0);
         self.player_2_graphics.draw(res, 20.0+1.0);
 

@@ -173,6 +173,28 @@ impl crate::State for RealtimeGame {
     }
 
     fn render(&mut self, res: &mut Resources) {
+        res.text.draw_text(
+            &format!("{} - {}", self.p1_wins, self.p2_wins),
+            20.0, 3.0,
+            game_util::Alignment::Center,
+            [0xFF; 4], 1.5, 0
+        );
+
+        if let State::Starting(timer) = self.state {
+            res.text.draw_text(
+                &format!("{}", timer / 60 + 1),
+                9.5, 12.25,
+                game_util::Alignment::Center,
+                [0xFF; 4], 3.0, 0
+            );
+            res.text.draw_text(
+                &format!("{}", timer / 60 + 1),
+                29.5, 12.25,
+                game_util::Alignment::Center,
+                [0xFF; 4], 3.0, 0
+            );
+        }
+
         self.ui.draw(res);
     }
 }

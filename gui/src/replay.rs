@@ -96,6 +96,20 @@ impl crate::State for ReplayGame {
     }
 
     fn render(&mut self, res: &mut Resources) {
+        if self.start_delay != 0 {
+            res.text.draw_text(
+                &format!("{}", self.start_delay / 60 + 1),
+                9.5, 12.25,
+                game_util::Alignment::Center,
+                [0xFF; 4], 3.0, 0
+            );
+            res.text.draw_text(
+                &format!("{}", self.start_delay / 60 + 1),
+                29.5, 12.25,
+                game_util::Alignment::Center,
+                [0xFF; 4], 3.0, 0
+            );
+        }
         self.ui.draw(res);
     }
 }

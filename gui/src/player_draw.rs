@@ -79,7 +79,7 @@ impl PlayerDrawState {
         }
         for event in &update.events {
             match event {
-                Event::PiecePlaced { piece, locked, hard_drop_distance } => {
+                Event::PiecePlaced { piece, locked, .. } => {
                     self.statistics.update(&locked);
                     for &(x, y, _) in &piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
