@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use game_util::prelude::*;
 use game_util::GameloopCommand;
 use game_util::glutin::*;
