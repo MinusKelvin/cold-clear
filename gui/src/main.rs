@@ -1,29 +1,115 @@
 #![windows_subsystem = "windows"]
 
-use ggez::ContextBuilder;
-use ggez::event;
-use ggez::graphics::{ Image };
-use ggez::graphics::spritebatch::SpriteBatch;
-use ggez::audio;
+use game_util::prelude::*;
+use game_util::GameloopCommand;
+use game_util::glutin::*;
+use game_util::glutin::dpi::LogicalSize;
+use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
-use serde::{ Serialize, Deserialize };
+use std::collections::HashSet;
 
-mod common;
-mod local;
-mod input;
-mod interface;
+mod player_draw;
+mod battle_ui;
+mod res;
+mod realtime;
 mod replay;
+mod input;
 
-use local::LocalGame;
+use realtime::RealtimeGame;
 use replay::ReplayGame;
-use crate::input::UserInput;
 
-pub struct Resources {
-    sprites: SpriteBatch,
+struct CCGui<'a> {
+    context: &'a WindowedContext<PossiblyCurrent>,
+    lsize: LogicalSize,
+    res: res::Resources,
+    state: Box<dyn State>,
+    gilrs: Gilrs,
+    keys: HashSet<VirtualKeyCode>,
+    p1: Option<GamepadId>,
+    p2: Option<GamepadId>
+}
 
-    move_sound: Option<audio::Source>,
-    hard_drop: Option<audio::Source>,
-    line_clear: Option<audio::Source>
+impl game_util::Game for CCGui<'_> {
+    fn update(&mut self) -> GameloopCommand {
+        let gilrs = &self.gilrs;
+        let p1 = self.p1.map(|id| gilrs.gamepad(id));
+        let p2 = self.p2.map(|id| gilrs.gamepad(id));
+        if let Some(new_state) = self.state.update(&mut self.res, &self.keys, p1, p2) {
+            self.state = new_state;
+        }
+        GameloopCommand::Continue
+    }
+
+    fn render(&mut self, _: f64, smooth_delta: f64) {
+        while let Some(event) = self.gilrs.next_event() {
+            match event.event {
+                gilrs::EventType::Connected => if self.p1.is_none() {
+                    self.p1 = Some(event.id);
+                } else if self.p2.is_none() {
+                    self.p2 = Some(event.id);
+                }
+                gilrs::EventType::Disconnected => if self.p1 == Some(event.id) {
+                    self.p1 = None;
+                } else if self.p2 == Some(event.id) {
+                    self.p2 = None;
+                }
+                _ => {}
+            }
+        }
+
+        let dpi = self.context.window().get_hidpi_factor();
+        const TARGET_ASPECT: f64 = 40.0 / 23.0;
+        let vp = if self.lsize.width / self.lsize.height < TARGET_ASPECT {
+            LogicalSize::new(self.lsize.width, self.lsize.width / TARGET_ASPECT)
+        } else {
+            LogicalSize::new(self.lsize.height * TARGET_ASPECT, self.lsize.height)
+        };
+        self.res.text.dpi = (dpi * vp.width / 40.0) as f32;
+
+        unsafe {
+            let (rw, rh): (u32, _) = self.lsize.to_physical(dpi).into();
+            let (rw, rh) = (rw as i32, rh as i32);
+            let (w, h): (u32, _) = vp.to_physical(dpi).into();
+            let (w, h) = (w as i32, h as i32);
+
+            gl::Viewport((rw - w) / 2, (rh - h) / 2, w, h);
+            gl::ClearBufferfv(gl::COLOR, 0, [0.0f32; 4].as_ptr());
+        }
+
+        self.state.render(&mut self.res);
+
+        self.res.text.render();
+
+        self.context.window().set_title(
+            &format!("Cold Clear (FPS: {:.0})", 1.0/smooth_delta)
+        );
+
+        self.context.swap_buffers().unwrap();
+    }
+
+    fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
+        if let Some(new_state) = self.state.event(&mut self.res, &event) {
+            self.state = new_state;
+        }
+        match event {
+            WindowEvent::CloseRequested => return GameloopCommand::Exit,
+            WindowEvent::Resized(new_size) => {
+                self.lsize = new_size;
+                self.context.resize(new_size.to_physical(
+                    self.context.window().get_hidpi_factor()
+                ));
+            }
+            WindowEvent::KeyboardInput { input, .. } => if let Some(k) = input.virtual_keycode {
+                if input.state == ElementState::Pressed {
+                    self.keys.insert(k);
+                } else {
+                    self.keys.remove(&k);
+                }
+            }
+            _ => {}
+        }
+        GameloopCommand::Continue
+    }
 }
 
 fn main() {
@@ -48,69 +134,63 @@ fn main() {
         return
     }
 
-    let mut cb = ContextBuilder::new("cold-clear", "MinusKelvin");
-    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let mut path = std::path::PathBuf::from(manifest_dir);
-        path.push("resources");
-        println!("Adding path {:?}", path);
-        cb = cb.add_resource_path(path);
+    let mut events = EventsLoop::new();
+
+    let (context, lsize) = game_util::create_context(
+        WindowBuilder::new()
+            .with_title("Cold Clear")
+            .with_dimensions((1280.0, 720.0).into()),
+        0, true, &mut events
+    );
+
+    unsafe {
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
     }
 
-    let (mut ctx, mut events) = cb
-        .window_setup(ggez::conf::WindowSetup {
-            title: "Cold Clear".to_owned(),
-            ..Default::default()
-        })
-        .window_mode(ggez::conf::WindowMode {
-            width: 1024.0,
-            height: 576.0,
-            resizable: true,
-            ..Default::default()
-        })
-        .build().unwrap();
+    let Options { p1, p2 } = read_options().unwrap_or_else(|e| {
+        eprintln!("An error occured while loading options.yaml: {}", e);
+        Options::default()
+    });
+    let p1_game_config = p1.game;
+    let p2_game_config = p2.game;
 
-    let mut resources = Resources {
-        sprites: SpriteBatch::new(Image::new(&mut ctx, "/sprites.png").unwrap()),
-        move_sound: audio::Source::new(&mut ctx, "/move.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for movement: {}", e);
-            Err(e)
-        }).ok(),
-        hard_drop: audio::Source::new(&mut ctx, "/hard-drop.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for hard drop: {}", e);
-            Err(e)
-        }).ok(),
-        line_clear: audio::Source::new(&mut ctx, "/line-clear.ogg").or_else(|e| {
-            eprintln!("Error loading sound effect for line clear: {}", e);
-            Err(e)
-        }).ok(),
+    let gilrs = Gilrs::new().unwrap();
+    let mut gamepads = gilrs.gamepads();
+
+    let mut game = CCGui {
+        context: &context,
+        lsize,
+        res: res::Resources::load(),
+        state: match replay_file {
+            Some(f) => Box::new(ReplayGame::new(f)),
+            None => Box::new(RealtimeGame::new(
+                Box::new(move |board| p1.to_player(board)),
+                Box::new(move |board| p2.to_player(board)),
+                p1_game_config, p2_game_config
+            ))
+        },
+        p1: gamepads.next().map(|(id, _)| id),
+        p2: gamepads.next().map(|(id, _)| id),
+        gilrs,
+        keys: HashSet::new()
     };
 
-    match replay_file {
-        Some(file) => {
-            let mut replay_game = ReplayGame::new(&mut resources, file);
-            event::run(&mut ctx, &mut events, &mut replay_game).unwrap();
-        }
-        None => {
-            let Options {
-                p1_config, p2_config
-            } = match read_options() {
-                Ok(options) => options,
-                Err(e) => {
-                    eprintln!("An error occured while loading options: {}", e);
-                    Options::default()
-                }
-            };
-            let p1_game_config = p1_config.game;
-            let p2_game_config = p2_config.game;
-            let mut local_game = LocalGame::new(
-                &mut resources,
-                Box::new(move |board| p1_config.to_player(board)),
-                Box::new(move |board| p2_config.to_player(board)),
-                p1_game_config, p2_game_config
-            );
-            event::run(&mut ctx, &mut events, &mut local_game).unwrap();
-        }
-    }
+    game_util::gameloop(&mut events, &mut game, 60.0, true);
+}
+
+trait State {
+    fn update(
+        &mut self,
+        res: &mut res::Resources,
+        keys: &HashSet<VirtualKeyCode>,
+        p1: Option<Gamepad>,
+        p2: Option<Gamepad>
+    ) -> Option<Box<dyn State>>;
+    fn render(&mut self, res: &mut res::Resources);
+    fn event(
+        &mut self, _res: &mut res::Resources, _event: &WindowEvent
+    ) -> Option<Box<dyn State>> { None }
 }
 
 fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
@@ -130,28 +210,29 @@ fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Options {
-    #[serde(rename = "p1")]
-    p1_config: PlayerConfig,
-    #[serde(rename = "p2")]
-    p2_config: PlayerConfig
+    p1: PlayerConfig,
+    p2: PlayerConfig
 }
+
 impl Default for Options {
     fn default() -> Self {
-        let mut p2_config = PlayerConfig::default();
-        p2_config.is_bot = true;
+        let mut p2 = PlayerConfig::default();
+        p2.is_bot = true;
         Options {
-            p1_config: PlayerConfig::default(),
-            p2_config
+            p1: PlayerConfig::default(),
+            p2
         }
     }
 }
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct PlayerConfig {
-    controls: UserInput,
+    controls: input::UserInput,
     game: GameConfig,
     is_bot: bool,
     bot_config: BotConfig
 }
+
 impl PlayerConfig {
     pub fn to_player(&self, board: libtetris::Board) -> (Box<dyn input::InputSource>, String) {
         use cold_clear::evaluation::Evaluator;
@@ -168,6 +249,7 @@ impl PlayerConfig {
         }
     }
 }
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct BotConfig {
     weights: cold_clear::evaluation::Standard,

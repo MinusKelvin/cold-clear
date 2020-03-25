@@ -1,32 +1,32 @@
-use ggez::event::EventHandler;
-use ggez::{ Context, GameResult };
-use ggez::timer;
-use ggez::graphics;
-use crate::interface::{ Gui, setup_graphics, text };
-use crate::Resources;
-use battle::{ Battle, Replay };
-use libtetris::Controller;
-use std::collections::VecDeque;
+use battle::Replay;
 use serde::{ Serialize, Deserialize };
-use libflate::deflate;
+use std::collections::{ HashSet, VecDeque };
+use std::path::PathBuf;
+use std::fs::File;
+use battle::Battle;
+use libtetris::Controller;
+use gilrs::Gamepad;
+use game_util::glutin::VirtualKeyCode;
+use crate::battle_ui::BattleUi;
+use crate::res::Resources;
 
-pub struct ReplayGame<'a, P> {
-    gui: Gui,
+pub struct ReplayGame {
+    ui: BattleUi,
     battle: Battle,
+    file: PathBuf,
     updates: VecDeque<(Controller, Controller)>,
     p1_info_updates: VecDeque<Option<cold_clear::Info>>,
     p2_info_updates: VecDeque<Option<cold_clear::Info>>,
-    start_delay: u32,
-    resources: &'a mut Resources,
-    file: P
+    start_delay: u32
 }
 
-impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
-    pub fn new(resources: &'a mut Resources, file: P) -> Self {
+impl ReplayGame {
+    pub fn new(file: impl Into<PathBuf>) -> Self {
+        let file = file.into();
         let InfoReplay {
             replay, p1_info_updates, p2_info_updates
         } = bincode::deserialize_from(
-            deflate::Decoder::new(std::fs::File::open(file.clone()).unwrap())
+            libflate::deflate::Decoder::new(File::open(&file).unwrap())
         ).unwrap();
         let battle = Battle::new(
             replay.p1_config, replay.p2_config,
@@ -34,82 +34,83 @@ impl<'a, P: AsRef<std::path::Path> + Clone> ReplayGame<'a, P> {
             replay.garbage_seed
         );
         ReplayGame {
-            gui: Gui::new(&battle, replay.p1_name, replay.p2_name),
+            ui: BattleUi::new(&battle, replay.p1_name, replay.p2_name),
             battle,
             updates: replay.updates,
-            p1_info_updates: p1_info_updates,
-            p2_info_updates: p2_info_updates,
+            p1_info_updates, p2_info_updates,
             start_delay: 500,
-            resources,
             file
         }
     }
 }
 
-impl<P: AsRef<std::path::Path> + Clone> EventHandler for ReplayGame<'_, P> {
-    fn update(&mut self, ctx: &mut Context) -> GameResult {
-        while timer::check_update_time(ctx, 60) {
-            if self.start_delay == 0 {
-                if let Some(
-                    (p1_controller, p2_controller)
-                ) = self.updates.pop_front() {
-                    let update = self.battle.update(p1_controller, p2_controller);
-                    self.gui.update(
-                        update,
-                        self.p1_info_updates.pop_front().and_then(|x| x),
-                        self.p2_info_updates.pop_front().and_then(|x| x),
-                        self.resources
-                    )?;
-                } else {
-                    let replay;
-                    loop {
-                        match std::fs::File::open(self.file.clone()) {
-                            Ok(f) => {
-                                match bincode::deserialize_from(deflate::Decoder::new(f)) {
-                                    Ok(r) => {
-                                        replay = r;
-                                        break
-                                    }
-                                    Err(_) => {}
-                                }
-                            }
-                            Err(_) => {}
-                        }
-                    }
-                    let InfoReplay { replay, p1_info_updates, p2_info_updates } = replay;
-                    let battle = Battle::new(
-                        replay.p1_config, replay.p2_config,
-                        replay.p1_seed, replay.p2_seed,
-                        replay.garbage_seed
-                    );
-                    self.gui = Gui::new(&battle, replay.p1_name, replay.p2_name);
-                    self.battle = battle;
-                    self.updates = replay.updates;
-                    self.p1_info_updates = p1_info_updates;
-                    self.p2_info_updates = p2_info_updates;
-                    self.start_delay = 180;
-                }
+impl crate::State for ReplayGame {
+    fn update(
+        &mut self,
+        res: &mut Resources,
+        _keys: &HashSet<VirtualKeyCode>,
+        _p1: Option<Gamepad>,
+        _p2: Option<Gamepad>
+    ) -> Option<Box<dyn crate::State>> {
+        if self.start_delay == 0 {
+            if let Some((p1_controller, p2_controller)) = self.updates.pop_front() {
+                let update = self.battle.update(p1_controller, p2_controller);
+                self.ui.update(
+                    res, update,
+                    self.p1_info_updates.pop_front().flatten(),
+                    self.p2_info_updates.pop_front().flatten()
+                );
             } else {
-                if self.start_delay == 180 {
-                    while timer::check_update_time(ctx, 60) {}
+                let replay;
+                loop {
+                    match std::fs::File::open(&self.file) {
+                        Ok(f) => {
+                            match bincode::deserialize_from(libflate::deflate::Decoder::new(f)) {
+                                Ok(r) => {
+                                    replay = r;
+                                    break
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        Err(_) => {}
+                    }
                 }
-                self.start_delay -= 1;
+                let InfoReplay { replay, p1_info_updates, p2_info_updates } = replay;
+                let battle = Battle::new(
+                    replay.p1_config, replay.p2_config,
+                    replay.p1_seed, replay.p2_seed,
+                    replay.garbage_seed
+                );
+                self.ui = BattleUi::new(&battle, replay.p1_name, replay.p2_name);
+                self.battle = battle;
+                self.updates = replay.updates;
+                self.p1_info_updates = p1_info_updates;
+                self.p2_info_updates = p2_info_updates;
+                self.start_delay = 180;
             }
+        } else {
+            self.start_delay -= 1;
         }
-        Ok(())
+        None
     }
 
-    fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let (scale, center) = setup_graphics(ctx)?;
-
+    fn render(&mut self, res: &mut Resources) {
         if self.start_delay != 0 {
-            let txt = text(format!("{}", self.start_delay / 60 + 1), scale * 4.0, 10.0*scale);
-            graphics::queue_text(ctx, &txt, [center-14.5*scale, 9.0*scale], None);
-            graphics::queue_text(ctx, &txt, [center+4.5*scale, 9.0*scale], None);
+            res.text.draw_text(
+                &format!("{}", self.start_delay / 60 + 1),
+                9.5, 12.25,
+                game_util::Alignment::Center,
+                [0xFF; 4], 3.0, 0
+            );
+            res.text.draw_text(
+                &format!("{}", self.start_delay / 60 + 1),
+                29.5, 12.25,
+                game_util::Alignment::Center,
+                [0xFF; 4], 3.0, 0
+            );
         }
-
-        self.gui.draw(ctx, self.resources, scale, center)?;
-        graphics::present(ctx)
+        self.ui.draw(res);
     }
 }
 
