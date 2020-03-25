@@ -191,6 +191,16 @@ impl PlayerDrawState {
             _ => {}
         }
 
+        // Draw pending garbage bar
+        for y in 0..self.garbage_queue {
+            let w = res.sprites.garbage_bar.real_size.width / res.sprite_batch.pixels_per_unit;
+            res.sprite_batch.draw(
+                &res.sprites.garbage_bar,
+                point2(offset_x + 13.5 + w / 2.0, y as f32 + 3.25),
+                [0xFF; 4]
+            );
+        }
+
         // Draw hold piece and next queue
         res.text.draw_text("Hold", offset_x + 2.0, 21.85, Alignment::Center, [0xFF; 4], 0.7, 0);
         if let Some(piece) = self.hold_piece {

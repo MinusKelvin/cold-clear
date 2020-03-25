@@ -10,9 +10,11 @@ mod player_draw;
 mod battle_ui;
 mod res;
 mod realtime;
+mod replay;
 mod input;
 
 use realtime::RealtimeGame;
+use replay::ReplayGame;
 
 struct CCGui<'a> {
     context: &'a WindowedContext<PossiblyCurrent>,
@@ -30,7 +32,9 @@ impl game_util::Game for CCGui<'_> {
         let gilrs = &self.gilrs;
         let p1 = self.p1.map(|id| gilrs.gamepad(id));
         let p2 = self.p2.map(|id| gilrs.gamepad(id));
-        self.state.update(&self.keys, p1, p2);
+        if let Some(new_state) = self.state.update(&self.keys, p1, p2) {
+            self.state = new_state;
+        }
         GameloopCommand::Continue
     }
 
@@ -82,6 +86,9 @@ impl game_util::Game for CCGui<'_> {
     }
 
     fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
+        if let Some(new_state) = self.state.event(&event) {
+            self.state = new_state;
+        }
         match event {
             WindowEvent::CloseRequested => return GameloopCommand::Exit,
             WindowEvent::Resized(new_size) => {
@@ -104,6 +111,27 @@ impl game_util::Game for CCGui<'_> {
 }
 
 fn main() {
+    let mut replay = false;
+    let mut replay_file = None;
+    for arg in std::env::args() {
+        if replay {
+            replay_file = Some(arg);
+            break
+        }
+        if arg == "--help" {
+            println!("Cold Clear gameplay interface");
+            println!("Options:");
+            println!("  --play    <path>       View a replay");
+            return
+        } else if arg == "--play" {
+            replay = true;
+        }
+    }
+    if replay && replay_file.is_none() {
+        eprintln!("--play requires argument");
+        return
+    }
+
     let mut events = EventsLoop::new();
 
     let (context, lsize) = game_util::create_context(
@@ -132,11 +160,14 @@ fn main() {
         context: &context,
         lsize,
         res: res::Resources::load(),
-        state: Box::new(RealtimeGame::new(
-            Box::new(move |board| p1.to_player(board)),
-            Box::new(move |board| p2.to_player(board)),
-            p1_game_config, p2_game_config
-        )),
+        state: match replay_file {
+            Some(f) => Box::new(ReplayGame::new(f)),
+            None => Box::new(RealtimeGame::new(
+                Box::new(move |board| p1.to_player(board)),
+                Box::new(move |board| p2.to_player(board)),
+                p1_game_config, p2_game_config
+            ))
+        },
         p1: gamepads.next().map(|(id, _)| id),
         p2: gamepads.next().map(|(id, _)| id),
         gilrs,
@@ -151,7 +182,7 @@ trait State {
         &mut self, keys: &HashSet<VirtualKeyCode>, p1: Option<Gamepad>, p2: Option<Gamepad>
     ) -> Option<Box<dyn State>>;
     fn render(&mut self, res: &mut res::Resources);
-    fn event(&mut self, event: WindowEvent) -> Option<Box<dyn State>>;
+    fn event(&mut self, event: &WindowEvent) -> Option<Box<dyn State>> { None }
 }
 
 fn read_options() -> Result<Options, Box<dyn std::error::Error>> {

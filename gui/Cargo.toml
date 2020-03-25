@@ -16,8 +16,10 @@ arrayvec = "0.4.11"
 rand = "0.7.3"
 gilrs = { version = "0.7.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
-winit = { version = "*", features = ["serde"] }
+winit = { version = "0.19", features = ["serde"] }
 serde_yaml = "0.8.11"
+bincode = "1.2"
+libflate = "0.1"
 
 [build-dependencies]
 build-utils = { git = "https://github.com/MinusKelvin/game-util-rs" }

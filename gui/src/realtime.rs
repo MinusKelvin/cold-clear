@@ -7,6 +7,7 @@ use gilrs::Gamepad;
 use crate::res::Resources;
 use crate::battle_ui::BattleUi;
 use crate::input::InputSource;
+use crate::replay::InfoReplay;
 
 type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
 
@@ -68,6 +69,19 @@ impl crate::State for RealtimeGame {
     ) -> Option<Box<dyn crate::State>> {
         let do_update = match self.state {
             State::GameOver(0) => {
+                let mut encoder = libflate::deflate::Encoder::new(
+                    std::fs::File::create("replay.dat"
+                ).unwrap());
+                bincode::serialize_into(
+                    &mut encoder,
+                    &InfoReplay {
+                        replay: self.battle.replay.clone(),
+                        p1_info_updates: self.p1_info_updates.clone(),
+                        p2_info_updates: self.p2_info_updates.clone()
+                    }
+                ).unwrap();
+                encoder.finish().unwrap();
+
                 self.battle = Battle::new(
                     self.p1_config, self.p2_config,
                     thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
@@ -156,9 +170,5 @@ impl crate::State for RealtimeGame {
 
     fn render(&mut self, res: &mut Resources) {
         self.ui.draw(res);
-    }
-
-    fn event(&mut self, event: WindowEvent) -> Option<Box<dyn crate::State>> {
-        None
     }
 }
