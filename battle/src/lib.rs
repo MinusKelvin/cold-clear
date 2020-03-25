@@ -17,7 +17,6 @@ pub struct GameConfig {
     pub auto_repeat_rate: u32,
     pub soft_drop_speed: u32,
     pub lock_delay: u32,
-    pub margin_time: Option<u32>,
     /// Measured in 1/100 of a tick
     pub gravity: i32,
 
@@ -37,7 +36,6 @@ impl Default for GameConfig {
             auto_repeat_rate: 2,
             soft_drop_speed: 2,
             lock_delay: 30,
-            margin_time: None,
             gravity: 4500,
             next_queue_size: 5,
             max_garbage_add: 10,
@@ -56,7 +54,6 @@ impl GameConfig {
             auto_repeat_rate: 0,
             soft_drop_speed: 0,
             lock_delay: 30,
-            margin_time: None,
             gravity: 4500,
             next_queue_size: 5,
             max_garbage_add: 20,

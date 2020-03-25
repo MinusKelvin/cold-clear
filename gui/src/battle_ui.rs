@@ -7,7 +7,6 @@ pub struct BattleUi {
     player_1_graphics: PlayerDrawState,
     player_2_graphics: PlayerDrawState,
     time: u32,
-    multiplier: f32,
     move_sound_play: u32
 }
 
@@ -17,7 +16,6 @@ impl BattleUi {
             player_1_graphics: PlayerDrawState::new(battle.player_1.board.next_queue(), p1_name),
             player_2_graphics: PlayerDrawState::new(battle.player_2.board.next_queue(), p2_name),
             time: 0,
-            multiplier: 1.0,
             move_sound_play: 0
         }
     }
@@ -52,7 +50,6 @@ impl BattleUi {
         self.player_1_graphics.update(update.player_1, p1_info_update, update.time);
         self.player_2_graphics.update(update.player_2, p2_info_update, update.time);
         self.time = update.time;
-        self.multiplier = update.attack_multiplier;
     }
 
     pub fn draw(&self, res: &mut Resources) {

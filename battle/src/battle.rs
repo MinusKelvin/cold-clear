@@ -12,8 +12,6 @@ pub struct Battle {
     p2_rng: Pcg64Mcg,
     garbage_rng: Pcg64Mcg,
     pub time: u32,
-    multiplier: f32,
-    margin_time: Option<u32>,
     pub replay: Replay
 }
 
@@ -38,18 +36,11 @@ impl Battle {
             player_1, player_2,
             p1_rng, p2_rng, garbage_rng,
             time: 0,
-            margin_time: p1_config.margin_time,
-            multiplier: 1.0,
         }
     }
 
     pub fn update(&mut self, p1: Controller, p2: Controller) -> BattleUpdate {
         self.time += 1;
-        if let Some(margin_time) = self.margin_time {
-            if self.time >= margin_time && (self.time - margin_time) % 1800 == 0 {
-                self.multiplier += 0.5;
-            }
-        }
 
         self.replay.updates.push_back((p1, p2));
 
@@ -58,12 +49,12 @@ impl Battle {
 
         for event in &p1_events {
             if let &Event::GarbageSent(amt) = event {
-                self.player_2.garbage_queue += (amt as f32 * self.multiplier) as u32;
+                self.player_2.garbage_queue += amt;
             }
         }
         for event in &p2_events {
             if let &Event::GarbageSent(amt) = event {
-                self.player_1.garbage_queue += (amt as f32 * self.multiplier) as u32;
+                self.player_1.garbage_queue += amt;
             }
         }
 
@@ -76,8 +67,7 @@ impl Battle {
                 events: p2_events,
                 garbage_queue: self.player_2.garbage_queue
             },
-            time: self.time,
-            attack_multiplier: self.multiplier
+            time: self.time
         }
     }
 }
@@ -86,8 +76,7 @@ impl Battle {
 pub struct BattleUpdate {
     pub player_1: PlayerUpdate,
     pub player_2: PlayerUpdate,
-    pub time: u32,
-    pub attack_multiplier: f32
+    pub time: u32
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
