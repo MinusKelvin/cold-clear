@@ -193,7 +193,8 @@ impl<E: Evaluator> BotState<E> {
     /// 
     /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find 
     pub fn think(&mut self) -> Result<Thinker<E>, bool> {
-        if self.tree.nodes < self.options.max_nodes && !self.tree.is_dead() {
+        if (!self.min_thinking_reached() || self.tree.nodes < self.options.max_nodes)
+                && !self.tree.is_dead() {
             if let Some((node, board)) = self.tree.find_and_mark_leaf(
                 &mut self.forced_analysis_lines
             ) {
