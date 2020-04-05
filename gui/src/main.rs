@@ -230,8 +230,8 @@ impl Default for Options {
 struct PlayerConfig {
     controls: input::UserInput,
     game: GameConfig,
+    bot_config: BotConfig,
     is_bot: bool,
-    bot_config: BotConfig
 }
 
 impl PlayerConfig {
@@ -239,12 +239,17 @@ impl PlayerConfig {
         use cold_clear::evaluation::Evaluator;
         use crate::input::BotInput;
         if self.is_bot {
-            let name = format!("Cold Clear\n{}", self.bot_config.weights.name());
+            let mut name = format!("Cold Clear\n{}", self.bot_config.weights.name());
+            if self.bot_config.speed_limit != 0 {
+                name.push_str(
+                    &format!("\n{:.1}%", 100.0 / (self.bot_config.speed_limit + 1) as f32)
+                );
+            }
             (Box::new(BotInput::new(cold_clear::Interface::launch(
                 board,
                 self.bot_config.options,
                 self.bot_config.weights.clone()
-            ))), name)
+            ), self.bot_config.speed_limit)), name)
         } else {
             (Box::new(self.controls), "Human".to_owned())
         }
@@ -255,5 +260,6 @@ impl PlayerConfig {
 #[serde(default)]
 struct BotConfig {
     weights: cold_clear::evaluation::Standard,
-    options: cold_clear::Options
+    options: cold_clear::Options,
+    speed_limit: u32
 }

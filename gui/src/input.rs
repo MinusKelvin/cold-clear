@@ -15,15 +15,17 @@ pub trait InputSource {
 pub struct BotInput {
     interface: cold_clear::Interface,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
-    controller: Controller
+    controller: Controller,
+    speed_limit: u32
 }
 
 impl BotInput {
-    pub fn new(interface: cold_clear::Interface) -> Self {
+    pub fn new(interface: cold_clear::Interface, speed_limit: u32) -> Self {
         BotInput {
             interface,
             executing: None,
-            controller: Default::default()
+            controller: Default::default(),
+            speed_limit,
         }
     }
 }
@@ -64,7 +66,7 @@ impl InputSource for BotInput {
             info = Some(i);
             self.executing = Some((
                 mv.expected_location,
-                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
+                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), self.speed_limit)
             ));
         }
         info

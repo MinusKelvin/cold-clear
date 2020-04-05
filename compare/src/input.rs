@@ -62,7 +62,7 @@ impl<E: Evaluator> BotInput<E> {
                             info = Some(inf);
                             *exec = Some((
                                 mv.expected_location,
-                                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect())
+                                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), 0)
                             ));
                         });
                     }

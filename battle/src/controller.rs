@@ -4,14 +4,20 @@ use crate::Event;
 
 pub struct PieceMoveExecutor {
     needs_hold: bool,
-    executing: VecDeque<PieceMovement>
+    speed_limit: u32,
+    input_timer: u32,
+    executing: VecDeque<PieceMovement>,
+    controller: Controller
 }
 
 impl PieceMoveExecutor {
-    pub fn new(hold: bool, to_do: VecDeque<PieceMovement>) -> Self {
+    pub fn new(hold: bool, to_do: VecDeque<PieceMovement>, speed_limit: u32) -> Self {
         PieceMoveExecutor {
             needs_hold: hold,
-            executing: to_do
+            executing: to_do,
+            speed_limit,
+            input_timer: speed_limit,
+            controller: Default::default()
         }
     }
 
@@ -23,77 +29,85 @@ impl PieceMoveExecutor {
                 Event::PieceHeld(_) => {
                     self.needs_hold = false;
                 }
-                Event::PieceFalling(piece, _) => {
+                Event::PieceFalling(piece, _) => if self.input_timer == 0 ||
+                        self.controller.soft_drop {
                     if self.needs_hold {
-                        controller.hold ^= true;
+                        self.controller.hold ^= true;
                     } else {
-                        controller.hold = false;
-                        controller.hard_drop = false;
+                        self.controller.hold = false;
+                        self.controller.hard_drop = false;
                         match self.executing.front() {
                             None => {
-                                *controller = Default::default();
-                                controller.hard_drop = true;
+                                self.controller = Default::default();
+                                self.controller.hard_drop = true;
                             }
                             Some(PieceMovement::SonicDrop) => {
-                                controller.right = false;
-                                controller.rotate_left = false;
-                                controller.rotate_right = false;
-                                controller.left = false;
+                                self.controller.right = false;
+                                self.controller.rotate_left = false;
+                                self.controller.rotate_right = false;
+                                self.controller.left = false;
 
-                                controller.soft_drop = true;
+                                self.controller.soft_drop = true;
                                 if board.on_stack(piece) {
                                     self.executing.pop_front();
+                                    self.controller.soft_drop = false;
                                 }
                             }
                             Some(PieceMovement::Left) => {
-                                controller.right = false;
-                                controller.rotate_left = false;
-                                controller.rotate_right = false;
-                                controller.soft_drop = false;
+                                self.controller.right = false;
+                                self.controller.rotate_left = false;
+                                self.controller.rotate_right = false;
+                                self.controller.soft_drop = false;
                                 
-                                controller.left ^= true;
-                                if controller.left {
+                                self.controller.left ^= true;
+                                if self.controller.left {
                                     self.executing.pop_front();
                                 }
                             }
                             Some(PieceMovement::Right) => {
-                                controller.left = false;
-                                controller.rotate_left = false;
-                                controller.rotate_right = false;
-                                controller.soft_drop = false;
+                                self.controller.left = false;
+                                self.controller.rotate_left = false;
+                                self.controller.rotate_right = false;
+                                self.controller.soft_drop = false;
                                 
-                                controller.right ^= true;
-                                if controller.right {
+                                self.controller.right ^= true;
+                                if self.controller.right {
                                     self.executing.pop_front();
                                 }
                             }
                             Some(PieceMovement::Cw) => {
-                                controller.right = false;
-                                controller.rotate_left = false;
-                                controller.left = false;
-                                controller.soft_drop = false;
+                                self.controller.right = false;
+                                self.controller.rotate_left = false;
+                                self.controller.left = false;
+                                self.controller.soft_drop = false;
                                 
-                                controller.rotate_right ^= true;
-                                if controller.rotate_right {
+                                self.controller.rotate_right ^= true;
+                                if self.controller.rotate_right {
                                     self.executing.pop_front();
                                 }
                             }
                             Some(PieceMovement::Ccw) => {
-                                controller.left = false;
-                                controller.right = false;
-                                controller.rotate_right = false;
-                                controller.soft_drop = false;
+                                self.controller.left = false;
+                                self.controller.right = false;
+                                self.controller.rotate_right = false;
+                                self.controller.soft_drop = false;
                                 
-                                controller.rotate_left ^= true;
-                                if controller.rotate_left {
+                                self.controller.rotate_left ^= true;
+                                if self.controller.rotate_left {
                                     self.executing.pop_front();
                                 }
                             }
                         }
                     }
+                    self.input_timer = self.speed_limit;
+                    *controller = self.controller;
+                } else {
+                    self.input_timer -= 1;
+                    *controller = Default::default();
                 }
                 Event::PiecePlaced { piece, .. } => {
-                    controller.hard_drop = false;
+                    self.controller.hard_drop = false;
+                    *controller = Default::default();
                     return Some(*piece)
                 }
                 _ => {}
