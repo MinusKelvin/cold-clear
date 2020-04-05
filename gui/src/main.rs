@@ -226,6 +226,7 @@ impl Default for Options {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
 struct PlayerConfig {
     controls: input::UserInput,
     game: GameConfig,
@@ -251,6 +252,7 @@ impl PlayerConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
 struct BotConfig {
     weights: cold_clear::evaluation::Standard,
     options: cold_clear::Options
