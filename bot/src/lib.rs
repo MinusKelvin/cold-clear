@@ -430,9 +430,15 @@ fn run(
 
     let (result_send, result_recv) = channel();
     let mut tasks = 0;
+    let mut can_think = true;
 
     while !bot.is_dead() {
-        match recv.try_recv() {
+        let result = if can_think {
+            recv.try_recv()
+        } else {
+            recv.recv().map_err(|_| TryRecvError::Disconnected)
+        };
+        match result {
             Err(TryRecvError::Disconnected) => break,
             Err(TryRecvError::Empty) => {}
             Ok(BotMsg::NewPiece(piece)) => bot.add_next_piece(piece),
@@ -448,12 +454,16 @@ fn run(
         }
 
         if tasks < 2*options.threads {
-            if let Ok(thinker) = bot.think() {
-                let result_send = result_send.clone();
-                pool.spawn_fifo(move || {
-                    result_send.send(thinker.think()).ok();
-                });
-                tasks += 1;
+            match bot.think() {
+                Ok(thinker) => {
+                    let result_send = result_send.clone();
+                    pool.spawn_fifo(move || {
+                        result_send.send(thinker.think()).ok();
+                    });
+                    tasks += 1;
+                    can_think = true;
+                }
+                Err(could_think) => can_think = could_think || tasks != 0
             }
         }
 
