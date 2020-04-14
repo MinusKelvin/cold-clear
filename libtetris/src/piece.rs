@@ -32,6 +32,7 @@ impl FallingPiece {
         }
     }
 
+    #[inline]
     pub fn cells(&self) -> [(i32, i32, EnumSet<Direction>); 4] {
         let mut cells = self.kind.cells();
         for (dx, dy, _) in cells.iter_mut() {
@@ -233,205 +234,76 @@ impl PieceState {
 
     /// Returns the cells this piece and orientation occupy relative to rotation point 1, as well
     /// as the connection directions, in no particular order.
+    #[inline]
     pub fn cells(&self) -> [(i32, i32, EnumSet<Direction>); 4] {
-        use Piece::*;
-        use RotationState::*;
         use Direction::*;
-        
-        const CELLS: [[(i32, i32, EnumSet<Direction>); 4]; 28] = [
-            [
-                (-1, 0, enum_set!(Right)),
-                (0, 0, enum_set!(Left | Right)),
-                (1, 0, enum_set!(Left | Right)),
-                (2, 0, enum_set!(Left))
-            ],
-            [
-                (1, -2, enum_set!(Up)),
-                (1, -1, enum_set!(Up | Down)),
-                (1, 0, enum_set!(Up | Down)),
-                (1, 1, enum_set!(Down))
-            ],
-            [
-                (-1, -1, enum_set!(Right)),
-                (0, -1, enum_set!(Left | Right)),
-                (1, -1, enum_set!(Left | Right)),
-                (2, -1, enum_set!(Left))
-            ],
-            [
-                (0, -2, enum_set!(Up)),
-                (0, -1, enum_set!(Up | Down)),
-                (0, 0, enum_set!(Up | Down)),
-                (0, 1, enum_set!(Down))
-            ],
-            
-            [
-                (0, 0, enum_set!(Up | Right)),
-                (0, 1, enum_set!(Down | Right)),
-                (1, 0, enum_set!(Up | Left)),
-                (1, 1, enum_set!(Down | Left))
-            ],
-            [
-                (0, 0, enum_set!(Up | Right)),
-                (0, 1, enum_set!(Down | Right)),
-                (1, 0, enum_set!(Up | Left)),
-                (1, 1, enum_set!(Down | Left))
-            ],
-            [
-                (0, 0, enum_set!(Up | Right)),
-                (0, 1, enum_set!(Down | Right)),
-                (1, 0, enum_set!(Up | Left)),
-                (1, 1, enum_set!(Down | Left))
-            ],
-            [
-                (0, 0, enum_set!(Up | Right)),
-                (0, 1, enum_set!(Down | Right)),
-                (1, 0, enum_set!(Up | Left)),
-                (1, 1, enum_set!(Down | Left))
-            ],
 
-            [
+        let mut cells = match self.0 {
+            Piece::I => [
                 (-1, 0, enum_set!(Right)),
-                (0, 0, enum_set!(Left | Right | Up)),
-                (1, 0, enum_set!(Left)),
-                (0, 1, enum_set!(Down))
+                ( 0, 0, enum_set!(Left | Right)),
+                ( 1, 0, enum_set!(Left | Right)),
+                ( 2, 0, enum_set!(Left)),
             ],
-            [
-                (0, 1, enum_set!(Down)),
-                (0, 0, enum_set!(Up | Down | Right)),
-                (0, -1, enum_set!(Up)),
-                (1, 0, enum_set!(Left))
-            ],
-            [
-                (1, 0, enum_set!(Left)),
-                (0, 0, enum_set!(Left | Right | Down)),
-                (-1, 0, enum_set!(Right)),
-                (0, -1, enum_set!(Up))
-            ],
-            [
-                (0, -1, enum_set!(Up)),
-                (0, 0, enum_set!(Left | Up | Down)),
-                (0, 1, enum_set!(Down)),
-                (-1, 0, enum_set!(Right))
-            ],
-
-            [
-                (-1, 0, enum_set!(Right)),
-                (0, 0, enum_set!(Left | Right)),
+            Piece::O => [
+                (0, 0, enum_set!(Right | Up)),
                 (1, 0, enum_set!(Left | Up)),
-                (1, 1, enum_set!(Down))
+                (0, 1, enum_set!(Right | Down)),
+                (1, 1, enum_set!(Left | Down)),
             ],
-            [
-                (0, 1, enum_set!(Down)),
-                (0, 0, enum_set!(Up | Down)),
-                (0, -1, enum_set!(Up | Right)),
-                (1, -1, enum_set!(Left))
+            Piece::L => [
+                (-1, 0, enum_set!(Right)),
+                ( 0, 0, enum_set!(Left | Right)),
+                ( 1, 0, enum_set!(Left | Up)),
+                ( 1, 1, enum_set!(Down))
             ],
-            [
-                (1, 0, enum_set!(Left)),
-                (0, 0, enum_set!(Left | Right)),
-                (-1, 0, enum_set!(Right | Down)),
-                (-1, -1, enum_set!(Up))
-            ],
-            [
-                (0, -1, enum_set!(Up)),
-                (0, 0, enum_set!(Up | Down)),
-                (0, 1, enum_set!(Down | Left)),
-                (-1, 1, enum_set!(Right))
-            ],
-
-            [
+            Piece::J => [
                 (-1, 0, enum_set!(Right | Up)),
-                (0, 0, enum_set!(Left | Right)),
-                (1, 0, enum_set!(Left)),
+                ( 0, 0, enum_set!(Left | Right)),
+                ( 1, 0, enum_set!(Left)),
                 (-1, 1, enum_set!(Down))
             ],
-            [
-                (0, 1, enum_set!(Down | Right)),
-                (0, 0, enum_set!(Up | Down)),
-                (0, -1, enum_set!(Up)),
-                (1, 1, enum_set!(Left))
-            ],
-            [
-                (1, 0, enum_set!(Down | Left)),
-                (0, 0, enum_set!(Left | Right)),
+            Piece::T => [
                 (-1, 0, enum_set!(Right)),
-                (1, -1, enum_set!(Up))
+                (0,  0, enum_set!(Left | Right | Up)),
+                (1,  0, enum_set!(Left)),
+                (0,  1, enum_set!(Down))
             ],
-            [
-                (0, -1, enum_set!(Left | Up)),
-                (0, 0, enum_set!(Up | Down)),
-                (0, 1, enum_set!(Down)),
-                (-1, -1, enum_set!(Right))
-            ],
-
-            [
-                (0, 0, enum_set!(Left | Up)),
-                (0, 1, enum_set!(Down | Right)),
+            Piece::S => [
                 (-1, 0, enum_set!(Right)),
-                (1, 1, enum_set!(Left))
+                ( 0, 0, enum_set!(Left | Up)),
+                ( 0, 1, enum_set!(Down | Right)),
+                ( 1, 1, enum_set!(Left))
             ],
-            [
-                (0, 0, enum_set!(Right | Up)),
-                (1, 0, enum_set!(Down | Left)),
-                (0, 1, enum_set!(Down)),
-                (1, -1, enum_set!(Up))
-            ],
-            [
-                (0, -1, enum_set!(Left | Up)),
-                (0, 0, enum_set!(Down | Right)),
-                (-1, -1, enum_set!(Right)),
-                (1, 0, enum_set!(Left))
-            ],
-            [
-                (-1, 0, enum_set!(Right | Up)),
-                (0, 0, enum_set!(Down | Left)),
-                (-1, 1, enum_set!(Down)),
-                (0, -1, enum_set!(Up))
-            ],
-
-            [
-                (0, 0, enum_set!(Up | Right)),
-                (0, 1, enum_set!(Down | Left)),
+            Piece::Z => [
                 (-1, 1, enum_set!(Right)),
-                (1, 0, enum_set!(Left))
+                ( 0, 1, enum_set!(Left | Down)),
+                ( 0, 0, enum_set!(Up | Right)),
+                ( 1, 0, enum_set!(Left))
             ],
-            [
-                (0, 0, enum_set!(Right | Down)),
-                (1, 0, enum_set!(Left | Up)),
-                (1, 1, enum_set!(Down)),
-                (0, -1, enum_set!(Up))
-            ],
-            [
-                (0, -1, enum_set!(Up | Right)),
-                (0, 0, enum_set!(Down | Left)),
-                (-1, 0, enum_set!(Right)),
-                (1, -1, enum_set!(Left))
-            ],
-            [
-                (-1, 0, enum_set!(Right | Down)),
-                (0, 0, enum_set!(Left | Up)),
-                (0, 1, enum_set!(Down)),
-                (-1, -1, enum_set!(Up))
-            ],
-        ];
+        };
 
-        let piece_index = match self.0 {
-            I => 0,
-            O => 1,
-            T => 2,
-            L => 3,
-            J => 4,
-            S => 5,
-            Z => 6
-        };
-        let rotation_index = match self.1 {
-            North => 0,
-            East => 1,
-            South => 2,
-            West => 3
-        };
-        let index = piece_index * 4 + rotation_index;
-        CELLS[index]
+        for (x, y, d) in &mut cells {
+            match self.1 {
+                RotationState::North => {},
+                RotationState::East => {
+                    *x = -*x;
+                    std::mem::swap(x, y);
+                    *d = d.iter().map(Direction::cw).collect();
+                }
+                RotationState::South => {
+                    *x = -*x;
+                    *y = -*y;
+                    *d = d.iter().map(Direction::flip).collect();
+                }
+                RotationState::West => {
+                    *y = -*y;
+                    std::mem::swap(x, y);
+                    *d = d.iter().map(Direction::ccw).collect();
+                }
+            }
+        }
+        cells
     }
 
     /// Returns the five rotation points associated with this piece and orientation.
@@ -442,16 +314,19 @@ impl PieceState {
         use Piece::*;
         use RotationState::*;
         match (self.0, self.1) {
-            (O, _) => [(0, 0); 5],
+            (O, North) => [( 0,  0); 5],
+            (O, East)  => [( 0, -1); 5],
+            (O, South) => [(-1, -1); 5],
+            (O, West)  => [(-1,  0); 5],
 
-            (I, North) => [(0, 0), (-1, 0), (2, 0), (-1, 0), (2, 0)],
-            (I, East)  => [(0, 0), (1, 0), (1, 0), (1, 1), (1, -2)],
-            (I, South) => [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, -1)],
-            (I, West)  => [(0, 0), (0, 0), (0, 0), (0, -2), (0, 1)],
+            (I, North) => [( 0, 0), (-1, 0), ( 2, 0), (-1,  0), ( 2,  0)],
+            (I, East)  => [(-1, 0), ( 0, 0), ( 0, 0), ( 0,  1), ( 0, -2)],
+            (I, South) => [(-1, 1), ( 1, 1), (-2, 1), ( 1,  0), (-2,  0)],
+            (I, West)  => [( 0, 1), ( 0, 1), ( 0, 1), ( 0, -1), ( 0,  2)],
 
             // The rotation points for T, L, J, S, Z are all the same.
             (_, North) => [(0, 0); 5],
-            (_, East)  => [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
+            (_, East)  => [(0, 0), ( 1, 0), ( 1, -1), (0, 2), ( 1, 2)],
             (_, South) => [(0, 0); 5],
             (_, West)  => [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]
         }
@@ -523,4 +398,33 @@ impl PieceMovement {
 #[derive(EnumSetType, Debug)]
 pub enum Direction {
     Up, Down, Left, Right
+}
+
+impl Direction {
+    fn cw(self) -> Direction {
+        match self {
+            Direction::Up => Direction::Right,
+            Direction::Right => Direction::Down,
+            Direction::Down => Direction::Left,
+            Direction::Left => Direction::Up,
+        }
+    }
+
+    fn ccw(self) -> Direction {
+        match self {
+            Direction::Up => Direction::Left,
+            Direction::Right => Direction::Up,
+            Direction::Down => Direction::Right,
+            Direction::Left => Direction::Down,
+        }
+    }
+
+    fn flip(self) -> Direction {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Right => Direction::Left,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right,
+        }
+    }
 }

@@ -293,6 +293,7 @@ impl Row for u16 {
         }
     }
 
+    #[inline]
     fn get(&self, x: usize) -> bool {
         *self & (1 << x) != 0
     }
