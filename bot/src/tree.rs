@@ -107,7 +107,9 @@ impl<E: Evaluation<R>, R: Clone> TreeState<E, R> {
             generation: 0,
             nodes: 0
         };
-        let sb = this.to_simplified_board(&b, if use_hold { 1 } else { 0 });
+        let sb = this.to_simplified_board(
+            &b, if use_hold && b.hold_piece.is_none() { 1 } else { 0 }
+        );
         this.root = this.create_tree(Tree {
             board: sb,
             parents: SmallVec::new(),
