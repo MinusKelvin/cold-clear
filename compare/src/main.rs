@@ -61,7 +61,7 @@ fn main() {
     println!("p = {:.4}", p);
 }
 
-fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> (InfoReplay, bool) {
+fn do_battle(p1: impl Evaluator + Clone, p2: impl Evaluator + Clone) -> (InfoReplay, bool) {
     let mut battle = Battle::new(
         GameConfig::fast_config(), GameConfig::fast_config(),
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()

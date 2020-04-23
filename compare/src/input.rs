@@ -3,7 +3,7 @@ use battle::{ Event, PieceMoveExecutor };
 use std::time::{ Instant, Duration };
 use cold_clear::evaluation::Evaluator;
 
-pub struct BotInput<E: Evaluator> {
+pub struct BotInput<E: Evaluator + Clone> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     time_budget: Duration,
@@ -12,7 +12,7 @@ pub struct BotInput<E: Evaluator> {
 
 const THINK_AMOUNT: Duration = Duration::from_millis(4);
 
-impl<E: Evaluator> BotInput<E> {
+impl<E: Evaluator + Clone> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {
         let mut this = BotInput {
             controller: Controller::default(),

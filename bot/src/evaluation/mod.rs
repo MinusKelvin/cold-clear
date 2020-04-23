@@ -35,3 +35,24 @@ pub trait Evaluation<R> : Eq + Ord + Default + Clone
 
     fn improve(&mut self, other: Self);
 }
+
+impl<T: Evaluator> Evaluator for std::sync::Arc<T> {
+    type Value = T::Value;
+    type Reward = T::Reward;
+
+    fn name(&self) -> String {
+        (**self).name()
+    }
+
+    fn evaluate(
+        &self, lock: &LockResult, board: &Board, move_time: u32, placed: Piece
+    ) -> (T::Value, T::Reward) {
+        (**self).evaluate(lock, board, move_time, placed)
+    }
+
+    fn pick_move(
+        &self, candidates: Vec<MoveCandidate<Self::Value>>, incoming: u32
+    ) -> MoveCandidate<Self::Value> {
+        (**self).pick_move(candidates, incoming)
+    }
+}

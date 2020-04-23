@@ -5,7 +5,7 @@ use rand::prelude::*;
 use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
 
-pub struct BotInput<E: Evaluator> {
+pub struct BotInput<E: Evaluator + Clone> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     bot: cold_clear::BotState<E>
@@ -13,7 +13,7 @@ pub struct BotInput<E: Evaluator> {
 
 const THINK_AMOUNT: usize = 10;
 
-impl<E: Evaluator> BotInput<E> {
+impl<E: Evaluator + Clone> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {
         let mut this = BotInput {
             controller: Controller::default(),
@@ -81,7 +81,9 @@ impl<E: Evaluator> BotInput<E> {
     }
 }
 
-pub fn do_battle(p1: impl Evaluator, p2: impl Evaluator) -> Option<(InfoReplay, bool)> {
+pub fn do_battle(
+    p1: impl Evaluator + Clone, p2: impl Evaluator + Clone
+) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
         GameConfig::fast_config(), GameConfig::fast_config(),
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()

@@ -5,6 +5,7 @@ use smallvec::SmallVec;
 use enumset::EnumSet;
 use enum_map::EnumMap;
 use rand::prelude::*;
+use serde::{ Serialize, Deserialize };
 use crate::evaluation::Evaluation;
 
 pub struct TreeState<E, R> {
@@ -29,7 +30,7 @@ struct Pieces {
     pieces_used: u32
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NodeId(u32, u32);
 
 #[derive(Clone)]

@@ -2,10 +2,11 @@ use arrayvec::ArrayVec;
 use enumset::EnumSet;
 use std::collections::VecDeque;
 use std::iter::DoubleEndedIterator;
+use serde::{ Serialize, Deserialize };
 
 use crate::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Board<R=u16> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
