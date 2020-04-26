@@ -322,22 +322,20 @@ impl<E: Evaluator + Clone> AsyncBotState<E> {
         }
 
         let mut thinks = vec![];
-        let mut can_think = false;
         for _ in 0..10 {
             if self.tasks >= 2*self.options.threads {
-                can_think = true;
-                break
+                return (thinks, true)
             }
             match self.bot.think() {
                 Ok(thinker) => {
                     thinks.push(thinker);
                     self.tasks += 1;
                 }
-                Err(false) => break,
-                Err(true) => can_think = true
+                Err(false) => return (thinks, false),
+                Err(true) => {}
             }
         }
-        (thinks, can_think)
+        (thinks, true)
     }
 
     pub fn is_dead(&self) -> bool {
