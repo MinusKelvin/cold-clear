@@ -3,13 +3,11 @@ use std::sync::Arc;
 use libtetris::*;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
-use crate::{ Options, Info, AsyncBotState, BotMsg };
+use crate::{ Options, Info, AsyncBotState, BotMsg, BotPollState };
 
 pub struct Interface {
     send: Sender<BotMsg>,
     recv: Receiver<(Move, Info)>,
-    dead: bool,
-    mv: Option<(Move, Info)>
 }
 
 impl Interface {
@@ -22,26 +20,7 @@ impl Interface {
         std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
 
         Interface {
-            send, recv, dead: false, mv: None
-        }
-    }
-
-    /// Returns true if all possible piece placement sequences result in death, or the bot thread
-    /// crashed.
-    pub fn is_dead(&self) -> bool {
-        self.dead
-    }
-
-    fn poll_bot(&mut self) {
-        loop {
-            match self.recv.try_recv() {
-                Ok(mv) => self.mv = Some(mv),
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    self.dead = true;
-                    break
-                }
-            }
+            send, recv
         }
     }
 
@@ -62,10 +41,8 @@ impl Interface {
     /// 
     /// Once a move is chosen, the bot will update its internal state to the result of the piece
     /// being placed correctly and the move will become available by calling `poll_next_move`.
-    pub fn request_next_move(&mut self, incoming: u32) {
-        if self.send.send(BotMsg::NextMove(incoming)).is_err() {
-            self.dead = true;
-        }
+    pub fn request_next_move(&self, incoming: u32) {
+        self.send.send(BotMsg::NextMove(incoming)).ok();
     }
 
     /// Checks to see if the bot has provided the previously requested move yet.
@@ -76,9 +53,18 @@ impl Interface {
     /// 
     /// If the piece couldn't be placed in the expected location, you must call `reset` to reset the
     /// game field, back-to-back status, and combo values.
-    pub fn poll_next_move(&mut self) -> Option<(Move, Info)> {
-        self.poll_bot();
-        self.mv.take()
+    pub fn poll_next_move(&self) -> Result<(Move, Info), BotPollState> {
+        self.recv.try_recv().map_err(|e| match e {
+            TryRecvError::Empty => BotPollState::Waiting,
+            TryRecvError::Disconnected => BotPollState::Dead
+        })
+    }
+
+    /// Waits until the bot provides the previously requested move.
+    /// 
+    /// `None` is returned if the bot is dead.
+    pub fn block_next_move(&self) -> Option<(Move, Info)> {
+        self.recv.recv().ok()
     }
 
     /// Adds a new piece to the end of the queue.
@@ -86,10 +72,8 @@ impl Interface {
     /// If speculation is enabled, the piece *must* be in the bag. For example, if in the current
     /// bag you've provided the sequence IJOZT, then the next time you call this function you can
     /// only provide either an L or an S piece.
-    pub fn add_next_piece(&mut self, piece: Piece) {
-        if self.send.send(BotMsg::NewPiece(piece)).is_err() {
-            self.dead = true;
-        }
+    pub fn add_next_piece(&self, piece: Piece) {
+        self.send.send(BotMsg::NewPiece(piece)).ok();
     }
 
     /// Resets the playfield, back-to-back status, and combo count.
@@ -101,19 +85,15 @@ impl Interface {
     /// Note: combo is not the same as the displayed combo in guideline games. Here, it is the
     /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
     /// on the screen, you need to use x+1 here.
-    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
-        if self.send.send(BotMsg::Reset {
+    pub fn reset(&self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
+        self.send.send(BotMsg::Reset {
             field, b2b: b2b_active, combo
-        }).is_err() {
-            self.dead = true;
-        }
+        }).ok();
     }
 
     /// Specifies a line that Cold Clear should analyze before making any moves.
-    pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {
-        if self.send.send(BotMsg::ForceAnalysisLine(path)).is_err() {
-            self.dead = true;
-        }
+    pub fn force_analysis_line(&self, path: Vec<FallingPiece>) {
+        self.send.send(BotMsg::ForceAnalysisLine(path)).ok();
     }
 }
 

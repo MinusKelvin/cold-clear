@@ -5,7 +5,7 @@ use serde::{ Serialize, de::DeserializeOwned };
 use libtetris::*;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
-use crate::{ Options, Info, AsyncBotState, BotMsg, Thinker, ThinkResult };
+use crate::{ Options, Info, AsyncBotState, BotMsg, Thinker, ThinkResult, BotPollState };
 use futures_util::{ select, pin_mut };
 use futures_util::FutureExt;
 
@@ -15,10 +15,7 @@ use futures_util::FutureExt;
 //     <Self as Evaluator>::Reward: Serialize + DeserializeOwned,
 //     <Self as Evaluator>::Value: Serialize + DeserializeOwned;
 
-pub struct Interface {
-    dead: bool,
-    worker: Worker<BotMsg, (Move, Info)>
-}
+pub struct Interface(Option<Worker<BotMsg, Option<(Move, Info)>>>);
 
 impl Interface {
     /// Launches a bot worker with the specified starting board and options.
@@ -38,15 +35,7 @@ impl Interface {
 
         let worker = Worker::new(bot_thread, &(board, options, evaluator)).await.unwrap();
 
-        Interface {
-            dead: false,
-            worker
-        }
-    }
-
-    /// Returns true if all possible piece placement sequences result in death.
-    pub fn is_dead(&self) -> bool {
-        self.dead
+        Interface(Some(worker))
     }
 
     /// Request the bot to provide a move as soon as possible.
@@ -66,9 +55,9 @@ impl Interface {
     /// 
     /// Once a move is chosen, the bot will update its internal state to the result of the piece
     /// being placed correctly and the move will become available by calling `poll_next_move`.
-    pub fn request_next_move(&mut self, incoming: u32) {
-        if self.worker.send(&BotMsg::NextMove(incoming)).is_err() {
-            self.dead = true;
+    pub fn request_next_move(&self, incoming: u32) {
+        if let Some(worker) = &self.0 {
+            worker.send(&BotMsg::NextMove(incoming)).ok().unwrap();
         }
     }
 
@@ -80,8 +69,31 @@ impl Interface {
     /// 
     /// If the piece couldn't be placed in the expected location, you must call `reset` to reset the
     /// game field, back-to-back status, and combo values.
-    pub fn poll_next_move(&mut self) -> Option<(Move, Info)> {
-        self.worker.try_recv()
+    pub fn poll_next_move(&mut self) -> Result<(Move, Info), BotPollState> {
+        match &self.0 {
+            Some(worker) => match worker.try_recv() {
+                Some(Some(mv)) => Ok(mv),
+                Some(None) => {
+                    self.0 = None;
+                    Err(BotPollState::Dead)
+                }
+                None => Err(BotPollState::Waiting)
+            }
+            None => Err(BotPollState::Dead)
+        }
+    }
+
+    /// Waits for the bot to provide the previously requested move.
+    /// 
+    /// `None` is returned if the bot is dead.
+    pub async fn next_move(&mut self) -> Option<(Move, Info)> {
+        match self.0.as_ref()?.recv().await {
+            Some(v) => Some(v),
+            None => {
+                self.0 = None;
+                None
+            }
+        }
     }
 
     /// Adds a new piece to the end of the queue.
@@ -89,9 +101,9 @@ impl Interface {
     /// If speculation is enabled, the piece *must* be in the bag. For example, if in the current
     /// bag you've provided the sequence IJOZT, then the next time you call this function you can
     /// only provide either an L or an S piece.
-    pub fn add_next_piece(&mut self, piece: Piece) {
-        if self.worker.send(&BotMsg::NewPiece(piece)).is_err() {
-            self.dead = true;
+    pub fn add_next_piece(&self, piece: Piece) {
+        if let Some(worker) = &self.0 {
+            worker.send(&BotMsg::NewPiece(piece)).unwrap();
         }
     }
 
@@ -104,18 +116,18 @@ impl Interface {
     /// Note: combo is not the same as the displayed combo in guideline games. Here, it is the
     /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
     /// on the screen, you need to use x+1 here.
-    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
-        if self.worker.send(&BotMsg::Reset {
-            field, b2b: b2b_active, combo
-        }).is_err() {
-            self.dead = true;
+    pub fn reset(&self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
+        if let Some(worker) = &self.0 {
+            worker.send(&BotMsg::Reset {
+                field, b2b: b2b_active, combo
+            }).unwrap();
         }
     }
 
     /// Specifies a line that Cold Clear should analyze before making any moves.
-    pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {
-        if self.worker.send(&BotMsg::ForceAnalysisLine(path)).is_err() {
-            self.dead = true;
+    pub fn force_analysis_line(&self, path: Vec<FallingPiece>) {
+        if let Some(worker) = &self.0 {
+            worker.send(&BotMsg::ForceAnalysisLine(path)).unwrap();
         }
     }
 }
@@ -123,7 +135,7 @@ impl Interface {
 fn bot_thread<E>(
     (board, options, eval): (Board, Options, E),
     recv: Receiver<BotMsg>,
-    send: WorkerSender<(Move, Info)>
+    send: WorkerSender<Option<(Move, Info)>>
 ) where
     E: Evaluator + Clone + Serialize + DeserializeOwned + 'static,
     E::Value: Serialize + DeserializeOwned,
@@ -148,7 +160,7 @@ fn bot_thread<E>(
         let mut state = AsyncBotState::new(board, options, eval);
 
         while !state.is_dead() {
-            let (new_thinks, _) = state.think(|mv, info| send.send(&(mv, info)));
+            let (new_thinks, _) = state.think(|mv, info| send.send(&Some((mv, info))));
             for thinker in new_thinks {
                 think_send.send(thinker).ok().unwrap();
             }
@@ -164,6 +176,8 @@ fn bot_thread<E>(
                 think = think => state.think_done(think.unwrap())
             }
         }
+
+        send.send(&None);
     });
 }
 

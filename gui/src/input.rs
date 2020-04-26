@@ -62,7 +62,7 @@ impl InputSource for BotInput {
                 }
                 self.executing = None;
             }
-        } else if let Some((mv, i)) = self.interface.poll_next_move() {
+        } else if let Ok((mv, i)) = self.interface.poll_next_move() {
             info = Some(i);
             self.executing = Some((
                 mv.expected_location,

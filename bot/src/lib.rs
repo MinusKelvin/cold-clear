@@ -17,7 +17,7 @@ pub use web::Interface;
 
 use libtetris::*;
 use crate::tree::{ ChildData, TreeState, NodeId };
-use crate::moves::Move;
+pub use crate::moves::Move;
 use crate::evaluation::Evaluator;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -371,4 +371,9 @@ pub struct Info {
     pub depth: u32,
     pub original_rank: u32,
     pub plan: Vec<(FallingPiece, LockResult)>
+}
+
+pub enum BotPollState {
+    Waiting,
+    Dead
 }
