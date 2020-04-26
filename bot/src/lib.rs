@@ -44,19 +44,17 @@ impl Default for Options {
     }
 }
 
-pub struct BotState<E: Evaluator + Clone> {
+pub struct BotState<E: Evaluator> {
     tree: TreeState<E::Value, E::Reward>,
     options: Options,
-    eval: E,
     forced_analysis_lines: Vec<Vec<FallingPiece>>
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Thinker<E: Evaluator> {
+pub struct Thinker {
     node: NodeId,
     board: Board,
     options: Options,
-    eval: E
 }
 
 #[derive(Serialize, Deserialize)]
@@ -68,11 +66,11 @@ pub enum ThinkResult<E: Evaluator> {
     Unmark(NodeId)
 }
 
-impl<E: Evaluator + Clone> BotState<E> {
-    pub fn new(board: Board, options: Options, eval: E) -> Self {
+impl<E: Evaluator> BotState<E> {
+    pub fn new(board: Board, options: Options) -> Self {
         BotState {
             tree: TreeState::create(board, options.use_hold),
-            options, eval,
+            options,
             forced_analysis_lines: vec![],
         }
     }
@@ -80,7 +78,7 @@ impl<E: Evaluator + Clone> BotState<E> {
     /// Prepare a thinking cycle.
     /// 
     /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find 
-    pub fn think(&mut self) -> Result<Thinker<E>, bool> {
+    pub fn think(&mut self) -> Result<Thinker, bool> {
         if (!self.min_thinking_reached() || self.tree.nodes < self.options.max_nodes)
                 && !self.tree.is_dead() {
             if let Some((node, board)) = self.tree.find_and_mark_leaf(
@@ -89,7 +87,6 @@ impl<E: Evaluator + Clone> BotState<E> {
                 return Ok(Thinker {
                     node, board,
                     options: self.options,
-                    eval: self.eval.clone()
                 });
             } else {
                 return Err(true)
@@ -140,7 +137,7 @@ impl<E: Evaluator + Clone> BotState<E> {
         self.tree.nodes > self.options.min_nodes && self.forced_analysis_lines.is_empty()
     }
 
-    pub fn next_move(&mut self, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
+    pub fn next_move(&mut self, eval: &E, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
         if !self.min_thinking_reached() {
             return false
         }
@@ -149,7 +146,7 @@ impl<E: Evaluator + Clone> BotState<E> {
         if candidates.is_empty() {
             return false
         }
-        let child = self.eval.pick_move(candidates, incoming);
+        let child = eval.pick_move(candidates, incoming);
 
         let plan = self.tree.get_plan();
 
@@ -183,8 +180,8 @@ impl<E: Evaluator + Clone> BotState<E> {
     }
 }
 
-impl<E: Evaluator> Thinker<E> {
-    pub fn think(self) -> ThinkResult<E> {
+impl Thinker {
+    pub fn think<E: Evaluator>(self, eval: &E) -> ThinkResult<E> {
         if let Err(possibilities) = self.board.get_next_piece() {
             // Next unknown (implies hold is known) => Speculate
             if self.options.speculate {
@@ -192,7 +189,7 @@ impl<E: Evaluator> Thinker<E> {
                 for p in possibilities {
                     let mut b = self.board.clone();
                     b.add_next_piece(p);
-                    children[p] = Some(self.make_children(b));
+                    children[p] = Some(self.make_children(b, eval));
                 }
                 ThinkResult::Speculated(self.node, children)
             } else {
@@ -212,7 +209,7 @@ impl<E: Evaluator> Thinker<E> {
                     for p in possibilities {
                         let mut b = self.board.clone();
                         b.add_next_piece(p);
-                        children[p] = Some(self.make_children(b));
+                        children[p] = Some(self.make_children(b, eval));
                     }
                     ThinkResult::Speculated(self.node, children)
                 } else {
@@ -220,13 +217,15 @@ impl<E: Evaluator> Thinker<E> {
                 }
             } else {
                 // Next and hold known
-                let children = self.make_children(self.board.clone());
+                let children = self.make_children(self.board.clone(), eval);
                 ThinkResult::Known(self.node, children)
             }
         }
     }
 
-    fn make_children(&self, mut board: Board) -> Vec<ChildData<E::Value, E::Reward>> {
+    fn make_children<E: Evaluator>(
+        &self, mut board: Board, eval: &E
+    ) -> Vec<ChildData<E::Value, E::Reward>> {
         let mut children = vec![];
 
         let next = board.advance_queue().unwrap();
@@ -235,7 +234,7 @@ impl<E: Evaluator> Thinker<E> {
             None => return children
         };
 
-        self.add_children(&mut children, &board, spawned, false);
+        self.add_children(&mut children, &board, eval, spawned, false);
 
         if self.options.use_hold {
             let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
@@ -247,16 +246,17 @@ impl<E: Evaluator> Thinker<E> {
                 None => return children
             };
         
-            self.add_children(&mut children, &board, spawned, true);
+            self.add_children(&mut children, &board, eval, spawned, true);
         }
 
         children
     }
 
-    fn add_children(
+    fn add_children<E: Evaluator>(
         &self,
         children: &mut Vec<ChildData<E::Value, E::Reward>>,
         board: &Board,
+        eval: &E,
         spawned: FallingPiece,
         hold: bool
     ) {
@@ -268,7 +268,7 @@ impl<E: Evaluator> Thinker<E> {
             // Don't add deaths by lock out, don't add useless mini tspins
             if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
                 let move_time = mv.inputs.time + if hold { 1 } else { 0 };
-                let (evaluation, accumulated) = self.eval.evaluate(
+                let (evaluation, accumulated) = eval.evaluate(
                     &lock, &result, move_time, spawned.kind.0
                 );
                 children.push(ChildData {
@@ -283,17 +283,17 @@ impl<E: Evaluator> Thinker<E> {
     }
 }
 
-struct AsyncBotState<E: Evaluator + Clone> {
+struct AsyncBotState<E: Evaluator> {
     bot: BotState<E>,
     options: Options,
     do_move: Option<u32>,
     tasks: u32
 }
 
-impl<E: Evaluator + Clone> AsyncBotState<E> {
-    pub fn new(board: Board, options: Options, evaluator: E) -> Self {
+impl<E: Evaluator> AsyncBotState<E> {
+    pub fn new(board: Board, options: Options) -> Self {
         AsyncBotState {
-            bot: BotState::new(board, options, evaluator),
+            bot: BotState::new(board, options),
             options,
             do_move: None,
             tasks: 0
@@ -314,9 +314,9 @@ impl<E: Evaluator + Clone> AsyncBotState<E> {
         }
     }
 
-    pub fn think(&mut self, send_move: impl FnOnce(Move, Info)) -> (Vec<Thinker<E>>, bool) {
+    pub fn think(&mut self, eval: &E, send_move: impl FnOnce(Move, Info)) -> (Vec<Thinker>, bool) {
         if let Some(incoming) = self.do_move {
-            if self.bot.next_move(incoming, send_move) {
+            if self.bot.next_move(eval, incoming, send_move) {
                 self.do_move = None;
             }
         }

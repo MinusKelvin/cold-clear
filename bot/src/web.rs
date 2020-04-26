@@ -143,13 +143,14 @@ fn bot_thread<E>(
 {
     spawn_local(async move {
         let (result_send, think_recv) = channel::<ThinkResult<E>>();
-        let (think_send, thinker_recv) = channel::<Thinker<E>>();
+        let (think_send, thinker_recv) = channel::<Thinker>();
         // spawn thinker workers
         for _ in 0..options.threads {
             let result_send = result_send.clone();
             let thinker_recv = thinker_recv.clone();
+            let eval = eval.clone();
             spawn_local(async move {
-                let think_worker = Worker::new(thinker, &()).await.unwrap();
+                let think_worker = Worker::new(thinker, &eval).await.unwrap();
                 while let Some(thinker) = thinker_recv.recv().await {
                     think_worker.send(&thinker).unwrap();
                     result_send.send(think_worker.recv().await).ok().unwrap();
@@ -157,10 +158,10 @@ fn bot_thread<E>(
             });
         }
 
-        let mut state = AsyncBotState::new(board, options, eval);
+        let mut state = AsyncBotState::new(board, options);
 
         while !state.is_dead() {
-            let (new_thinks, _) = state.think(|mv, info| send.send(&Some((mv, info))));
+            let (new_thinks, _) = state.think(&eval, |mv, info| send.send(&Some((mv, info))));
             for thinker in new_thinks {
                 think_send.send(thinker).ok().unwrap();
             }
@@ -181,15 +182,15 @@ fn bot_thread<E>(
     });
 }
 
-fn thinker<E>(_: (), recv: Receiver<Thinker<E>>, send: WorkerSender<ThinkResult<E>>)
+fn thinker<E>(eval: E, recv: Receiver<Thinker>, send: WorkerSender<ThinkResult<E>>)
 where
-    E: Evaluator + Clone + Serialize + DeserializeOwned + 'static,
+    E: Evaluator + Serialize + DeserializeOwned + 'static,
     E::Value: Serialize + DeserializeOwned,
     E::Reward: Serialize + DeserializeOwned
 {
     spawn_local(async move {
         while let Some(v) = recv.recv().await {
-            send.send(&v.think());
+            send.send(&v.think(&eval));
         }
     })
 }

@@ -101,7 +101,7 @@ fn run(
     recv: Receiver<BotMsg>,
     send: Sender<(Move, Info)>,
     mut board: Board,
-    evaluator: impl Evaluator + 'static,
+    eval: impl Evaluator + 'static,
     options: Options
 ) {
     if options.threads == 0 {
@@ -122,7 +122,7 @@ fn run(
         }
     }
 
-    let mut bot = AsyncBotState::new(board, options, Arc::new(evaluator));
+    let mut bot = AsyncBotState::new(board, options);
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(options.threads as usize)
@@ -130,12 +130,17 @@ fn run(
 
     let (result_send, result_recv) = channel();
 
+    let eval = Arc::new(eval);
     while !bot.is_dead() {
-        let (new_thinks, can_think) = bot.think(|mv, info| { send.send((mv, info)).ok(); });
+        let (new_thinks, can_think) = bot.think(
+            &eval,
+            |mv, info| { send.send((mv, info)).ok(); }
+        );
         for thinker in new_thinks {
             let result_send = result_send.clone();
+            let eval = eval.clone();
             pool.spawn_fifo(move || {
-                result_send.send(thinker.think()).ok();
+                result_send.send(thinker.think(&eval)).ok();
             });
         }
 

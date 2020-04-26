@@ -3,22 +3,24 @@ use battle::{ Event, PieceMoveExecutor };
 use std::time::{ Instant, Duration };
 use cold_clear::evaluation::Evaluator;
 
-pub struct BotInput<E: Evaluator + Clone> {
+pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     time_budget: Duration,
-    bot: cold_clear::BotState<E>
+    bot: cold_clear::BotState<E>,
+    eval: E
 }
 
 const THINK_AMOUNT: Duration = Duration::from_millis(4);
 
-impl<E: Evaluator + Clone> BotInput<E> {
+impl<E: Evaluator> BotInput<E> {
     pub fn new(board: Board, eval: E) -> Self {
         let mut this = BotInput {
             controller: Controller::default(),
             executing: None,
             time_budget: Duration::new(0, 0),
-            bot: cold_clear::BotState::new(board, Default::default(), eval)
+            bot: cold_clear::BotState::new(board, Default::default()),
+            eval
         };
         for _ in 0..180 {
             // equivalent of 3 realtime seconds of thinking
@@ -33,7 +35,7 @@ impl<E: Evaluator + Clone> BotInput<E> {
             let start = Instant::now();
             match self.bot.think() {
                 Ok(thinker) => {
-                    self.bot.finish_thinking(thinker.think());
+                    self.bot.finish_thinking(thinker.think(&self.eval));
                 }
                 Err(_) => {
                     // can't think anymore
@@ -58,7 +60,7 @@ impl<E: Evaluator + Clone> BotInput<E> {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
                         let exec = &mut self.executing;
-                        self.bot.next_move(incoming, |mv, inf| {
+                        self.bot.next_move(&self.eval, incoming, |mv, inf| {
                             info = Some(inf);
                             *exec = Some((
                                 mv.expected_location,
