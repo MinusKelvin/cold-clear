@@ -15,7 +15,7 @@ pub struct Placement {
     pub location: FallingPiece
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Move {
     pub inputs: ArrayVec<[PieceMovement; 32]>,
     pub expected_location: FallingPiece,

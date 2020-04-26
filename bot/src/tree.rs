@@ -43,6 +43,7 @@ struct Tree<E> {
     death: bool,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ChildData<E, R> {
     pub mv: FallingPiece,
     pub board: Board,

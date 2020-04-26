@@ -1,48 +1,52 @@
-use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
-use std::sync::Arc;
+use webutil::prelude::*;
+use webutil::worker::{ Worker, WorkerSender };
+use webutil::channel::{ channel, Receiver };
+use serde::{ Serialize, de::DeserializeOwned };
 use libtetris::*;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
-use crate::{ Options, Info, AsyncBotState, BotMsg };
+use crate::{ Options, Info, AsyncBotState, BotMsg, Thinker, ThinkResult };
+use futures_util::{ select, pin_mut };
+use futures_util::FutureExt;
+
+// trait aliases (#41517) would make my life SOOOOO much easier
+// pub trait WebCompatibleEvaluator = where
+//     Self: Evaluator + Clone + Serialize + DeserializeOwned + 'static,
+//     <Self as Evaluator>::Reward: Serialize + DeserializeOwned,
+//     <Self as Evaluator>::Value: Serialize + DeserializeOwned;
 
 pub struct Interface {
-    send: Sender<BotMsg>,
-    recv: Receiver<(Move, Info)>,
     dead: bool,
-    mv: Option<(Move, Info)>
+    worker: Worker<BotMsg, (Move, Info)>
 }
 
 impl Interface {
-    /// Launches a bot thread with the specified starting board and options.
-    pub fn launch(
-        board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
-    ) -> Self {
-        let (bot_send, recv) = channel();
-        let (send, bot_recv) = channel();
-        std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
+    /// Launches a bot worker with the specified starting board and options.
+    pub async fn launch<E>(
+        board: Board,
+        options: Options,
+        evaluator: E
+    ) -> Self
+    where
+        E: Evaluator + Clone + Serialize + DeserializeOwned + 'static,
+        E::Value: Serialize + DeserializeOwned,
+        E::Reward: Serialize + DeserializeOwned
+    {
+        if options.threads == 0 {
+            panic!("Invalid number of threads: 0");
+        }
+
+        let worker = Worker::new(bot_thread, &(board, options, evaluator)).await.unwrap();
 
         Interface {
-            send, recv, dead: false, mv: None
+            dead: false,
+            worker
         }
     }
 
-    /// Returns true if all possible piece placement sequences result in death, or the bot thread
-    /// crashed.
+    /// Returns true if all possible piece placement sequences result in death.
     pub fn is_dead(&self) -> bool {
         self.dead
-    }
-
-    fn poll_bot(&mut self) {
-        loop {
-            match self.recv.try_recv() {
-                Ok(mv) => self.mv = Some(mv),
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    self.dead = true;
-                    break
-                }
-            }
-        }
     }
 
     /// Request the bot to provide a move as soon as possible.
@@ -63,7 +67,7 @@ impl Interface {
     /// Once a move is chosen, the bot will update its internal state to the result of the piece
     /// being placed correctly and the move will become available by calling `poll_next_move`.
     pub fn request_next_move(&mut self, incoming: u32) {
-        if self.send.send(BotMsg::NextMove(incoming)).is_err() {
+        if self.worker.send(&BotMsg::NextMove(incoming)).is_err() {
             self.dead = true;
         }
     }
@@ -77,8 +81,7 @@ impl Interface {
     /// If the piece couldn't be placed in the expected location, you must call `reset` to reset the
     /// game field, back-to-back status, and combo values.
     pub fn poll_next_move(&mut self) -> Option<(Move, Info)> {
-        self.poll_bot();
-        self.mv.take()
+        self.worker.try_recv()
     }
 
     /// Adds a new piece to the end of the queue.
@@ -87,7 +90,7 @@ impl Interface {
     /// bag you've provided the sequence IJOZT, then the next time you call this function you can
     /// only provide either an L or an S piece.
     pub fn add_next_piece(&mut self, piece: Piece) {
-        if self.send.send(BotMsg::NewPiece(piece)).is_err() {
+        if self.worker.send(&BotMsg::NewPiece(piece)).is_err() {
             self.dead = true;
         }
     }
@@ -102,7 +105,7 @@ impl Interface {
     /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
     /// on the screen, you need to use x+1 here.
     pub fn reset(&mut self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
-        if self.send.send(BotMsg::Reset {
+        if self.worker.send(&BotMsg::Reset {
             field, b2b: b2b_active, combo
         }).is_err() {
             self.dead = true;
@@ -111,73 +114,68 @@ impl Interface {
 
     /// Specifies a line that Cold Clear should analyze before making any moves.
     pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {
-        if self.send.send(BotMsg::ForceAnalysisLine(path)).is_err() {
+        if self.worker.send(&BotMsg::ForceAnalysisLine(path)).is_err() {
             self.dead = true;
         }
     }
 }
 
-fn run(
+fn bot_thread<E>(
+    (board, options, eval): (Board, Options, E),
     recv: Receiver<BotMsg>,
-    send: Sender<(Move, Info)>,
-    mut board: Board,
-    evaluator: impl Evaluator + 'static,
-    options: Options
-) {
-    if options.threads == 0 {
-        panic!("Invalid number of threads: 0");
-    }
-
-    while board.next_queue().next().is_none() {
-        match recv.recv() {
-            Err(_) => return,
-            Ok(BotMsg::NewPiece(piece)) => board.add_next_piece(piece),
-            Ok(BotMsg::Reset { field, b2b, combo }) =>{
-                board.set_field(field);
-                board.combo = combo;
-                board.b2b_bonus = b2b;
-            }
-            Ok(BotMsg::NextMove(_)) => {}
-            Ok(BotMsg::ForceAnalysisLine(_)) => {}
-        }
-    }
-
-    let mut bot = AsyncBotState::new(board, options, Arc::new(evaluator));
-
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(options.threads as usize)
-        .build().unwrap();
-
-    let (result_send, result_recv) = channel();
-
-    while !bot.is_dead() {
-        let (new_thinks, can_think) = bot.think(|mv, info| { send.send((mv, info)).ok(); });
-        for thinker in new_thinks {
+    send: WorkerSender<(Move, Info)>
+) where
+    E: Evaluator + Clone + Serialize + DeserializeOwned + 'static,
+    E::Value: Serialize + DeserializeOwned,
+    E::Reward: Serialize + DeserializeOwned
+{
+    spawn_local(async move {
+        let (result_send, think_recv) = channel::<ThinkResult<E>>();
+        let (think_send, thinker_recv) = channel::<Thinker<E>>();
+        // spawn thinker workers
+        for _ in 0..options.threads {
             let result_send = result_send.clone();
-            pool.spawn_fifo(move || {
-                result_send.send(thinker.think()).ok();
+            let thinker_recv = thinker_recv.clone();
+            spawn_local(async move {
+                let think_worker = Worker::new(thinker, &()).await.unwrap();
+                while let Some(thinker) = thinker_recv.recv().await {
+                    think_worker.send(&thinker).unwrap();
+                    result_send.send(think_worker.recv().await).ok().unwrap();
+                }
             });
         }
 
-        for result in result_recv.try_iter() {
-            bot.think_done(result);
-        }
+        let mut state = AsyncBotState::new(board, options, eval);
 
-        let result = if can_think {
-            recv.try_recv()
-        } else {
-            recv.recv().map_err(|_| TryRecvError::Disconnected)
-        };
-        match result {
-            Err(TryRecvError::Disconnected) => break,
-            Err(TryRecvError::Empty) => {}
-            Ok(msg) => bot.message(msg)
-        }
+        while !state.is_dead() {
+            let (new_thinks, _) = state.think(|mv, info| send.send(&(mv, info)));
+            for thinker in new_thinks {
+                think_send.send(thinker).ok().unwrap();
+            }
 
-        if can_think && bot.should_wait_for_think() {
-            if let Ok(result) = result_recv.recv() {
-                bot.think_done(result);
+            let msg = recv.recv().fuse();
+            let think = think_recv.recv().fuse();
+            pin_mut!(msg, think);
+            select! {
+                msg = msg => match msg {
+                    Some(msg) => state.message(msg),
+                    None => break
+                },
+                think = think => state.think_done(think.unwrap())
             }
         }
-    }
+    });
+}
+
+fn thinker<E>(_: (), recv: Receiver<Thinker<E>>, send: WorkerSender<ThinkResult<E>>)
+where
+    E: Evaluator + Clone + Serialize + DeserializeOwned + 'static,
+    E::Value: Serialize + DeserializeOwned,
+    E::Reward: Serialize + DeserializeOwned
+{
+    spawn_local(async move {
+        while let Some(v) = recv.recv().await {
+            send.send(&v.think());
+        }
+    })
 }

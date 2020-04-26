@@ -11,10 +11,16 @@ arrayvec = "0.4.11"
 rand = "0.7.0"
 enumset = "0.4.0"
 libtetris = { path = "../libtetris" }
-enum-map = "0.6.0"
+enum-map = { version = "0.6.0", features = ["serde"] }
 odds = { version = "0.3.1", features = ["std-vec"] }
 serde = { version = "1", features = ["derive"] }
 smallvec = "1.0.0"
+serde-big-array = "0.2.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1.2.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "01c5b5f" }
+futures-util = "0.3"
+getrandom = { version = "0.1", features = ["wasm-bindgen"] }

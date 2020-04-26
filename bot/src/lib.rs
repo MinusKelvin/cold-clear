@@ -10,6 +10,11 @@ mod desktop;
 #[cfg(not(target_arch = "wasm32"))]
 pub use desktop::Interface;
 
+#[cfg(target_arch = "wasm32")]
+mod web;
+#[cfg(target_arch = "wasm32")]
+pub use web::Interface;
+
 use libtetris::*;
 use crate::tree::{ ChildData, TreeState, NodeId };
 use crate::moves::Move;
@@ -54,6 +59,9 @@ pub struct Thinker<E: Evaluator> {
     eval: E
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(bound(serialize = "E::Value: Serialize, E::Reward: Serialize"))]
+#[serde(bound(deserialize = "E::Value: Deserialize<'de>, E::Reward: Deserialize<'de>"))]
 pub enum ThinkResult<E: Evaluator> {
     Known(NodeId, Vec<ChildData<E::Value, E::Reward>>),
     Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData<E::Value, E::Reward>>>>),
@@ -273,6 +281,88 @@ impl<E: Evaluator> Thinker<E> {
             }
         }
     }
+}
+
+struct AsyncBotState<E: Evaluator + Clone> {
+    bot: BotState<E>,
+    options: Options,
+    do_move: Option<u32>,
+    tasks: u32
+}
+
+impl<E: Evaluator + Clone> AsyncBotState<E> {
+    pub fn new(board: Board, options: Options, evaluator: E) -> Self {
+        AsyncBotState {
+            bot: BotState::new(board, options, evaluator),
+            options,
+            do_move: None,
+            tasks: 0
+        }
+    }
+
+    pub fn think_done(&mut self, think_result: ThinkResult<E>) {
+        self.tasks -= 1;
+        self.bot.finish_thinking(think_result);
+    }
+
+    pub fn message(&mut self, msg: BotMsg) {
+        match msg {
+            BotMsg::Reset { field, b2b, combo } => self.bot.reset(field, b2b, combo),
+            BotMsg::NewPiece(piece) => self.bot.add_next_piece(piece),
+            BotMsg::NextMove(incoming) => self.do_move = Some(incoming),
+            BotMsg::ForceAnalysisLine(path) => self.bot.force_analysis_line(path)
+        }
+    }
+
+    pub fn think(&mut self, send_move: impl FnOnce(Move, Info)) -> (Vec<Thinker<E>>, bool) {
+        if let Some(incoming) = self.do_move {
+            if self.bot.next_move(incoming, send_move) {
+                self.do_move = None;
+            }
+        }
+
+        let mut thinks = vec![];
+        let mut can_think = false;
+        for _ in 0..10 {
+            if self.tasks >= 2*self.options.threads {
+                can_think = true;
+                break
+            }
+            match self.bot.think() {
+                Ok(thinker) => {
+                    thinks.push(thinker);
+                    self.tasks += 1;
+                }
+                Err(false) => break,
+                Err(true) => can_think = true
+            }
+        }
+        (thinks, can_think)
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.bot.is_dead()
+    }
+
+    pub fn should_wait_for_think(&self) -> bool {
+        self.tasks == self.options.threads * 2
+    }
+}
+
+use serde_big_array::big_array;
+big_array!( BigArray; 40, );
+
+#[derive(Serialize, Deserialize)]
+enum BotMsg {
+    Reset {
+        #[serde(with = "BigArray")]
+        field: [[bool; 10]; 40],
+        b2b: bool,
+        combo: u32
+    },
+    NewPiece(Piece),
+    NextMove(u32),
+    ForceAnalysisLine(Vec<FallingPiece>)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
