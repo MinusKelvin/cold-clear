@@ -47,7 +47,8 @@ impl Default for Options {
 pub struct BotState<E: Evaluator> {
     tree: TreeState<E::Value, E::Reward>,
     options: Options,
-    forced_analysis_lines: Vec<Vec<FallingPiece>>
+    forced_analysis_lines: Vec<Vec<FallingPiece>>,
+    outstanding_thinks: u32
 }
 
 #[derive(Serialize, Deserialize)]
@@ -58,11 +59,9 @@ pub struct Thinker {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(bound(serialize = "E::Value: Serialize, E::Reward: Serialize"))]
-#[serde(bound(deserialize = "E::Value: Deserialize<'de>, E::Reward: Deserialize<'de>"))]
-pub enum ThinkResult<E: Evaluator> {
-    Known(NodeId, Vec<ChildData<E::Value, E::Reward>>),
-    Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData<E::Value, E::Reward>>>>),
+pub enum ThinkResult<V, R> {
+    Known(NodeId, Vec<ChildData<V, R>>),
+    Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData<V, R>>>>),
     Unmark(NodeId)
 }
 
@@ -72,6 +71,7 @@ impl<E: Evaluator> BotState<E> {
             tree: TreeState::create(board, options.use_hold),
             options,
             forced_analysis_lines: vec![],
+            outstanding_thinks: 0
         }
     }
 
@@ -84,6 +84,7 @@ impl<E: Evaluator> BotState<E> {
             if let Some((node, board)) = self.tree.find_and_mark_leaf(
                 &mut self.forced_analysis_lines
             ) {
+                self.outstanding_thinks += 1;
                 return Ok(Thinker {
                     node, board,
                     options: self.options,
@@ -96,7 +97,8 @@ impl<E: Evaluator> BotState<E> {
         }
     }
 
-    pub fn finish_thinking(&mut self, result: ThinkResult<E>) {
+    pub fn finish_thinking(&mut self, result: ThinkResult<E::Value, E::Reward>) {
+        self.outstanding_thinks -= 1;
         match result {
             ThinkResult::Known(node, children) => self.tree.update_known(node, children),
             ThinkResult::Speculated(node, children) => self.tree.update_speculated(node, children),
@@ -181,7 +183,7 @@ impl<E: Evaluator> BotState<E> {
 }
 
 impl Thinker {
-    pub fn think<E: Evaluator>(self, eval: &E) -> ThinkResult<E> {
+    pub fn think<E: Evaluator>(self, eval: &E) -> ThinkResult<E::Value, E::Reward> {
         if let Err(possibilities) = self.board.get_next_piece() {
             // Next unknown (implies hold is known) => Speculate
             if self.options.speculate {
@@ -283,67 +285,91 @@ impl Thinker {
     }
 }
 
+enum Mode<E: Evaluator> {
+    ColdClear(BotState<E>)
+}
+
+#[derive(Serialize, Deserialize)]
+enum Task {
+    ColdClearThink(Thinker)
+}
+
+#[derive(Serialize, Deserialize)]
+enum TaskResult<V, R> {
+    ColdClearThink(ThinkResult<V, R>)
+}
+
 struct AsyncBotState<E: Evaluator> {
-    bot: BotState<E>,
+    mode: Mode<E>,
     options: Options,
-    do_move: Option<u32>,
-    tasks: u32
+    do_move: Option<u32>
 }
 
 impl<E: Evaluator> AsyncBotState<E> {
     pub fn new(board: Board, options: Options) -> Self {
         AsyncBotState {
-            bot: BotState::new(board, options),
+            mode: Mode::ColdClear(BotState::new(board, options)),
             options,
-            do_move: None,
-            tasks: 0
+            do_move: None
         }
     }
 
-    pub fn think_done(&mut self, think_result: ThinkResult<E>) {
-        self.tasks -= 1;
-        self.bot.finish_thinking(think_result);
+    pub fn task_complete(&mut self, result: TaskResult<E::Value, E::Reward>) {
+        match &mut self.mode {
+            Mode::ColdClear(bot) => match result {
+                TaskResult::ColdClearThink(result) => bot.finish_thinking(result)
+            }
+        }
     }
 
     pub fn message(&mut self, msg: BotMsg) {
         match msg {
-            BotMsg::Reset { field, b2b, combo } => self.bot.reset(field, b2b, combo),
-            BotMsg::NewPiece(piece) => self.bot.add_next_piece(piece),
+            BotMsg::Reset { field, b2b, combo } => match &mut self.mode {
+                Mode::ColdClear(bot) => bot.reset(field, b2b, combo),
+            },
+            BotMsg::NewPiece(piece) => match &mut self.mode {
+                Mode::ColdClear(bot) => bot.add_next_piece(piece),
+            },
             BotMsg::NextMove(incoming) => self.do_move = Some(incoming),
-            BotMsg::ForceAnalysisLine(path) => self.bot.force_analysis_line(path)
+            BotMsg::ForceAnalysisLine(path) => match &mut self.mode {
+                Mode::ColdClear(bot) => bot.force_analysis_line(path)
+            }
         }
     }
 
-    pub fn think(&mut self, eval: &E, send_move: impl FnOnce(Move, Info)) -> (Vec<Thinker>, bool) {
-        if let Some(incoming) = self.do_move {
-            if self.bot.next_move(eval, incoming, send_move) {
-                self.do_move = None;
-            }
-        }
-
-        let mut thinks = vec![];
-        for _ in 0..10 {
-            if self.tasks >= 2*self.options.threads {
-                return (thinks, true)
-            }
-            match self.bot.think() {
-                Ok(thinker) => {
-                    thinks.push(thinker);
-                    self.tasks += 1;
+    pub fn think(&mut self, eval: &E, send_move: impl FnOnce(Move, Info)) -> Vec<Task> {
+        match &mut self.mode {
+            Mode::ColdClear(bot) => {
+                if let Some(incoming) = self.do_move {
+                    if bot.next_move(eval, incoming, send_move) {
+                        self.do_move = None;
+                    }
                 }
-                Err(false) => return (thinks, false),
-                Err(true) => {}
+
+                let mut thinks = vec![];
+                for _ in 0..10 {
+                    if bot.outstanding_thinks >= self.options.threads {
+                        return thinks
+                    }
+                    match bot.think() {
+                        Ok(thinker) => {
+                            thinks.push(Task::ColdClearThink(thinker));
+                        }
+                        Err(false) => return thinks,
+                        Err(true) => {}
+                    }
+                }
+                thinks
             }
         }
-        (thinks, true)
     }
+}
 
-    pub fn is_dead(&self) -> bool {
-        self.bot.is_dead()
-    }
-
-    pub fn should_wait_for_think(&self) -> bool {
-        self.tasks == self.options.threads * 2
+impl Task {
+    pub fn execute<E: Evaluator>(self, eval: &E) -> TaskResult<E::Value, E::Reward> {
+        match self {
+            Task::ColdClearThink(thinker) => TaskResult::ColdClearThink(thinker.think(eval))
+        }
     }
 }
 

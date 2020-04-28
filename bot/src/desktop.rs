@@ -1,4 +1,4 @@
-use std::sync::mpsc::{ Sender, Receiver, TryRecvError, channel };
+use crossbeam_channel::{ Sender, Receiver, TryRecvError, unbounded, select };
 use std::sync::Arc;
 use libtetris::*;
 use crate::evaluation::Evaluator;
@@ -15,8 +15,8 @@ impl Interface {
     pub fn launch(
         board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
     ) -> Self {
-        let (bot_send, recv) = channel();
-        let (send, bot_recv) = channel();
+        let (bot_send, recv) = unbounded();
+        let (send, bot_recv) = unbounded();
         std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
 
         Interface {
@@ -128,40 +128,27 @@ fn run(
         .num_threads(options.threads as usize)
         .build().unwrap();
 
-    let (result_send, result_recv) = channel();
+    let (result_send, result_recv) = unbounded();
 
     let eval = Arc::new(eval);
-    while !bot.is_dead() {
-        let (new_thinks, can_think) = bot.think(
+    loop {
+        let new_tasks = bot.think(
             &eval,
             |mv, info| { send.send((mv, info)).ok(); }
         );
-        for thinker in new_thinks {
+        for task in new_tasks {
             let result_send = result_send.clone();
             let eval = eval.clone();
             pool.spawn_fifo(move || {
-                result_send.send(thinker.think(&eval)).ok();
+                result_send.send(task.execute(&eval)).ok();
             });
         }
 
-        for result in result_recv.try_iter() {
-            bot.think_done(result);
-        }
-
-        let result = if can_think {
-            recv.try_recv()
-        } else {
-            recv.recv().map_err(|_| TryRecvError::Disconnected)
-        };
-        match result {
-            Err(TryRecvError::Disconnected) => break,
-            Err(TryRecvError::Empty) => {}
-            Ok(msg) => bot.message(msg)
-        }
-
-        if can_think && bot.should_wait_for_think() {
-            if let Ok(result) = result_recv.recv() {
-                bot.think_done(result);
+        select! {
+            recv(result_recv) -> result => bot.task_complete(result.unwrap()),
+            recv(recv) -> msg => match msg {
+                Ok(msg) => bot.message(msg),
+                Err(_) => break
             }
         }
     }

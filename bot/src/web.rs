@@ -5,7 +5,7 @@ use serde::{ Serialize, de::DeserializeOwned };
 use libtetris::*;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
-use crate::{ Options, Info, AsyncBotState, BotMsg, Thinker, ThinkResult, BotPollState };
+use crate::{ Options, Info, AsyncBotState, BotMsg, Task, TaskResult, BotPollState };
 use futures_util::{ select, pin_mut };
 use futures_util::FutureExt;
 
@@ -142,39 +142,39 @@ fn bot_thread<E>(
     E::Reward: Serialize + DeserializeOwned
 {
     spawn_local(async move {
-        let (result_send, think_recv) = channel::<ThinkResult<E>>();
-        let (think_send, thinker_recv) = channel::<Thinker>();
-        // spawn thinker workers
+        let (result_send, result_recv) = channel::<TaskResult<E::Value, E::Reward>>();
+        let (task_send, task_recv) = channel::<Task>();
+        // spawn workers
         for _ in 0..options.threads {
             let result_send = result_send.clone();
-            let thinker_recv = thinker_recv.clone();
+            let task_recv = task_recv.clone();
             let eval = eval.clone();
             spawn_local(async move {
-                let think_worker = Worker::new(thinker, &eval).await.unwrap();
-                while let Some(thinker) = thinker_recv.recv().await {
-                    think_worker.send(&thinker).unwrap();
-                    result_send.send(think_worker.recv().await).ok().unwrap();
+                let worker = Worker::new(worker, &eval).await.unwrap();
+                while let Some(task) = task_recv.recv().await {
+                    worker.send(&task).unwrap();
+                    result_send.send(worker.recv().await).ok().unwrap();
                 }
             });
         }
 
         let mut state = AsyncBotState::new(board, options);
 
-        while !state.is_dead() {
-            let (new_thinks, _) = state.think(&eval, |mv, info| send.send(&Some((mv, info))));
-            for thinker in new_thinks {
-                think_send.send(thinker).ok().unwrap();
+        loop {
+            let new_tasks = state.think(&eval, |mv, info| send.send(&Some((mv, info))));
+            for task in new_tasks {
+                task_send.send(task).ok().unwrap();
             }
 
             let msg = recv.recv().fuse();
-            let think = think_recv.recv().fuse();
-            pin_mut!(msg, think);
+            let task = result_recv.recv().fuse();
+            pin_mut!(msg, task);
             select! {
                 msg = msg => match msg {
                     Some(msg) => state.message(msg),
                     None => break
                 },
-                think = think => state.think_done(think.unwrap())
+                task = task => state.task_complete(task.unwrap())
             }
         }
 
@@ -182,7 +182,7 @@ fn bot_thread<E>(
     });
 }
 
-fn thinker<E>(eval: E, recv: Receiver<Thinker>, send: WorkerSender<ThinkResult<E>>)
+fn worker<E>(eval: E, recv: Receiver<Task>, send: WorkerSender<TaskResult<E::Value, E::Reward>>)
 where
     E: Evaluator + Serialize + DeserializeOwned + 'static,
     E::Value: Serialize + DeserializeOwned,
@@ -190,7 +190,7 @@ where
 {
     spawn_local(async move {
         while let Some(v) = recv.recv().await {
-            send.send(&v.think(&eval));
+            send.send(&v.execute(&eval));
         }
     })
 }
