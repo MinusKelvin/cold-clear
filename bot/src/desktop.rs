@@ -3,7 +3,8 @@ use std::sync::Arc;
 use libtetris::*;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
-use crate::{ Options, Info, AsyncBotState, BotMsg, BotPollState };
+use crate::modes::ModeSwitchedBot;
+use crate::{ Options, Info, BotMsg, BotPollState };
 
 pub struct Interface {
     send: Sender<BotMsg>,
@@ -122,7 +123,7 @@ fn run(
         }
     }
 
-    let mut bot = AsyncBotState::new(board, options);
+    let mut bot = ModeSwitchedBot::new(board, options);
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(options.threads as usize)
