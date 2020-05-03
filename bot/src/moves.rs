@@ -86,7 +86,11 @@ pub fn find_moves(
     }
 
     fn next(q: &mut Vec<Placement>) -> Option<Placement> {
-        q.sort_by_key(|p| std::u32::MAX-p.inputs.time);
+        q.sort_by(|a, b|
+            a.inputs.time.cmp(&b.inputs.time).then(
+                a.inputs.movements.len().cmp(&b.inputs.movements.len())
+            ).reverse()
+        );
         q.pop()
     }
 
@@ -160,27 +164,19 @@ fn lock_check(
     locks: &mut HashMap<(ArrayVec<[(i32, i32); 4]>, TspinStatus), Placement>,
     moves: InputList
 ) {
-    let cells = piece.cells();
-    if cells.iter().all(|&(_, y, _)| y >= 20) {
+    let mut cells: ArrayVec<[_; 4]> = piece.cells().iter().map(|&(x,y,_)|(x,y)).collect();
+    if cells.iter().all(|&(_, y)| y >= 20) {
         return
     }
-    match locks.entry((cells.iter().map(|&(x,y,_)|(x,y)).collect(), piece.tspin)) {
-        Entry::Vacant(entry) => {
-            entry.insert(Placement {
-                inputs: moves,
-                location: piece,
-            });
-        }
-        Entry::Occupied(mut entry) => {
-            let mv = entry.get_mut();
-            if moves.time < mv.inputs.time {
-                *mv = Placement {
-                    inputs: moves,
-                    location: piece,
-                };
-            }
-        }
-    }
+    cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
+
+    // Since the first path to a location is always the shortest path to that location,
+    // we know that if there is already an entry here this isn't a faster path, so only
+    // insert placement if there isn't one there already.
+    locks.entry((cells, piece.tspin)).or_insert(Placement {
+        inputs: moves,
+        location: piece,
+    });
 }
 
 fn attempt(
