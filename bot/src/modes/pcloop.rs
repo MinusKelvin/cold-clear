@@ -142,6 +142,12 @@ impl PcLooper {
     }
 }
 
+impl Drop for PcLooper {
+    fn drop(&mut self) {
+        self.abort.store(true, Ordering::Relaxed);
+    }
+}
+
 impl PcSolver {
     pub fn solve(&self) -> Option<ArrayVec<[FallingPiece; 10]>> {
         let (send, recv) = unbounded();
