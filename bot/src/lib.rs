@@ -25,6 +25,7 @@ pub struct Options {
     pub mode: crate::moves::MovementMode,
     pub use_hold: bool,
     pub speculate: bool,
+    pub pcloop: bool,
     pub min_nodes: u32,
     pub max_nodes: u32,
     pub threads: u32
@@ -62,6 +63,7 @@ impl Default for Options {
             mode: crate::moves::MovementMode::ZeroG,
             use_hold: true,
             speculate: true,
+            pcloop: false,
             min_nodes: 0,
             max_nodes: 4_000_000_000,
             threads: 1

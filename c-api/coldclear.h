@@ -48,6 +48,7 @@ typedef struct CCOptions {
     CCMovementMode mode;
     bool use_hold;
     bool speculate;
+    bool pcloop;
     uint32_t min_nodes;
     uint32_t max_nodes;
     uint32_t threads;

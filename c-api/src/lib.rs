@@ -91,6 +91,7 @@ struct CCOptions {
     mode: CCMovementMode,
     use_hold: bool,
     speculate: bool,
+    pcloop: bool,
     min_nodes: u32,
     max_nodes: u32,
     threads: u32,
@@ -143,6 +144,7 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
             min_nodes: options.min_nodes,
             use_hold: options.use_hold,
             speculate: options.speculate,
+            pcloop: options.pcloop,
             mode: options.mode.into(),
             threads: options.threads
         },
@@ -262,6 +264,7 @@ extern "C" fn cc_default_options(options: &mut CCOptions) {
         min_nodes: o.min_nodes,
         use_hold: o.use_hold,
         speculate: o.speculate,
+        pcloop: o.pcloop,
         mode: o.mode.into(),
         threads: o.threads
     }

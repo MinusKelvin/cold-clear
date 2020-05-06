@@ -5,7 +5,8 @@ use serde::{ Serialize, de::DeserializeOwned };
 use libtetris::*;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
-use crate::{ Options, Info, AsyncBotState, BotMsg, Task, TaskResult, BotPollState };
+use crate::{ Options, Info, BotMsg, BotPollState };
+use crate::modes::{ ModeSwitchedBot, Task, TaskResult };
 use futures_util::{ select, pin_mut };
 use futures_util::FutureExt;
 
@@ -158,7 +159,7 @@ fn bot_thread<E>(
             });
         }
 
-        let mut state = AsyncBotState::new(board, options);
+        let mut state = ModeSwitchedBot::new(board, options);
 
         loop {
             let new_tasks = state.think(&eval, |mv, info| send.send(&Some((mv, info))));
