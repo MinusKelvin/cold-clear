@@ -57,10 +57,7 @@ impl<E: Evaluator> ModeSwitchedBot<E> {
                 _ => {}
             }
             Mode::PcLoop(bot) => match result {
-                TaskResult::PcLoopSolve(Some(result)) => bot.solution(result),
-                TaskResult::PcLoopSolve(None) => self.mode = Mode::Normal(
-                    normal::BotState::new(self.board.clone(), self.options)
-                ),
+                TaskResult::PcLoopSolve(result) => bot.solution(result),
                 _ => {}
             }
         }
@@ -155,9 +152,21 @@ impl<E: Evaluator> ModeSwitchedBot<E> {
             }
             Mode::PcLoop(bot) => {
                 if let Some(_) = self.do_move {
-                    if let Some((mv, info)) = bot.next_move() {
-                        send_move(mv, info);
-                        self.do_move = None;
+                    match bot.next_move() {
+                        Ok((mv, info)) => {
+                            send_move(mv, info);
+                            self.do_move = None;
+                        }
+                        Err(false) => {}
+                        Err(true) => {
+                            let mut bot = normal::BotState::new(self.board.clone(), self.options);
+                            let mut thinks = vec![];
+                            if let Ok(thinker) = bot.think() {
+                                thinks.push(Task::NormalThink(thinker));
+                            }
+                            self.mode = Mode::Normal(bot);
+                            return thinks;
+                        }
                     }
                 }
 
@@ -205,7 +214,7 @@ mod pcloop {
     impl PcLooper {
         pub fn add_next_piece(&mut self, _: Piece) { unreachable!() }
         pub fn think(&mut self) -> Option<PcSolver> { unreachable!() }
-        pub fn next_move(&mut self) -> Option<(Move, Info)> { unreachable!() }
+        pub fn next_move(&mut self) -> Result<(Move, Info), bool> { unreachable!() }
         pub fn solution(&mut self, _: ArrayVec<[FallingPiece; 10]>) { unreachable!() }
     }
 

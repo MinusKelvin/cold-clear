@@ -63,59 +63,61 @@ impl PcLooper {
         }
     }
 
-    pub fn solution(&mut self, soln: ArrayVec<[FallingPiece; 10]>) {
+    pub fn solution(&mut self, soln: Option<ArrayVec<[FallingPiece; 10]>>) {
         self.solving = false;
         self.abort.store(false, Ordering::Relaxed);
         
-        let mut b = Board::<u16>::new();
-        for &placement in &soln {
-            let placements = crate::moves::find_moves(
-                &b,
-                FallingPiece::spawn(placement.kind.0, &b).unwrap(),
-                crate::moves::MovementMode::ZeroG
-            );
+        if let Some(soln) = soln {
+            let mut b = Board::<u16>::new();
+            for &placement in &soln {
+                let placements = crate::moves::find_moves(
+                    &b,
+                    FallingPiece::spawn(placement.kind.0, &b).unwrap(),
+                    crate::moves::MovementMode::ZeroG
+                );
 
-            let mut target_cells = placement.cells().iter().map(|&(x,y,_)|(x,y))
-                .collect::<ArrayVec<[_; 4]>>().into_inner().unwrap();
-            target_cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
-            let mut mv = None;
-            for p in placements {
-                let mut cells = p.location.cells().iter().map(|&(x,y,_)|(x,y))
+                let mut target_cells = placement.cells().iter().map(|&(x,y,_)|(x,y))
                     .collect::<ArrayVec<[_; 4]>>().into_inner().unwrap();
-                cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
-                if cells == target_cells {
-                    match &mv {
-                        None => mv = Some(p),
-                        Some(candidate) => if p.inputs.time < candidate.inputs.time {
-                            mv = Some(p)
+                target_cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
+                let mut mv = None;
+                for p in placements {
+                    let mut cells = p.location.cells().iter().map(|&(x,y,_)|(x,y))
+                        .collect::<ArrayVec<[_; 4]>>().into_inner().unwrap();
+                    cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
+                    if cells == target_cells {
+                        match &mv {
+                            None => mv = Some(p),
+                            Some(candidate) => if p.inputs.time < candidate.inputs.time {
+                                mv = Some(p)
+                            }
                         }
                     }
                 }
-            }
-            if mv.is_none() {
-                println!("{:#?} {:#?}", b, placement);
-            }
-            let mv = mv.unwrap();
-            let mut mv = Move {
-                expected_location: mv.location,
-                inputs: mv.inputs.movements,
-                hold: false
-            };
-
-            let next = self.next_pc_queue.pop_front().unwrap();
-            if next != placement.kind.0 {
-                if self.next_pc_hold.is_none() {
-                    self.next_pc_queue.pop_front().unwrap();
+                if mv.is_none() {
+                    eprintln!("{:#?} {:#?} {:#?}", b, placement, &soln);
                 }
-                self.next_pc_hold = Some(next);
-                mv.hold = true;
-            }
+                let mv = mv.unwrap();
+                let mut mv = Move {
+                    expected_location: mv.location,
+                    inputs: mv.inputs.movements,
+                    hold: false
+                };
 
-            self.current_pc.push_back((mv, b.lock_piece(placement)));
+                let next = self.next_pc_queue.pop_front().unwrap();
+                if next != placement.kind.0 {
+                    if self.next_pc_hold.is_none() {
+                        self.next_pc_queue.pop_front().unwrap();
+                    }
+                    self.next_pc_hold = Some(next);
+                    mv.hold = true;
+                }
+
+                self.current_pc.push_back((mv, b.lock_piece(placement)));
+            }
         }
     }
 
-    pub fn next_move(&mut self) -> Option<(Move, Info)> {
+    pub fn next_move(&mut self) -> Result<(Move, Info), bool> {
         match self.current_pc.pop_front() {
             Some((mv, lock)) => {
                 let mut info = Info {
@@ -128,11 +130,11 @@ impl PcLooper {
                 for (mv, lock) in &self.current_pc {
                     info.plan.push((mv.expected_location, lock.clone()));
                 }
-                Some((mv, info))
+                Ok((mv, info))
             }
             None => {
                 self.abort.store(true, Ordering::Relaxed);
-                None
+                Err(!self.solving)
             }
         }
     }
