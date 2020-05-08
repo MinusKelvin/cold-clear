@@ -20,7 +20,7 @@ serde-big-array = "0.2.0"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1.2.1"
 crossbeam-channel = "0.4"
-pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "12337b0" }
+pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "c8e02af" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "01c5b5f" }

@@ -156,7 +156,7 @@ impl PcSolver {
 
         let mut best = SendOnDrop::new(None, send);
         pcf::solve_pc_mt(
-            &self.queue, pcf::BitBoard(0), self.hold_enabled, false,
+            &self.queue, pcf::BitBoard(0), self.hold_enabled, false, &self.abort,
             pcf::placeability::simple_srs_spins,
             move |soln| {
                 let soln: ArrayVec<[_; 10]> = soln.iter().copied().collect();
@@ -193,11 +193,6 @@ impl PcSolver {
                     Some((_, s)) => if score > s {
                         *best = Some((soln, score));
                     }
-                }
-                if self.abort.load(Ordering::Relaxed) {
-                    pcf::SearchStatus::Abort
-                } else {
-                    pcf::SearchStatus::Continue
                 }
             }
         );
