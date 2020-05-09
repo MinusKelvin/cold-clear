@@ -214,12 +214,13 @@ impl Evaluator for Standard {
             }
         }
 
-        // magic approximations of spawn delay and line clear delay
-        acc_eval += if lock.placement_kind.is_clear() {
-            self.move_time * (move_time + 10 + 45) as i32
-         } else {
-            self.move_time * (move_time + 10) as i32
-         };
+        // magic approximation of line clear delay
+        let move_time = if lock.placement_kind.is_clear() {
+            move_time as i32 + 40
+        } else {
+            move_time as i32
+        };
+        acc_eval += self.move_time * move_time;
 
         if board.b2b_bonus {
             transient_eval += self.back_to_back;
@@ -228,7 +229,8 @@ impl Evaluator for Standard {
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.top_quarter * (highest_point - 15).max(0);
         transient_eval += self.top_half * (highest_point - 10).max(0);
-        acc_eval += self.jeopardy * (highest_point - 10).max(0);
+
+        acc_eval += (self.jeopardy * (highest_point - 10).max(0) * move_time) / 10;
 
         let ts = if self.use_bag {
             board.next_bag().contains(Piece::T) as usize
@@ -445,11 +447,11 @@ fn covered_cells(board: &Board) -> (i32, i32) {
 fn sky_tslot(board: &Board) -> Option<(i32, i32)> {
     fn filledness(board: &Board, x: i32, y: i32) -> usize {
         let mut filled = 0;
-        for cy in y-1..y+1 {
+        'yloop: for cy in y-1..y+1 {
             for rx in 0..10 {
                 if rx < x-1 || rx > x+1 {
                     if !board.occupied(rx, cy) {
-                        break
+                        continue 'yloop;
                     }
                 }
             }
@@ -754,13 +756,13 @@ fn cutout_tslot(mut board: Board, piece: FallingPiece) -> Cutout {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct Reward {
     value: i32,
     attack: i32
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 pub struct Value {
     value: i32,
     spike: i32

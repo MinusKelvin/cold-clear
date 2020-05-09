@@ -13,9 +13,9 @@ fn main() {
     use cold_clear::evaluation::Standard;
     use cold_clear::evaluation::changed;
 
-    let p1_eval = Standard::fast_config();
+    let p1_eval = Standard::default();
 
-    let p2_eval = changed::Standard::fast_config();
+    let p2_eval = changed::Standard::default();
 
     let (send, recv) = std::sync::mpsc::channel();
 
@@ -33,7 +33,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 10000;
+    let games = 5000;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
@@ -63,7 +63,7 @@ fn main() {
 
 fn do_battle(p1: impl Evaluator + Clone, p2: impl Evaluator + Clone) -> (InfoReplay, bool) {
     let mut battle = Battle::new(
-        GameConfig::fast_config(), GameConfig::fast_config(),
+        GameConfig::default(), GameConfig::default(),
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 
