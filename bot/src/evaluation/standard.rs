@@ -1,5 +1,3 @@
-use arrayvec::ArrayVec;
-use std::collections::VecDeque;
 use libtetris::*;
 use serde::{ Serialize, Deserialize };
 use super::*;
@@ -358,58 +356,34 @@ fn bumpiness(board: &Board, well: usize) -> (i32, i32) {
 /// The first returned value is the number of cells that make up fully enclosed spaces (cavities).
 /// The second is the number of cells that make up partially enclosed spaces (overhangs).
 fn cavities_and_overhangs(board: &Board) -> (i32, i32) {
-    let mut checked = ArrayVec::from([[false; 10]; 40]);
+    let mut cavities = 0;
+    let mut overhangs = 0;
 
-    let mut cavity_cells = 0;
-    let mut overhang_cells = 0;
-
-    for y in 0..40 {
+    for y in 0..*board.column_heights().iter().max().unwrap() {
         for x in 0..10 {
-            if board.occupied(x, y) ||
-                    checked[y as usize][x as usize] ||
-                    y >= board.column_heights()[x as usize] {
+            if board.occupied(x as i32, y) || y >= board.column_heights()[x] {
                 continue
             }
 
-            let mut is_overhang = false;
-            let mut size = 0;
-            let mut to_check = VecDeque::new();
-            to_check.push_back((x, y));
-
-            while let Some((x, y)) = to_check.pop_front() {
-                if x < 0 || y < 0 || x >= 10 || y >= 40 ||
-                        board.occupied(x, y) || checked[y as usize][x as usize] {
+            if x > 1 {
+                if board.column_heights()[x-1] <= y-1 && board.column_heights()[x-2] <= y {
+                    overhangs += 1;
                     continue
                 }
+            }
 
-                if y >= board.column_heights()[x as usize] {
-                    if x >= 1 {
-                        is_overhang |= y >= board.column_heights()[x as usize - 1];
-                    }
-                    if x < 9 {
-                        is_overhang |= y >= board.column_heights()[x as usize + 1];
-                    }
+            if x < 8 {
+                if board.column_heights()[x+1] <= y-1 && board.column_heights()[x+2] <= y {
+                    overhangs += 1;
                     continue
                 }
-
-                checked[y as usize][x as usize] = true;
-                size += 1;
-
-                to_check.push_back((x-1, y));
-                to_check.push_back((x, y-1));
-                to_check.push_back((x+1, y));
-                to_check.push_back((x, y+1));
             }
 
-            if is_overhang {
-                overhang_cells += size;
-            } else {
-                cavity_cells += size;
-            }
+            cavities += 1;
         }
     }
 
-    (cavity_cells, overhang_cells)
+    (cavities, overhangs)
 }
 
 /// Evaluates how covered holes in the playfield are.
