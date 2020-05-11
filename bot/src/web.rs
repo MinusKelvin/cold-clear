@@ -177,6 +177,10 @@ fn bot_thread<E>(
                 },
                 task = task => state.task_complete(task.unwrap())
             }
+
+            if state.is_dead() {
+                break
+            }
         }
 
         send.send(&None);

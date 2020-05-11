@@ -174,6 +174,14 @@ impl<E: Evaluator> ModeSwitchedBot<E> {
             }
         }
     }
+
+    pub fn is_dead(&self) -> bool {
+        if let Mode::Normal(bot) = &self.mode {
+            bot.is_dead()
+        } else {
+            false
+        }
+    }
 }
 
 impl Task {
@@ -215,7 +223,7 @@ mod pcloop {
         pub fn add_next_piece(&mut self, _: Piece) { unreachable!() }
         pub fn think(&mut self) -> Option<PcSolver> { unreachable!() }
         pub fn next_move(&mut self) -> Result<(Move, Info), bool> { unreachable!() }
-        pub fn solution(&mut self, _: ArrayVec<[FallingPiece; 10]>) { unreachable!() }
+        pub fn solution(&mut self, _: Option<ArrayVec<[FallingPiece; 10]>>) { unreachable!() }
     }
 
     impl PcSolver {

@@ -1,6 +1,6 @@
 use libtetris::{ Board, FallingPiece, Piece, RotationState, TspinStatus, PieceMovement };
 use arrayvec::ArrayVec;
-use std::collections::{ HashMap, HashSet, hash_map::Entry };
+use std::collections::{ HashMap, HashSet };
 use serde::{ Serialize, Deserialize };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
