@@ -33,7 +33,7 @@ fn main() {
     let mut p1_wins = 0;
     let mut p2_wins = 0;
 
-    let games = 5000;
+    let games = 20000;
 
     while p1_wins + p2_wins < games {
         match recv.recv() {
