@@ -1,9 +1,13 @@
 use serde::{ Serialize, Deserialize };
 
+#[macro_use]
+extern crate rental;
+
 pub mod evaluation;
 pub mod moves;
 mod modes;
 mod tree;
+mod dag;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod desktop;
