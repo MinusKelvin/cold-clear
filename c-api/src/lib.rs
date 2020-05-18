@@ -213,7 +213,7 @@ extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
 fn convert((m, info): (cold_clear::Move, cold_clear::Info)) -> CCMove {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
-    for (i, &(x, y, _)) in m.expected_location.cells().iter().enumerate() {
+    for (i, &(x, y)) in m.expected_location.cells().iter().enumerate() {
         expected_x[i] = x as u8;
         expected_y[i] = y as u8;
     }
