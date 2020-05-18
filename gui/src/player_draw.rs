@@ -81,7 +81,7 @@ impl PlayerDrawState {
             match event {
                 Event::PiecePlaced { piece, locked, .. } => {
                     self.statistics.update(&locked);
-                    for &(x, y, _) in &piece.cells() {
+                    for &(x, y) in &piece.cells() {
                         self.board[y as usize].set(x as usize, piece.kind.0.color());
                     }
                     if locked.cleared_lines.is_empty() {
@@ -163,14 +163,14 @@ impl PlayerDrawState {
         // Draw either the falling piece or the line clear animation
         match self.state {
             State::Falling(piece, ghost) => {
-                for &(x,y,_) in &ghost.cells() {
+                for &(x,y) in &ghost.cells() {
                     res.sprite_batch.draw(
                         &res.sprites.ghost,
                         point2(offset_x + x as f32 + 4.0, y as f32 + 3.25),
                         cell_color_to_color(piece.kind.0.color())
                     );
                 }
-                for &(x,y,_) in &piece.cells() {
+                for &(x,y) in &piece.cells() {
                     res.sprite_batch.draw(
                         &res.sprites.filled,
                         point2(offset_x + x as f32 + 4.0, y as f32 + 3.25),
@@ -277,7 +277,7 @@ impl PlayerDrawState {
                 y_map[i] = i as i32;
             }
             for (placement, lock) in &info.plan {
-                for &(x, y, d) in &placement.cells() {
+                for &(x, y, d) in &placement.cells_with_connections() {
                     res.sprite_batch.draw(
                         &res.sprites.plan[d.to_bits() as usize],
                         point2(offset_x + x as f32 + 4.0, y_map[y as usize] as f32 + 3.25),

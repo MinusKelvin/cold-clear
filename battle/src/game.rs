@@ -151,7 +151,7 @@ impl Game {
                 if let Some(spawned) = FallingPiece::spawn(next_piece, &self.board) {
                     self.state = GameState::Falling(FallingState {
                         piece: spawned,
-                        lowest_y: spawned.cells().iter().map(|&(_,y,_)| y).min().unwrap(),
+                        lowest_y: spawned.cells().iter().map(|&(_,y)| y).min().unwrap(),
                         rotation_move_count: 0,
                         gravity: self.config.gravity,
                         lock_delay: 30,
@@ -204,7 +204,7 @@ impl Game {
                         if let Some(spawned) = FallingPiece::spawn(piece, &self.board) {
                             *falling = FallingState {
                                 piece: spawned,
-                                lowest_y: spawned.cells().iter().map(|&(_,y,_)| y).min().unwrap(),
+                                lowest_y: spawned.cells().iter().map(|&(_,y)| y).min().unwrap(),
                                 rotation_move_count: 0,
                                 gravity: self.config.gravity,
                                 lock_delay: 30,
@@ -266,7 +266,7 @@ impl Game {
                 }
 
                 // 15 move lock rule reset
-                let low_y = falling.piece.cells().iter().map(|&(_,y,_)| y).min().unwrap();
+                let low_y = falling.piece.cells().iter().map(|&(_,y)| y).min().unwrap();
                 if low_y < falling.lowest_y {
                     falling.rotation_move_count = 0;
                     falling.lowest_y = low_y;
@@ -276,7 +276,7 @@ impl Game {
                 if falling.rotation_move_count >= self.config.move_lock_rule {
                     let mut p = falling.piece;
                     p.sonic_drop(&self.board);
-                    let low_y = p.cells().iter().map(|&(_,y,_)| y).min().unwrap();
+                    let low_y = p.cells().iter().map(|&(_,y)| y).min().unwrap();
                     // I don't think the 15 move lock rule applies if the piece can fall to a lower
                     // y position than it has ever reached before.
                     if low_y >= falling.lowest_y {

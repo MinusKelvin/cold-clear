@@ -76,14 +76,12 @@ impl PcLooper {
                     crate::moves::MovementMode::ZeroG
                 );
 
-                let mut target_cells = placement.cells().iter().map(|&(x,y,_)|(x,y))
-                    .collect::<ArrayVec<[_; 4]>>().into_inner().unwrap();
-                target_cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
+                let mut target_cells = placement.cells();
+                target_cells.sort();
                 let mut mv = None;
                 for p in placements {
-                    let mut cells = p.location.cells().iter().map(|&(x,y,_)|(x,y))
-                        .collect::<ArrayVec<[_; 4]>>().into_inner().unwrap();
-                    cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
+                    let mut cells = p.location.cells();
+                    cells.sort();
                     if cells == target_cells {
                         match &mv {
                             None => mv = Some(p),

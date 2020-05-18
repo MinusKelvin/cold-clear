@@ -161,14 +161,14 @@ pub fn find_moves(
 
 fn lock_check(
     piece: FallingPiece,
-    locks: &mut HashMap<(ArrayVec<[(i32, i32); 4]>, TspinStatus), Placement>,
+    locks: &mut HashMap<([(i32, i32); 4], TspinStatus), Placement>,
     moves: InputList
 ) {
-    let mut cells: ArrayVec<[_; 4]> = piece.cells().iter().map(|&(x,y,_)|(x,y)).collect();
+    let mut cells = piece.cells();
     if cells.iter().all(|&(_, y)| y >= 20) {
         return
     }
-    cells.sort_by(|&(x1, y1), (x2, y2)| x1.cmp(x2).then(y1.cmp(y2)));
+    cells.sort();
 
     // Since the first path to a location is always the shortest path to that location,
     // we know that if there is already an entry here this isn't a faster path, so only
