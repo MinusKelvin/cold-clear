@@ -796,7 +796,7 @@ impl Evaluation<Reward> for Value {
 
     fn weight(self, min: &Value, rank: usize) -> i64 {
         let e = (self.value - min.value) as i64 + 10;
-        e * e / (rank + 1) as i64
+        e * e / (rank*rank + 1) as i64
     }
 
     fn improve(&mut self, new_result: Self) {
