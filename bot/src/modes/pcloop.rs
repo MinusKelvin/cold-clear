@@ -5,10 +5,12 @@ use arrayvec::ArrayVec;
 use libtetris::{ Piece, RotationState, PieceState, TspinStatus, FallingPiece, Board, LockResult };
 use crossbeam_channel::{ Sender, unbounded };
 use crate::{ Move, Info };
+use crate::moves::MovementMode;
 
 pub struct PcLooper {
     current_pc: VecDeque<(Move, LockResult)>,
     abort: Arc<AtomicBool>,
+    mode: MovementMode,
     next_pc_queue: VecDeque<Piece>,
     next_pc_hold: Option<Piece>,
     hold_enabled: bool,
@@ -22,14 +24,15 @@ pub struct PcSolver {
 }
 
 impl PcLooper {
-    pub fn new(board: Board, hold_enabled: bool) -> Self {
+    pub fn new(board: Board, hold_enabled: bool, mode: MovementMode) -> Self {
         PcLooper {
             current_pc: VecDeque::new(),
             abort: Arc::new(AtomicBool::new(false)),
             next_pc_queue: board.next_queue().collect(),
             next_pc_hold: if hold_enabled { board.hold_piece } else { None },
             hold_enabled,
-            solving: false
+            solving: false,
+            mode
         }
     }
 
@@ -69,11 +72,14 @@ impl PcLooper {
         
         if let Some(soln) = soln {
             let mut b = Board::<u16>::new();
+            let mut solution = ArrayVec::<[_; 10]>::new();
+            let mut next_pc_hold = self.next_pc_hold;
+            let mut next_pc_queue = self.next_pc_queue.clone();
             for &placement in &soln {
                 let placements = crate::moves::find_moves(
                     &b,
                     FallingPiece::spawn(placement.kind.0, &b).unwrap(),
-                    crate::moves::MovementMode::ZeroG
+                    self.mode
                 );
 
                 let mut target_cells = placement.cells();
@@ -91,27 +97,33 @@ impl PcLooper {
                         }
                     }
                 }
-                if mv.is_none() {
-                    eprintln!("{:#?} {:#?} {:#?}", b, placement, &soln);
-                }
-                let mv = mv.unwrap();
-                let mut mv = Move {
-                    expected_location: mv.location,
-                    inputs: mv.inputs.movements,
-                    hold: false
-                };
-
-                let next = self.next_pc_queue.pop_front().unwrap();
-                if next != placement.kind.0 {
-                    if self.next_pc_hold.is_none() {
-                        self.next_pc_queue.pop_front().unwrap();
+                if let Some(mv) = mv {
+                    let mut mv = Move {
+                        expected_location: mv.location,
+                        inputs: mv.inputs.movements,
+                        hold: false
+                    };
+    
+                    let next = next_pc_queue.pop_front().unwrap();
+                    if next != placement.kind.0 {
+                        if next_pc_hold.is_none() {
+                            next_pc_queue.pop_front().unwrap();
+                        }
+                        next_pc_hold = Some(next);
+                        mv.hold = true;
                     }
-                    self.next_pc_hold = Some(next);
-                    mv.hold = true;
+    
+                    solution.push((mv, b.lock_piece(placement)));
+                } else {
+                    return;
                 }
-
-                self.current_pc.push_back((mv, b.lock_piece(placement)));
             }
+
+            for v in solution {
+                self.current_pc.push_back(v);
+            }
+            self.next_pc_queue = next_pc_queue;
+            self.next_pc_hold = next_pc_hold;
         }
     }
 

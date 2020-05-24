@@ -40,7 +40,7 @@ impl<E: Evaluator> ModeSwitchedBot<E> {
         let mode = if options.pcloop &&
                 board.get_row(0).is_empty() &&
                 can_pc_loop(&board, options.use_hold) {
-            Mode::PcLoop(pcloop::PcLooper::new(board.clone(), options.use_hold))
+            Mode::PcLoop(pcloop::PcLooper::new(board.clone(), options.use_hold, options.mode))
         } else {
             Mode::Normal(normal::BotState::new(board.clone(), options))
         };
@@ -84,9 +84,9 @@ impl<E: Evaluator> ModeSwitchedBot<E> {
                             if self.options.pcloop && can_pc_loop(
                                 &self.board, self.options.use_hold
                             ) {
-                                self.mode = Mode::PcLoop(
-                                    pcloop::PcLooper::new(self.board.clone(), self.options.use_hold)
-                                );
+                                self.mode = Mode::PcLoop(pcloop::PcLooper::new(
+                                    self.board.clone(), self.options.use_hold, self.options.mode
+                                ));
                             } else {
                                 bot.add_next_piece(piece);
                             }
@@ -125,9 +125,9 @@ impl<E: Evaluator> ModeSwitchedBot<E> {
                         self.do_move = None;
                         #[cfg(not(target_arch = "wasm32"))] {
                             if self.options.pcloop && can_pc_loop(board, self.options.use_hold) {
-                                self.mode = Mode::PcLoop(
-                                    pcloop::PcLooper::new(board.clone(), self.options.use_hold)
-                                );
+                                self.mode = Mode::PcLoop(pcloop::PcLooper::new(
+                                    board.clone(), self.options.use_hold, self.options.mode
+                                ));
                                 fn nothing(_: Move, _: Info) {}
                                 return self.think(eval, nothing);
                             }
