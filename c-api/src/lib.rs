@@ -59,8 +59,7 @@ cenum! {
     enum CCTspinStatus => libtetris::TspinStatus {
         CC_NONE => None,
         CC_MINI => Mini,
-        CC_FULL => Full,
-        CC_PERSISTENT_FULL => PersistentFull
+        CC_FULL => Full
     }
 
     enum CCPlacementKind => libtetris::PlacementKind {
@@ -343,26 +342,15 @@ fn convert(m: &cold_clear::Move, info: &cold_clear::Info) -> CCMove {
 }
 
 #[no_mangle]
-extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotPollStatus {
+extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
     match bot.poll_next_move() {
         Ok(result) => {
             let (m, info) = &result;
             *mv = convert(m, info);
-            CCBotPollStatus::CC_MOVE_PROVIDED
-        }
-        Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
-        Err(cold_clear::BotPollState::Dead) => CCBotPollStatus::CC_BOT_DEAD,
-    }
-}
-
-#[no_mangle]
-extern "C" fn cc_poll_next_move_with_plans(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
-    match bot.poll_next_move() {
-        Ok(result) => {
-            let (m, info) = &result;
-            *mv = convert(m, info);
-            unsafe {
-                *num_plans = convert_plans(info, plans, *num_plans);
+            if !plans.is_null() {
+                unsafe {
+                    *num_plans = convert_plans(info, plans, *num_plans);
+                }
             }
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
@@ -372,25 +360,15 @@ extern "C" fn cc_poll_next_move_with_plans(bot: &mut CCAsyncBot, mv: &mut CCMove
 }
 
 #[no_mangle]
-extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotPollStatus {
+extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
     match bot.block_next_move() {
         Some(result) => {
             let (m, info) = &result;
             *mv = convert(m, info);
-            CCBotPollStatus::CC_MOVE_PROVIDED
-        }
-        None => CCBotPollStatus::CC_BOT_DEAD,
-    }
-}
-
-#[no_mangle]
-extern "C" fn cc_block_next_move_with_plans(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
-    match bot.block_next_move() {
-        Some(result) => {
-            let (m, info) = &result;
-            *mv = convert(m, info);
-            unsafe {
-                *num_plans = convert_plans(info, plans, *num_plans);
+            if !plans.is_null() {
+                unsafe {
+                    *num_plans = convert_plans(info, plans, *num_plans);
+                }
             }
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
