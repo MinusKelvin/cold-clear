@@ -49,6 +49,35 @@ cenum! {
         CC_J => J
     }
 
+    enum CCRotationState => libtetris::RotationState {
+        CC_NORTH => North,
+        CC_SOUTH => South,
+        CC_EAST => East,
+        CC_WEST => West
+    }
+
+    enum CCTspinStatus => libtetris::TspinStatus {
+        CC_NONE => None,
+        CC_MINI => Mini,
+        CC_FULL => Full,
+        CC_PERSISTENT_FULL => PersistentFull
+    }
+
+    enum CCPlacementKind => libtetris::PlacementKind {
+        CC_NONE => None,
+        CC_CLEAR1 => Clear1,
+        CC_CLEAR2 => Clear2,
+        CC_CLEAR3 => Clear3,
+        CC_CLEAR4 => Clear4,
+        CC_MINI_TSPIN => MiniTspin,
+        CC_MINI_TSPIN1 => MiniTspin1,
+        CC_MINI_TSPIN2 => MiniTspin2,
+        CC_TSPIN => Tspin,
+        CC_TSPIN1 => Tspin1,
+        CC_TSPIN2 => Tspin2,
+        CC_TSPIN3 => Tspin3
+    }
+
     enum CCMovement => libtetris::PieceMovement {
         CC_LEFT => Left,
         CC_RIGHT => Right,
@@ -84,6 +113,35 @@ struct CCMove {
     nodes: u32,
     depth: u32,
     original_rank: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct CCFallingPiece {
+    piece: CCPiece,
+    state: CCRotationState,
+    expected_x: [u8; 4],
+    expected_y: [u8; 4],
+    tspin: CCTspinStatus,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct CCLockResult {
+    placement_kind: CCPlacementKind,
+    locked_out: bool,
+    b2b: bool,
+    perfect_clear: bool,
+    combo: u32,
+    garbage_sent: u32,
+    cleared_lines: [i32; 4],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct CCPlan {
+    falling_piece: CCFallingPiece,
+    lock_result: CCLockResult,
 }
 
 #[repr(C)]
@@ -210,7 +268,58 @@ extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
     bot.request_next_move(incoming);
 }
 
-fn convert((m, info): (cold_clear::Move, cold_clear::Info)) -> CCMove {
+fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetris::LockResult)) -> CCPlan {
+    let mut expected_x = [0; 4];
+    let mut expected_y = [0; 4];
+    for (i, &(x, y)) in falling_piece.cells().iter().enumerate() {
+        expected_x[i] = x as u8;
+        expected_y[i] = y as u8;
+    }
+
+    let mut combos = 0 as u32;
+    if let Some(combo) = lock_result.combo {
+        combos = combo as u32;
+    }
+
+    let mut cleared_lines = [0; 4];
+    for (i, &cl) in lock_result.cleared_lines.iter().enumerate() {
+        cleared_lines[i] = cl;
+    }
+
+    CCPlan {
+        falling_piece: CCFallingPiece{
+            piece: falling_piece.kind.0.into(),
+            state: falling_piece.kind.1.into(),
+            expected_x: expected_x,
+            expected_y: expected_y,
+            tspin: falling_piece.tspin.into(),
+        },
+        lock_result: CCLockResult{
+            placement_kind: lock_result.placement_kind.into(),
+            locked_out: lock_result.locked_out,
+            b2b: lock_result.b2b,
+            perfect_clear: lock_result.perfect_clear,
+            combo: combos,
+            garbage_sent: lock_result.garbage_sent,
+            cleared_lines: cleared_lines,
+        },
+    }
+}
+
+unsafe fn convert_plans(info: &cold_clear::Info, cplans: *mut CCPlan, max_plans: u32) -> u32 {
+    let plan_size = max_plans as usize;
+    let rplans = std::slice::from_raw_parts_mut(cplans, plan_size);
+    let mut n = info.plan.len();
+    if n > plan_size {
+        n = plan_size
+    }
+    for i in 0..n {
+        rplans[i] = convert_plan(&info.plan[i]);
+    }
+    return n as u32;
+}
+
+fn convert(m: &cold_clear::Move, info: &cold_clear::Info) -> CCMove {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
     for (i, &(x, y)) in m.expected_location.cells().iter().enumerate() {
@@ -237,7 +346,24 @@ fn convert((m, info): (cold_clear::Move, cold_clear::Info)) -> CCMove {
 extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotPollStatus {
     match bot.poll_next_move() {
         Ok(result) => {
-            *mv = convert(result);
+            let (m, info) = &result;
+            *mv = convert(m, info);
+            CCBotPollStatus::CC_MOVE_PROVIDED
+        }
+        Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
+        Err(cold_clear::BotPollState::Dead) => CCBotPollStatus::CC_BOT_DEAD,
+    }
+}
+
+#[no_mangle]
+extern "C" fn cc_poll_next_move_with_plans(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
+    match bot.poll_next_move() {
+        Ok(result) => {
+            let (m, info) = &result;
+            *mv = convert(m, info);
+            unsafe {
+                *num_plans = convert_plans(info, plans, *num_plans);
+            }
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
@@ -249,7 +375,23 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotP
 extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotPollStatus {
     match bot.block_next_move() {
         Some(result) => {
-            *mv = convert(result);
+            let (m, info) = &result;
+            *mv = convert(m, info);
+            CCBotPollStatus::CC_MOVE_PROVIDED
+        }
+        None => CCBotPollStatus::CC_BOT_DEAD,
+    }
+}
+
+#[no_mangle]
+extern "C" fn cc_block_next_move_with_plans(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
+    match bot.block_next_move() {
+        Some(result) => {
+            let (m, info) = &result;
+            *mv = convert(m, info);
+            unsafe {
+                *num_plans = convert_plans(info, plans, *num_plans);
+            }
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         None => CCBotPollStatus::CC_BOT_DEAD,

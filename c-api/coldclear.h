@@ -8,6 +8,17 @@ typedef enum CCPiece {
     CC_I, CC_T, CC_O, CC_S, CC_Z, CC_L, CC_J
 } CCPiece;
 
+typedef enum CCRotationState {
+    CC_NORTH, CC_SOUTH, CC_EAST, CC_WEST
+} CCRotationState;
+
+typedef enum CCTspinStatus {
+    CC_NONE_TSPIN_STATUS,
+    CC_MINI,
+    CC_FULL,
+    CC_PERSISTENT_FULL
+} CCTspinStatus;
+
 typedef enum CCMovement {
     CC_LEFT, CC_RIGHT,
     CC_CW, CC_CCW,
@@ -26,6 +37,44 @@ typedef enum CCBotPollStatus {
     CC_WAITING,
     CC_BOT_DEAD
 } CCBotPollStatus;
+
+typedef struct CCFallingPiece {
+    CCPiece piece;
+    CCRotationState state;
+    uint8_t expected_x[4];
+    uint8_t expected_y[4];
+    CCTspinStatus tspin;
+} CCFallingPiece;
+
+typedef enum CCPlacementKind {
+    CC_NONE_PLACEMENT_KIND,
+    CC_CLEAR1,
+    CC_CLEAR2,
+    CC_CLEAR3,
+    CC_CLEAR4,
+    CC_MINI_TSPIN,
+    CC_MINI_TSPIN1,
+    CC_MINI_TSPIN2,
+    CC_TSPIN,
+    CC_TSPIN1,
+    CC_TSPIN2,
+    CC_TSPIN3
+} CCPlacementKind;
+
+typedef struct CCLockResult {
+    CCPlacementKind placement_kind;
+    bool locked_out;
+    bool b2b;
+    bool perfect_clear;
+    uint32_t combo;
+    uint32_t garbage_sent;
+    int32_t cleared_lines[4];
+} CCLockResult;
+
+typedef struct CCPlan {
+    CCFallingPiece falling_piece;
+    CCLockResult lock_result;
+} CCPlan;
 
 typedef struct CCMove {
     /* Whether hold is required */
@@ -165,6 +214,13 @@ void cc_request_next_move(CCAsyncBot *bot, uint32_t incoming);
  */
 CCBotPollStatus cc_poll_next_move(CCAsyncBot *bot, CCMove *move);
 
+/* Same to cc_poll_next_move_with_plans, but also provide plans along with the next move.
+ * Caller is responsible for allocating space for array of CCPlan.
+ * The num_plans parameter is used for both input and output. Caller passes in the size of
+ * the allocated array, this function returns the number of plans actually provided.
+ */
+CCBotPollStatus cc_poll_next_move_with_plans(CCAsyncBot *bot, CCMove *move, CCPlan* plans, uint32_t *num_plans);
+
 /* This function is the same as `cc_poll_next_move` except when `cc_poll_next_move` would return
  * `CC_WAITING` it instead waits until the bot has made a decision.
  *
@@ -172,6 +228,13 @@ CCBotPollStatus cc_poll_next_move(CCAsyncBot *bot, CCMove *move);
  * If the bot has found that it cannot survive, this function will return `CC_BOT_DEAD`
  */
 CCBotPollStatus cc_block_next_move(CCAsyncBot *bot, CCMove *move);
+
+/* Same to cc_block_next_move, but also provide plans along with the next move.
+ * Caller is responsible for allocating space for array of CCPlan.
+ * The num_plans parameter is used for both input and output. Caller passes in the size of
+ * the allocated array, this function returns the number of plans actually provided.
+ */
+CCBotPollStatus cc_block_next_move_with_plans(CCAsyncBot *bot, CCMove *move, CCPlan* plans, uint32_t *num_plans);
 
 /* Returns the default options in the options parameter */
 void cc_default_options(CCOptions *options);
