@@ -104,7 +104,7 @@ impl FallingPiece {
             self.x = initial.x + dx;
             self.y = initial.y + dy;
             if !board.obstructed(self) {
-                if target.0 == Piece::T && self.tspin != TspinStatus::PersistentFull {
+                if target.0 == Piece::T {
                     let mut mini_corners = 0;
                     for &(dx, dy) in &target.1.mini_tspin_corners() {
                         if board.occupied(self.x + dx, self.y + dy) {
@@ -120,19 +120,7 @@ impl FallingPiece {
                     }
 
                     if non_mini_corners + mini_corners >= 3 {
-                        if i == 4 {
-                            // Rotation point 5 is never a Mini T-Spin
-
-                            // The leaked 2009 guideline says that rotations made after using the
-                            // TST twist stay as full tspins, not minis. Example:
-                            // http://harddrop.com/fumen/?v115@4gB8IeA8CeE8AeH8CeG8BeD8JeVBnvhC9rflrBAAA
-                            // That guideline contains no examples of this, and this isn't the case
-                            // in recent guideline games such as Puyo Puyo Tetris.
-                            // For now, we won't implement it.
-                            
-                            // self.tspin = TspinStatus::PersistentFull;
-                            self.tspin = TspinStatus::Full;
-                        } else if mini_corners == 2 {
+                        if i == 4 || mini_corners == 2 {
                             self.tspin = TspinStatus::Full;
                         } else {
                             self.tspin = TspinStatus::Mini;
@@ -188,7 +176,6 @@ pub enum TspinStatus {
     None,
     Mini,
     Full,
-    PersistentFull
 }
 
 impl RotationState {

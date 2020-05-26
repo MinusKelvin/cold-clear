@@ -1,8 +1,6 @@
 use libtetris::{ LockResult, Board, Piece };
 use crate::tree::MoveCandidate;
 
-mod misalike;
-pub use self::misalike::Misalike;
 mod standard;
 pub use self::standard::Standard;
 pub mod changed;
