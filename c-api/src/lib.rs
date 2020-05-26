@@ -305,17 +305,21 @@ fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetr
     }
 }
 
-unsafe fn convert_plans(info: &cold_clear::Info, cplans: *mut CCPlan, max_plans: u32) -> u32 {
-    let plan_size = max_plans as usize;
-    let rplans = std::slice::from_raw_parts_mut(cplans, plan_size);
-    let mut n = info.plan.len();
-    if n > plan_size {
-        n = plan_size
+fn convert_plans(info: &cold_clear::Info, plans: *mut CCPlan, num_plans: *mut u32)  {
+    if !plans.is_null() {
+        unsafe {
+            let plan_size = *num_plans as usize;
+            let rplans = std::slice::from_raw_parts_mut(plans, plan_size);
+            let mut n = info.plan.len();
+            if n > plan_size {
+                n = plan_size
+            }
+            for i in 0..n {
+                rplans[i] = convert_plan(&info.plan[i]);
+            }
+            *num_plans = n as u32;
+        }
     }
-    for i in 0..n {
-        rplans[i] = convert_plan(&info.plan[i]);
-    }
-    return n as u32;
 }
 
 fn convert(m: &cold_clear::Move, info: &cold_clear::Info) -> CCMove {
@@ -342,16 +346,12 @@ fn convert(m: &cold_clear::Move, info: &cold_clear::Info) -> CCMove {
 }
 
 #[no_mangle]
-extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
+extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: *mut u32) -> CCBotPollStatus {
     match bot.poll_next_move() {
         Ok(result) => {
             let (m, info) = &result;
             *mv = convert(m, info);
-            if !plans.is_null() {
-                unsafe {
-                    *num_plans = convert_plans(info, plans, *num_plans);
-                }
-            }
+            convert_plans(info, plans, num_plans);
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
@@ -360,16 +360,12 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *m
 }
 
 #[no_mangle]
-extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: &mut u32) -> CCBotPollStatus {
+extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: *mut u32) -> CCBotPollStatus {
     match bot.block_next_move() {
         Some(result) => {
             let (m, info) = &result;
             *mv = convert(m, info);
-            if !plans.is_null() {
-                unsafe {
-                    *num_plans = convert_plans(info, plans, *num_plans);
-                }
-            }
+            convert_plans(info, plans, num_plans);
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         None => CCBotPollStatus::CC_BOT_DEAD,
