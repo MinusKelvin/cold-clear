@@ -49,19 +49,6 @@ cenum! {
         CC_J => J
     }
 
-    enum CCRotationState => libtetris::RotationState {
-        CC_NORTH => North,
-        CC_SOUTH => South,
-        CC_EAST => East,
-        CC_WEST => West
-    }
-
-    enum CCTspinStatus => libtetris::TspinStatus {
-        CC_NONE => None,
-        CC_MINI => Mini,
-        CC_FULL => Full
-    }
-
     enum CCPlacementKind => libtetris::PlacementKind {
         CC_NONE => None,
         CC_CLEAR1 => Clear1,
@@ -116,31 +103,12 @@ struct CCMove {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-struct CCFallingPiece {
+struct CCPlan {
     piece: CCPiece,
-    state: CCRotationState,
     expected_x: [u8; 4],
     expected_y: [u8; 4],
-    tspin: CCTspinStatus,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-struct CCLockResult {
     placement_kind: CCPlacementKind,
-    locked_out: bool,
-    b2b: bool,
-    perfect_clear: bool,
-    combo: u32,
-    garbage_sent: u32,
     cleared_lines: [i32; 4],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-struct CCPlan {
-    falling_piece: CCFallingPiece,
-    lock_result: CCLockResult,
 }
 
 #[repr(C)]
@@ -275,33 +243,17 @@ fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetr
         expected_y[i] = y as u8;
     }
 
-    let mut combos = 0 as u32;
-    if let Some(combo) = lock_result.combo {
-        combos = combo as u32;
-    }
-
     let mut cleared_lines = [0; 4];
     for (i, &cl) in lock_result.cleared_lines.iter().enumerate() {
         cleared_lines[i] = cl;
     }
 
     CCPlan {
-        falling_piece: CCFallingPiece{
-            piece: falling_piece.kind.0.into(),
-            state: falling_piece.kind.1.into(),
-            expected_x: expected_x,
-            expected_y: expected_y,
-            tspin: falling_piece.tspin.into(),
-        },
-        lock_result: CCLockResult{
-            placement_kind: lock_result.placement_kind.into(),
-            locked_out: lock_result.locked_out,
-            b2b: lock_result.b2b,
-            perfect_clear: lock_result.perfect_clear,
-            combo: combos,
-            garbage_sent: lock_result.garbage_sent,
-            cleared_lines: cleared_lines,
-        },
+        piece: falling_piece.kind.0.into(),
+        expected_x: expected_x,
+        expected_y: expected_y,
+        placement_kind: lock_result.placement_kind.into(),
+        cleared_lines: cleared_lines,
     }
 }
 

@@ -8,16 +8,6 @@ typedef enum CCPiece {
     CC_I, CC_T, CC_O, CC_S, CC_Z, CC_L, CC_J
 } CCPiece;
 
-typedef enum CCRotationState {
-    CC_NORTH, CC_SOUTH, CC_EAST, CC_WEST
-} CCRotationState;
-
-typedef enum CCTspinStatus {
-    CC_NONE_TSPIN_STATUS,
-    CC_MINI,
-    CC_FULL,
-} CCTspinStatus;
-
 typedef enum CCMovement {
     CC_LEFT, CC_RIGHT,
     CC_CW, CC_CCW,
@@ -37,14 +27,6 @@ typedef enum CCBotPollStatus {
     CC_BOT_DEAD
 } CCBotPollStatus;
 
-typedef struct CCFallingPiece {
-    CCPiece piece;
-    CCRotationState state;
-    uint8_t expected_x[4];
-    uint8_t expected_y[4];
-    CCTspinStatus tspin;
-} CCFallingPiece;
-
 typedef enum CCPlacementKind {
     CC_NONE_PLACEMENT_KIND,
     CC_CLEAR1,
@@ -60,19 +42,12 @@ typedef enum CCPlacementKind {
     CC_TSPIN3
 } CCPlacementKind;
 
-typedef struct CCLockResult {
-    CCPlacementKind placement_kind;
-    bool locked_out;
-    bool b2b;
-    bool perfect_clear;
-    uint32_t combo;
-    uint32_t garbage_sent;
-    int32_t cleared_lines[4];
-} CCLockResult;
-
 typedef struct CCPlan {
-    CCFallingPiece falling_piece;
-    CCLockResult lock_result;
+    CCPiece piece;
+    uint8_t expected_x[4];
+    uint8_t expected_y[4];
+    CCPlacementKind placement_kind;
+    int32_t cleared_lines[4];
 } CCPlan;
 
 typedef struct CCMove {
