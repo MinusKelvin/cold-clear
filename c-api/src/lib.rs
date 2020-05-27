@@ -49,19 +49,10 @@ cenum! {
         CC_J => J
     }
 
-    enum CCPlacementKind => libtetris::PlacementKind {
+    enum CCTspinStatus => libtetris::TspinStatus {
         CC_NONE => None,
-        CC_CLEAR1 => Clear1,
-        CC_CLEAR2 => Clear2,
-        CC_CLEAR3 => Clear3,
-        CC_CLEAR4 => Clear4,
-        CC_MINI_TSPIN => MiniTspin,
-        CC_MINI_TSPIN1 => MiniTspin1,
-        CC_MINI_TSPIN2 => MiniTspin2,
-        CC_TSPIN => Tspin,
-        CC_TSPIN1 => Tspin1,
-        CC_TSPIN2 => Tspin2,
-        CC_TSPIN3 => Tspin3
+        CC_MINI => Mini,
+        CC_FULL => Full
     }
 
     enum CCMovement => libtetris::PieceMovement {
@@ -105,9 +96,9 @@ struct CCMove {
 #[derive(Copy, Clone, Debug)]
 struct CCPlan {
     piece: CCPiece,
+    tspin: CCTspinStatus,
     expected_x: [u8; 4],
     expected_y: [u8; 4],
-    placement_kind: CCPlacementKind,
     cleared_lines: [i32; 4],
 }
 
@@ -243,16 +234,16 @@ fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetr
         expected_y[i] = y as u8;
     }
 
-    let mut cleared_lines = [0; 4];
+    let mut cleared_lines = [-1; 4];
     for (i, &cl) in lock_result.cleared_lines.iter().enumerate() {
         cleared_lines[i] = cl;
     }
 
     CCPlan {
         piece: falling_piece.kind.0.into(),
+        tspin: falling_piece.tspin.into(),
         expected_x: expected_x,
         expected_y: expected_y,
-        placement_kind: lock_result.placement_kind.into(),
         cleared_lines: cleared_lines,
     }
 }

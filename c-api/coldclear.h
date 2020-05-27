@@ -8,6 +8,12 @@ typedef enum CCPiece {
     CC_I, CC_T, CC_O, CC_S, CC_Z, CC_L, CC_J
 } CCPiece;
 
+typedef enum CCTspinStatus {
+    CC_NONE_TSPIN_STATUS,
+    CC_MINI,
+    CC_FULL,
+} CCTspinStatus;
+
 typedef enum CCMovement {
     CC_LEFT, CC_RIGHT,
     CC_CW, CC_CCW,
@@ -27,26 +33,15 @@ typedef enum CCBotPollStatus {
     CC_BOT_DEAD
 } CCBotPollStatus;
 
-typedef enum CCPlacementKind {
-    CC_NONE_PLACEMENT_KIND,
-    CC_CLEAR1,
-    CC_CLEAR2,
-    CC_CLEAR3,
-    CC_CLEAR4,
-    CC_MINI_TSPIN,
-    CC_MINI_TSPIN1,
-    CC_MINI_TSPIN2,
-    CC_TSPIN,
-    CC_TSPIN1,
-    CC_TSPIN2,
-    CC_TSPIN3
-} CCPlacementKind;
-
 typedef struct CCPlan {
     CCPiece piece;
+    CCTspinStatus tspin;
+
+    /* Expected cell coordinates of placement, (0, 0) being the bottom left */
     uint8_t expected_x[4];
     uint8_t expected_y[4];
-    CCPlacementKind placement_kind;
+
+    /* Expected lines that will be cleared after placement. 0 being the bottom line, and -1 being not cleared */
     int32_t cleared_lines[4];
 } CCPlan;
 
