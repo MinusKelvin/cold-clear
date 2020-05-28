@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 type CCAsyncBot = cold_clear::Interface;
 
 macro_rules! cenum {
@@ -250,7 +252,11 @@ fn convert_plan_placement(
     }
 }
 
-fn convert_plan(info: &cold_clear::Info, plan: *mut CCPlanPlacement, plan_length: *mut u32) {
+fn convert_plan(
+    info: &cold_clear::Info,
+    plan: *mut MaybeUninit<CCPlanPlacement>,
+    plan_length: *mut u32
+) {
     if !plan.is_null() && !plan_length.is_null() {
         let plan_length = unsafe { &mut *plan_length };
         let plan = unsafe {
@@ -258,7 +264,7 @@ fn convert_plan(info: &cold_clear::Info, plan: *mut CCPlanPlacement, plan_length
         };
         let n = info.plan.len().min(plan.len());
         for i in 0..n {
-            plan[i] = convert_plan_placement(&info.plan[i]);
+            plan[i] = MaybeUninit::new(convert_plan_placement(&info.plan[i]));
         }
         *plan_length = n as u32;
     }
@@ -289,12 +295,15 @@ fn convert(m: cold_clear::Move, info: cold_clear::Info) -> CCMove {
 
 #[no_mangle]
 extern "C" fn cc_poll_next_move(
-    bot: &mut CCAsyncBot, mv: &mut CCMove, plan: *mut CCPlanPlacement, plan_length: *mut u32
+    bot: &mut CCAsyncBot,
+    mv: *mut CCMove,
+    plan: *mut MaybeUninit<CCPlanPlacement>,
+    plan_length: *mut u32
 ) -> CCBotPollStatus {
     match bot.poll_next_move() {
         Ok((m, info)) => {
             convert_plan(&info, plan, plan_length);
-            *mv = convert(m, info);
+            unsafe { mv.write(convert(m, info)) };
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
@@ -304,12 +313,15 @@ extern "C" fn cc_poll_next_move(
 
 #[no_mangle]
 extern "C" fn cc_block_next_move(
-    bot: &mut CCAsyncBot, mv: &mut CCMove, plan: *mut CCPlanPlacement, plan_length: *mut u32
+    bot: &mut CCAsyncBot,
+    mv: *mut CCMove,
+    plan: *mut MaybeUninit<CCPlanPlacement>,
+    plan_length: *mut u32
 ) -> CCBotPollStatus {
     match bot.block_next_move() {
         Some((m, info)) => {
             convert_plan(&info, plan, plan_length);
-            *mv = convert(m, info);
+            unsafe { mv.write(convert(m, info)) };
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         None => CCBotPollStatus::CC_BOT_DEAD,
@@ -317,9 +329,9 @@ extern "C" fn cc_block_next_move(
 }
 
 #[no_mangle]
-extern "C" fn cc_default_options(options: &mut CCOptions) {
+unsafe extern "C" fn cc_default_options(options: *mut CCOptions) {
     let o = cold_clear::Options::default();
-    *options = CCOptions {
+    options.write(CCOptions {
         max_nodes: o.max_nodes,
         min_nodes: o.min_nodes,
         use_hold: o.use_hold,
@@ -327,11 +339,11 @@ extern "C" fn cc_default_options(options: &mut CCOptions) {
         pcloop: o.pcloop,
         mode: o.mode.into(),
         threads: o.threads
-    }
+    });
 }
 
-fn put_weights(weights: &mut CCWeights, w: cold_clear::evaluation::Standard) {
-    *weights = CCWeights {
+fn convert_weights(w: cold_clear::evaluation::Standard) -> CCWeights {
+    CCWeights {
         back_to_back: w.back_to_back,
         bumpiness: w.bumpiness,
         bumpiness_sq: w.bumpiness_sq,
@@ -370,11 +382,11 @@ fn put_weights(weights: &mut CCWeights, w: cold_clear::evaluation::Standard) {
 }
 
 #[no_mangle]
-extern "C" fn cc_default_weights(weights: &mut CCWeights) {
-    put_weights(weights, cold_clear::evaluation::Standard::default())
+unsafe extern "C" fn cc_default_weights(weights: *mut CCWeights) {
+    weights.write(convert_weights(cold_clear::evaluation::Standard::default()));
 }
 
 #[no_mangle]
-extern "C" fn cc_fast_weights(weights: &mut CCWeights) {
-    put_weights(weights, cold_clear::evaluation::Standard::fast_config())
+unsafe extern "C" fn cc_fast_weights(weights: *mut CCWeights) {
+    weights.write(convert_weights(cold_clear::evaluation::Standard::fast_config()));
 }
