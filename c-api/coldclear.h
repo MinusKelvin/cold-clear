@@ -8,6 +8,12 @@ typedef enum CCPiece {
     CC_I, CC_T, CC_O, CC_S, CC_Z, CC_L, CC_J
 } CCPiece;
 
+typedef enum CCTspinStatus {
+    CC_NONE_TSPIN_STATUS,
+    CC_MINI,
+    CC_FULL,
+} CCTspinStatus;
+
 typedef enum CCMovement {
     CC_LEFT, CC_RIGHT,
     CC_CW, CC_CCW,
@@ -26,6 +32,18 @@ typedef enum CCBotPollStatus {
     CC_WAITING,
     CC_BOT_DEAD
 } CCBotPollStatus;
+
+typedef struct CCPlanPlacement {
+    CCPiece piece;
+    CCTspinStatus tspin;
+
+    /* Expected cell coordinates of placement, (0, 0) being the bottom left */
+    uint8_t expected_x[4];
+    uint8_t expected_y[4];
+
+    /* Expected lines that will be cleared after placement, with -1 indicating no line */
+    int32_t cleared_lines[4];
+} CCPlanPlacement;
 
 typedef struct CCMove {
     /* Whether hold is required */
@@ -159,11 +177,20 @@ void cc_request_next_move(CCAsyncBot *bot, uint32_t incoming);
  * If the piece couldn't be placed in the expected location, you must call `cc_reset_async` to
  * reset the game field, back-to-back status, and combo values.
  * 
+ * If `plan` and `plan_length` are not `NULL` and this function provides a move, a placement plan
+ * will be returned in the array pointed to by `plan`. `plan_length` should point to the length
+ * of the array, and the number of plan placements provided will be returned through this pointer.
+ * 
  * If the move has been provided, this function will return `CC_MOVE_PROVIDED`.
  * If the bot has not produced a result, this function will return `CC_WAITING`.
  * If the bot has found that it cannot survive, this function will return `CC_BOT_DEAD`
  */
-CCBotPollStatus cc_poll_next_move(CCAsyncBot *bot, CCMove *move);
+CCBotPollStatus cc_poll_next_move(
+    CCAsyncBot *bot,
+    CCMove *move,
+    CCPlanPlacement* plan,
+    uint32_t *plan_length
+);
 
 /* This function is the same as `cc_poll_next_move` except when `cc_poll_next_move` would return
  * `CC_WAITING` it instead waits until the bot has made a decision.
@@ -171,7 +198,12 @@ CCBotPollStatus cc_poll_next_move(CCAsyncBot *bot, CCMove *move);
  * If the move has been provided, this function will return `CC_MOVE_PROVIDED`.
  * If the bot has found that it cannot survive, this function will return `CC_BOT_DEAD`
  */
-CCBotPollStatus cc_block_next_move(CCAsyncBot *bot, CCMove *move);
+CCBotPollStatus cc_block_next_move(
+    CCAsyncBot *bot,
+    CCMove *move,
+    CCPlanPlacement* plan,
+    uint32_t *plan_length
+);
 
 /* Returns the default options in the options parameter */
 void cc_default_options(CCOptions *options);
