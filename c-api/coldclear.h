@@ -33,7 +33,7 @@ typedef enum CCBotPollStatus {
     CC_BOT_DEAD
 } CCBotPollStatus;
 
-typedef struct CCPlan {
+typedef struct CCPlanPlacement {
     CCPiece piece;
     CCTspinStatus tspin;
 
@@ -41,9 +41,9 @@ typedef struct CCPlan {
     uint8_t expected_x[4];
     uint8_t expected_y[4];
 
-    /* Expected lines that will be cleared after placement. 0 being the bottom line, and -1 being not cleared */
+    /* Expected lines that will be cleared after placement, with -1 indicating no line */
     int32_t cleared_lines[4];
-} CCPlan;
+} CCPlanPlacement;
 
 typedef struct CCMove {
     /* Whether hold is required */
@@ -177,26 +177,33 @@ void cc_request_next_move(CCAsyncBot *bot, uint32_t incoming);
  * If the piece couldn't be placed in the expected location, you must call `cc_reset_async` to
  * reset the game field, back-to-back status, and combo values.
  * 
- * If plans is not null, caller is responsible for allocating space for array of CCPlan.
- * The num_plans parameter is used for both input and output. Caller passes in the size of
- * the allocated array, this function returns the number of plans actually provided.
+ * If `plan` and `plan_length` are not `NULL` and this function provides a move, a placement plan
+ * will be returned in the array pointed to by `plan`. `plan_length` should point to the length
+ * of the array, and the number of plan placements provided will be returned through this pointer.
  * 
  * If the move has been provided, this function will return `CC_MOVE_PROVIDED`.
  * If the bot has not produced a result, this function will return `CC_WAITING`.
  * If the bot has found that it cannot survive, this function will return `CC_BOT_DEAD`
  */
-CCBotPollStatus cc_poll_next_move(CCAsyncBot *bot, CCMove *move, CCPlan* plans, uint32_t *num_plans);
+CCBotPollStatus cc_poll_next_move(
+    CCAsyncBot *bot,
+    CCMove *move,
+    CCPlanPlacement* plan,
+    uint32_t *plan_length
+);
 
 /* This function is the same as `cc_poll_next_move` except when `cc_poll_next_move` would return
  * `CC_WAITING` it instead waits until the bot has made a decision.
- * If plans is not null, caller is responsible for allocating space for array of CCPlan.
- * The num_plans parameter is used for both input and output. Caller passes in the size of
- * the allocated array, this function returns the number of plans actually provided.
  *
  * If the move has been provided, this function will return `CC_MOVE_PROVIDED`.
  * If the bot has found that it cannot survive, this function will return `CC_BOT_DEAD`
  */
-CCBotPollStatus cc_block_next_move(CCAsyncBot *bot, CCMove *move, CCPlan* plans, uint32_t *num_plans);
+CCBotPollStatus cc_block_next_move(
+    CCAsyncBot *bot,
+    CCMove *move,
+    CCPlanPlacement* plan,
+    uint32_t *plan_length
+);
 
 /* Returns the default options in the options parameter */
 void cc_default_options(CCOptions *options);

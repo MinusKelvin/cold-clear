@@ -94,7 +94,7 @@ struct CCMove {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-struct CCPlan {
+struct CCPlanPlacement {
     piece: CCPiece,
     tspin: CCTspinStatus,
     expected_x: [u8; 4],
@@ -226,7 +226,9 @@ extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
     bot.request_next_move(incoming);
 }
 
-fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetris::LockResult)) -> CCPlan {
+fn convert_plan_placement(
+    (falling_piece, lock_result): &(libtetris::FallingPiece, libtetris::LockResult)
+) -> CCPlanPlacement {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
     for (i, &(x, y)) in falling_piece.cells().iter().enumerate() {
@@ -239,7 +241,7 @@ fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetr
         cleared_lines[i] = cl;
     }
 
-    CCPlan {
+    CCPlanPlacement {
         piece: falling_piece.kind.0.into(),
         tspin: falling_piece.tspin.into(),
         expected_x: expected_x,
@@ -248,24 +250,21 @@ fn convert_plan((falling_piece, lock_result): &(libtetris::FallingPiece, libtetr
     }
 }
 
-fn convert_plans(info: &cold_clear::Info, plans: *mut CCPlan, num_plans: *mut u32)  {
-    if !plans.is_null() {
-        unsafe {
-            let plan_size = *num_plans as usize;
-            let rplans = std::slice::from_raw_parts_mut(plans, plan_size);
-            let mut n = info.plan.len();
-            if n > plan_size {
-                n = plan_size
-            }
-            for i in 0..n {
-                rplans[i] = convert_plan(&info.plan[i]);
-            }
-            *num_plans = n as u32;
+fn convert_plan(info: &cold_clear::Info, plan: *mut CCPlanPlacement, plan_length: *mut u32) {
+    if !plan.is_null() && !plan_length.is_null() {
+        let plan_length = unsafe { &mut *plan_length };
+        let plan = unsafe {
+            std::slice::from_raw_parts_mut(plan, *plan_length as usize)
+        };
+        let n = info.plan.len().min(plan.len());
+        for i in 0..n {
+            plan[i] = convert_plan_placement(&info.plan[i]);
         }
+        *plan_length = n as u32;
     }
 }
 
-fn convert(m: &cold_clear::Move, info: &cold_clear::Info) -> CCMove {
+fn convert(m: cold_clear::Move, info: cold_clear::Info) -> CCMove {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
     for (i, &(x, y)) in m.expected_location.cells().iter().enumerate() {
@@ -289,12 +288,13 @@ fn convert(m: &cold_clear::Move, info: &cold_clear::Info) -> CCMove {
 }
 
 #[no_mangle]
-extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: *mut u32) -> CCBotPollStatus {
+extern "C" fn cc_poll_next_move(
+    bot: &mut CCAsyncBot, mv: &mut CCMove, plan: *mut CCPlanPlacement, plan_length: *mut u32
+) -> CCBotPollStatus {
     match bot.poll_next_move() {
-        Ok(result) => {
-            let (m, info) = &result;
+        Ok((m, info)) => {
+            convert_plan(&info, plan, plan_length);
             *mv = convert(m, info);
-            convert_plans(info, plans, num_plans);
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
@@ -303,12 +303,13 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *m
 }
 
 #[no_mangle]
-extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove, plans: *mut CCPlan, num_plans: *mut u32) -> CCBotPollStatus {
+extern "C" fn cc_block_next_move(
+    bot: &mut CCAsyncBot, mv: &mut CCMove, plan: *mut CCPlanPlacement, plan_length: *mut u32
+) -> CCBotPollStatus {
     match bot.block_next_move() {
-        Some(result) => {
-            let (m, info) = &result;
+        Some((m, info)) => {
+            convert_plan(&info, plan, plan_length);
             *mv = convert(m, info);
-            convert_plans(info, plans, num_plans);
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         None => CCBotPollStatus::CC_BOT_DEAD,
