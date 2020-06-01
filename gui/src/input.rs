@@ -42,8 +42,6 @@ impl InputSource for BotInput {
             match event {
                 Event::PieceSpawned { new_in_queue } => {
                     self.interface.add_next_piece(*new_in_queue);
-                }
-                Event::FrameBeforePieceSpawns => {
                     if self.executing.is_none() {
                         self.interface.request_next_move(incoming);
                     }
@@ -55,6 +53,13 @@ impl InputSource for BotInput {
             }
         }
         let mut info = None;
+        if let Ok((mv, i)) = self.interface.poll_next_move() {
+            info = Some(i);
+            self.executing = Some((
+                mv.expected_location,
+                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), self.speed_limit)
+            ));
+        }
         if let Some((expected, ref mut executor)) = self.executing {
             if let Some(loc) = executor.update(&mut self.controller, board, events) {
                 if loc != expected {
@@ -62,12 +67,6 @@ impl InputSource for BotInput {
                 }
                 self.executing = None;
             }
-        } else if let Ok((mv, i)) = self.interface.poll_next_move() {
-            info = Some(i);
-            self.executing = Some((
-                mv.expected_location,
-                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), self.speed_limit)
-            ));
         }
         info
     }
