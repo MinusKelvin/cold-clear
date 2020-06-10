@@ -42,6 +42,21 @@ impl<R: Row> Board<R> {
         }
     }
 
+    /// Creates a blank board with an empty queue.
+    pub fn new_from_exist_board(field: [[bool; 10]; 40], bag_remain: u32, hold: Option<Piece>, b2b: bool, combo: u32) -> Self {
+        let mut board = Board {
+            cells: [*R::EMPTY; 40].into(),
+            column_heights: [0; 10],
+            combo: combo,
+            b2b_bonus: b2b,
+            hold_piece: hold,
+            next_pieces: VecDeque::new(),
+            bag: EnumSet::from_bits(bag_remain as u128),
+        };
+        board.set_field(field);
+        board
+    }
+
     /// Randomly selects a piece from the bag.
     /// 
     /// This function does not remove the generated piece from the bag.

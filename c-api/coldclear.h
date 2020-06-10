@@ -118,6 +118,21 @@ typedef struct CCWeights {
  */
 CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights);
 
+/* Launches a bot thread with a predefined field, empty queue, remaining pieces in the bag, hold piece,
+ * back-to-back status, and combo count. This allows you to start CC from the middle of a game.
+ * 
+ * The bag_remain parameter is a bit field indicating which pieces are still in the bag. Each bit
+ * correspond to CCPiece enum. This must match the next few pieces provided to CC via
+ * cc_add_next_piece_async later.
+ * 
+ * The field parameter is a pointer to the start of an array of 400 booleans in row major order,
+ * with index 0 being the bottom-left cell.
+ * 
+ * The hold parameter is a pointer to the current hold piece, or `NULL` if there's no hold piece now.
+ */
+CCAsyncBot *cc_launch_with_board_async(CCOptions *options, CCWeights *weights, bool *field,
+    uint32_t bag_remain, CCPiece *hold, bool b2b, uint32_t combo);
+
 /* Terminates the bot thread and frees the memory associated with the bot.
  */
 void cc_destroy_async(CCAsyncBot *bot);
