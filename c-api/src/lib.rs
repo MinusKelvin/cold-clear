@@ -1,4 +1,5 @@
 use std::mem::MaybeUninit;
+use enumset::EnumSet;
 
 type CCAsyncBot = cold_clear::Interface;
 
@@ -219,7 +220,7 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
 extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeights, field: &[[bool; 10]; 40], 
     bag_remain: u32, hold: *mut CCPiece, b2b: bool, combo: u32) -> *mut CCAsyncBot {
     Box::into_raw(Box::new(cold_clear::Interface::launch(
-        libtetris::Board::new_from_exist_board(*field, bag_remain, convert_hold(hold), b2b, combo),
+        libtetris::Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
         convert_from_c_options(options),
         convert_from_c_weights(weights)
     )))

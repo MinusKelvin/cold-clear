@@ -43,7 +43,7 @@ impl<R: Row> Board<R> {
     }
 
     /// Creates a blank board with an empty queue.
-    pub fn new_from_exist_board(field: [[bool; 10]; 40], bag_remain: u32, hold: Option<Piece>, b2b: bool, combo: u32) -> Self {
+    pub fn new_with_state(field: [[bool; 10]; 40], bag_remain: EnumSet<Piece>, hold: Option<Piece>, b2b: bool, combo: u32) -> Self {
         let mut board = Board {
             cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
@@ -51,7 +51,7 @@ impl<R: Row> Board<R> {
             b2b_bonus: b2b,
             hold_piece: hold,
             next_pieces: VecDeque::new(),
-            bag: EnumSet::from_bits(bag_remain as u128),
+            bag: bag_remain,
         };
         board.set_field(field);
         board
