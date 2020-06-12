@@ -42,7 +42,7 @@ impl<R: Row> Board<R> {
         }
     }
 
-    /// Creates a blank board with an empty queue.
+    /// Creates a board with existing field, remain pieces in the bag, hold piece, back-to-back status and combo count.
     pub fn new_with_state(field: [[bool; 10]; 40], bag_remain: EnumSet<Piece>, hold: Option<Piece>, b2b: bool, combo: u32) -> Self {
         let mut board = Board {
             cells: [*R::EMPTY; 40].into(),
