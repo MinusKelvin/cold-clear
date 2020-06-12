@@ -158,8 +158,7 @@ fn convert_hold(hold: *mut CCPiece) -> Option<libtetris::Piece> {
     if hold.is_null() {
         None
     } else {
-        let h = unsafe {*hold};
-        Some(h.into())
+        Some(unsafe{*hold}.into())
     }
 }
 
