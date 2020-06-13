@@ -1,4 +1,5 @@
 use std::mem::MaybeUninit;
+use enumset::EnumSet;
 
 type CCAsyncBot = cold_clear::Interface;
 
@@ -153,56 +154,83 @@ struct CCWeights {
     use_bag: bool,
 }
 
+fn convert_hold(hold: *mut CCPiece) -> Option<libtetris::Piece> {
+    if hold.is_null() {
+        None
+    } else {
+        Some(unsafe{*hold}.into())
+    }
+}
+
+
+fn convert_from_c_options(options: &CCOptions) -> cold_clear::Options {
+    cold_clear::Options {
+        max_nodes: options.max_nodes,
+        min_nodes: options.min_nodes,
+        use_hold: options.use_hold,
+        speculate: options.speculate,
+        pcloop: options.pcloop,
+        mode: options.mode.into(),
+        threads: options.threads
+    }
+}
+
+fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standard {
+    cold_clear::evaluation::Standard {
+        back_to_back: weights.back_to_back,
+        bumpiness: weights.bumpiness,
+        bumpiness_sq: weights.bumpiness_sq,
+        height: weights.height,
+        top_half: weights.top_half,
+        top_quarter: weights.top_quarter,
+        jeopardy: weights.jeopardy,
+        cavity_cells: weights.cavity_cells,
+        cavity_cells_sq: weights.cavity_cells_sq,
+        overhang_cells: weights.overhang_cells,
+        overhang_cells_sq: weights.overhang_cells_sq,
+        covered_cells: weights.covered_cells,
+        covered_cells_sq: weights.covered_cells_sq,
+        tslot: weights.tslot,
+        well_depth: weights.well_depth,
+        max_well_depth: weights.max_well_depth,
+        well_column: weights.well_column,
+
+        b2b_clear: weights.b2b_clear,
+        clear1: weights.clear1,
+        clear2: weights.clear2,
+        clear3: weights.clear3,
+        clear4: weights.clear4,
+        tspin1: weights.tspin1,
+        tspin2: weights.tspin2,
+        tspin3: weights.tspin3,
+        mini_tspin1: weights.mini_tspin1,
+        mini_tspin2: weights.mini_tspin2,
+        perfect_clear: weights.perfect_clear,
+        combo_garbage: weights.combo_garbage,
+        move_time: weights.move_time,
+        wasted_t: weights.wasted_t,
+
+        use_bag: weights.use_bag,
+        sub_name: None
+    }
+}
+
+#[no_mangle]
+extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeights, field: &[[bool; 10]; 40], 
+    bag_remain: u32, hold: *mut CCPiece, b2b: bool, combo: u32) -> *mut CCAsyncBot {
+    Box::into_raw(Box::new(cold_clear::Interface::launch(
+        libtetris::Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
+        convert_from_c_options(options),
+        convert_from_c_weights(weights)
+    )))
+}
+
 #[no_mangle]
 extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut CCAsyncBot {
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         libtetris::Board::new(),
-        cold_clear::Options {
-            max_nodes: options.max_nodes,
-            min_nodes: options.min_nodes,
-            use_hold: options.use_hold,
-            speculate: options.speculate,
-            pcloop: options.pcloop,
-            mode: options.mode.into(),
-            threads: options.threads
-        },
-        cold_clear::evaluation::Standard {
-            back_to_back: weights.back_to_back,
-            bumpiness: weights.bumpiness,
-            bumpiness_sq: weights.bumpiness_sq,
-            height: weights.height,
-            top_half: weights.top_half,
-            top_quarter: weights.top_quarter,
-            jeopardy: weights.jeopardy,
-            cavity_cells: weights.cavity_cells,
-            cavity_cells_sq: weights.cavity_cells_sq,
-            overhang_cells: weights.overhang_cells,
-            overhang_cells_sq: weights.overhang_cells_sq,
-            covered_cells: weights.covered_cells,
-            covered_cells_sq: weights.covered_cells_sq,
-            tslot: weights.tslot,
-            well_depth: weights.well_depth,
-            max_well_depth: weights.max_well_depth,
-            well_column: weights.well_column,
-
-            b2b_clear: weights.b2b_clear,
-            clear1: weights.clear1,
-            clear2: weights.clear2,
-            clear3: weights.clear3,
-            clear4: weights.clear4,
-            tspin1: weights.tspin1,
-            tspin2: weights.tspin2,
-            tspin3: weights.tspin3,
-            mini_tspin1: weights.mini_tspin1,
-            mini_tspin2: weights.mini_tspin2,
-            perfect_clear: weights.perfect_clear,
-            combo_garbage: weights.combo_garbage,
-            move_time: weights.move_time,
-            wasted_t: weights.wasted_t,
-
-            use_bag: weights.use_bag,
-            sub_name: None
-        }
+        convert_from_c_options(options),
+        convert_from_c_weights(weights)
     )))
 }
 
