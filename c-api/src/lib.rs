@@ -44,12 +44,12 @@ macro_rules! cenum {
 cenum! {
     enum CCPiece => libtetris::Piece {
         CC_I => I,
-        CC_T => T,
         CC_O => O,
-        CC_S => S,
-        CC_Z => Z,
+        CC_T => T,
         CC_L => L,
-        CC_J => J
+        CC_J => J,
+        CC_S => S,
+        CC_Z => Z
     }
 
     enum CCTspinStatus => libtetris::TspinStatus {

@@ -5,7 +5,7 @@
 typedef struct CCAsyncBot CCAsyncBot;
 
 typedef enum CCPiece {
-    CC_I, CC_T, CC_O, CC_S, CC_Z, CC_L, CC_J
+    CC_I, CC_O, CC_T, CC_L, CC_J, CC_S, CC_Z
 } CCPiece;
 
 typedef enum CCTspinStatus {
