@@ -69,12 +69,12 @@
 
 use libtetris::{ Board, Piece, FallingPiece };
 use std::collections::{ HashMap, VecDeque };
-use smallvec::SmallVec;
 use arrayvec::ArrayVec;
 use enumset::EnumSet;
 use enum_map::EnumMap;
 use serde::{ Serialize, Deserialize };
 use rand::prelude::*;
+use bumpalo::collections::vec::Vec as BumpVec;
 use crate::evaluation::Evaluation;
 
 pub struct DagState<E: 'static, R: 'static> {
@@ -109,7 +109,7 @@ rental! {
 }
 
 struct Generation<'c, E, R> {
-    nodes: Vec<Node<E>>,
+    nodes: Vec<Node<'c, E>>,
     children: Children<'c, R>,
     deduplicator: HashMap<SimplifiedBoard<'c>, u32>,
 }
@@ -121,8 +121,8 @@ enum Children<'c, R> {
     Speculated(Vec<Option<EnumMap<Piece, Option<&'c mut [Child<R>]>>>>)
 }
 
-struct Node<E> {
-    parents: SmallVec<[u32; 4]>,
+struct Node<'c, E> {
+    parents: BumpVec<'c, u32>,
     evaluation: E,
     marked: bool,
     death: bool
@@ -159,9 +159,9 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         }
         let root_generation = rented::Generation::new(
             Box::new(bumpalo::Bump::new()),
-            |_| Generation {
+            |bump| Generation {
                 nodes: vec![Node {
-                    parents: SmallVec::new(),
+                    parents: BumpVec::new_in(bump),
                     evaluation: E::default(),
                     marked: false,
                     death: false
@@ -261,13 +261,16 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             });
 
             if let Some(children) = children {
-                let child = chooser(
-                    self.generations[gen_index+1].ref_rent(|gen| &gen.nodes),
-                    children
-                )?;
-                advance(&mut board, child.placement);
-                gen_index += 1;
-                node_key = child.node as usize;
+                self.generations[gen_index+1].rent(|gen| {
+                    let child = chooser(
+                        &gen.nodes,
+                        children
+                    )?;
+                    advance(&mut board, child.placement);
+                    gen_index += 1;
+                    node_key = child.node as usize;
+                    Ok(())
+                })?;
             } else if self.generations[gen_index].rent(|gen| gen.nodes[node_key].marked) {
                 // this leaf has already been returned for processing, so it's not valid
                 return None
@@ -412,12 +415,13 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
 
             let nodes = &mut children_gen.data.nodes;
             let evaluation = data.evaluation;
+            let children_arena = &children_gen.arena;
             let &mut node = children_gen.data.deduplicator
                 .entry(simple_board)
                 .or_insert_with(|| {
                     let node = nodes.len();
                     nodes.push(Node {
-                        parents: SmallVec::new(),
+                        parents: BumpVec::with_capacity_in(2, children_arena),
                         evaluation,
                         death: false,
                         marked: false

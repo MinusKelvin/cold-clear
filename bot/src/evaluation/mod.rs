@@ -8,8 +8,8 @@ pub use self::standard::Standard;
 pub mod changed;
 
 pub trait Evaluator : Send + Sync {
-    type Value: Evaluation<Self::Reward> + Send;
-    type Reward: Clone + Send;
+    type Value: Evaluation<Self::Reward> + Send + 'static;
+    type Reward: Clone + Send + 'static;
 
     fn name(&self) -> String;
 

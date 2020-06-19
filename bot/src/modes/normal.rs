@@ -1,13 +1,14 @@
 use serde::{ Serialize, Deserialize };
 use enum_map::EnumMap;
 use libtetris::*;
-use crate::tree::{ ChildData, TreeState, NodeId };
+// use crate::tree::{ ChildData, TreeState, NodeId };
+use crate::dag::{ DagState, NodeId, ChildData };
 use crate::{ Options, Info };
 pub use crate::moves::Move;
 use crate::evaluation::Evaluator;
 
 pub struct BotState<E: Evaluator> {
-    tree: TreeState<E::Value, E::Reward>,
+    tree: DagState<E::Value, E::Reward>,
     options: Options,
     forced_analysis_lines: Vec<Vec<FallingPiece>>,
     pub outstanding_thinks: u32
@@ -30,7 +31,7 @@ pub enum ThinkResult<V, R> {
 impl<E: Evaluator> BotState<E> {
     pub fn new(board: Board, options: Options) -> Self {
         BotState {
-            tree: TreeState::create(board, options.use_hold),
+            tree: DagState::new(board, options.use_hold),
             options,
             forced_analysis_lines: vec![],
             outstanding_thinks: 0
@@ -41,7 +42,7 @@ impl<E: Evaluator> BotState<E> {
     /// 
     /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find 
     pub fn think(&mut self) -> Result<Thinker, bool> {
-        if (!self.min_thinking_reached() || self.tree.nodes < self.options.max_nodes)
+        if (!self.min_thinking_reached() || self.tree.nodes() < self.options.max_nodes)
                 && !self.tree.is_dead() {
             if let Some((node, board)) = self.tree.find_and_mark_leaf(
                 &mut self.forced_analysis_lines
@@ -98,7 +99,7 @@ impl<E: Evaluator> BotState<E> {
     }
 
     pub fn min_thinking_reached(&self) -> bool {
-        self.tree.nodes > self.options.min_nodes && self.forced_analysis_lines.is_empty()
+        self.tree.nodes() > self.options.min_nodes && self.forced_analysis_lines.is_empty()
     }
 
     pub fn next_move(&mut self, eval: &E, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
@@ -115,7 +116,7 @@ impl<E: Evaluator> BotState<E> {
         let plan = self.tree.get_plan();
 
         let info = Info {
-            nodes: self.tree.nodes,
+            nodes: self.tree.nodes(),
             depth: self.tree.depth() as u32,
             original_rank: child.original_rank,
             plan,
@@ -232,14 +233,13 @@ impl Thinker {
             // Don't add deaths by lock out, don't add useless mini tspins
             if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
                 let move_time = mv.inputs.time + if hold { 1 } else { 0 };
-                let (evaluation, accumulated) = eval.evaluate(
+                let (evaluation, reward) = eval.evaluate(
                     &lock, &result, move_time, spawned.kind.0
                 );
                 children.push(ChildData {
                     evaluation,
-                    accumulated,
+                    reward,
                     board: result,
-                    hold,
                     mv: mv.location
                 });
             }
