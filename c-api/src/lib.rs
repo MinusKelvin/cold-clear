@@ -66,6 +66,11 @@ cenum! {
         CC_DROP => SonicDrop
     }
 
+    enum CCSpawnRule => libtetris::SpawnRule {
+        CC_ROW_19_OR_20 => Row19Or20,
+        CC_ROW_21_AND_FALL => Row21AndFall
+    }
+
     enum CCMovementMode => cold_clear::moves::MovementMode {
         CC_0G => ZeroG,
         CC_20G => TwentyG,
@@ -108,6 +113,7 @@ struct CCPlanPlacement {
 #[repr(C)]
 struct CCOptions {
     mode: CCMovementMode,
+    spawn_rule: CCSpawnRule,
     use_hold: bool,
     speculate: bool,
     pcloop: bool,
@@ -171,6 +177,7 @@ fn convert_from_c_options(options: &CCOptions) -> cold_clear::Options {
         speculate: options.speculate,
         pcloop: options.pcloop,
         mode: options.mode.into(),
+        spawn_rule: options.spawn_rule.into(),
         threads: options.threads
     }
 }
@@ -366,6 +373,7 @@ unsafe extern "C" fn cc_default_options(options: *mut CCOptions) {
         speculate: o.speculate,
         pcloop: o.pcloop,
         mode: o.mode.into(),
+        spawn_rule: o.spawn_rule.into(),
         threads: o.threads
     });
 }

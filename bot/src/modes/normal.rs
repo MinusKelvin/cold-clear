@@ -123,7 +123,7 @@ impl<E: Evaluator> BotState<E> {
 
         let inputs = crate::moves::find_moves(
             &self.tree.board,
-            FallingPiece::spawn(child.mv.kind.0, &self.tree.board).unwrap(),
+            self.options.spawn_rule.spawn(child.mv.kind.0, &self.tree.board).unwrap(),
             self.options.mode
         ).into_iter().find(|p| p.location == child.mv).unwrap().inputs;
         let mv = Move {
@@ -193,7 +193,7 @@ impl Thinker {
         let mut children = vec![];
 
         let next = board.advance_queue().unwrap();
-        let spawned = match FallingPiece::spawn(next, &board) {
+        let spawned = match self.options.spawn_rule.spawn(next, &board) {
             Some(spawned) => spawned,
             None => return children
         };
@@ -205,7 +205,7 @@ impl Thinker {
             if hold == next {
                 return children
             }
-            let spawned = match FallingPiece::spawn(hold, &board) {
+            let spawned = match self.options.spawn_rule.spawn(hold, &board) {
                 Some(spawned) => spawned,
                 None => return children
             };

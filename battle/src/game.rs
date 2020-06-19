@@ -148,7 +148,7 @@ impl Game {
                 let new_piece = self.board.generate_next_piece(piece_rng);
                 self.board.add_next_piece(new_piece);
                 let next_piece = self.board.advance_queue().unwrap();
-                if let Some(spawned) = FallingPiece::spawn(next_piece, &self.board) {
+                if let Some(spawned) = SpawnRule::Row19Or20.spawn(next_piece, &self.board) {
                     self.state = GameState::Falling(FallingState {
                         piece: spawned,
                         lowest_y: spawned.cells().iter().map(|&(_,y)| y).min().unwrap(),
@@ -201,7 +201,7 @@ impl Game {
                     events.push(Event::PieceHeld(falling.piece.kind.0));
                     if let Some(piece) = self.board.hold(falling.piece.kind.0) {
                         // Piece in hold; the piece spawns instantly
-                        if let Some(spawned) = FallingPiece::spawn(piece, &self.board) {
+                        if let Some(spawned) = SpawnRule::Row19Or20.spawn(piece, &self.board) {
                             *falling = FallingState {
                                 piece: spawned,
                                 lowest_y: spawned.cells().iter().map(|&(_,y)| y).min().unwrap(),

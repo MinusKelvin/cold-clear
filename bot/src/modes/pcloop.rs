@@ -78,7 +78,7 @@ impl PcLooper {
             for &placement in &soln {
                 let placements = crate::moves::find_moves(
                     &b,
-                    FallingPiece::spawn(placement.kind.0, &b).unwrap(),
+                    libtetris::SpawnRule::Row19Or20.spawn(placement.kind.0, &b).unwrap(),
                     self.mode
                 );
 

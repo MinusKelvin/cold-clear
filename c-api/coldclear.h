@@ -27,6 +27,11 @@ typedef enum CCMovementMode {
     CC_HARD_DROP_ONLY
 } CCMovementMode;
 
+typedef enum CCSpawnRule {
+    CC_ROW_19_OR_20,
+    CC_ROW_21_AND_FALL,
+} CCSpawnRule;
+
 typedef enum CCBotPollStatus {
     CC_MOVE_PROVIDED,
     CC_WAITING,
@@ -64,6 +69,7 @@ typedef struct CCMove {
 
 typedef struct CCOptions {
     CCMovementMode mode;
+    CCSpawnRule spawn_rule;
     bool use_hold;
     bool speculate;
     bool pcloop;
