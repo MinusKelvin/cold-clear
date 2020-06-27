@@ -53,6 +53,7 @@ pub struct Info {
     pub plan: Vec<(FallingPiece, LockResult)>
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum BotPollState {
     Waiting,
     Dead
