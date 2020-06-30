@@ -384,7 +384,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             let done = gen.rent_mut(|gen| if let Children::Speculated(childs) = &mut gen.children {
                 let mut newchildren = vec![];
                 for child in std::mem::take(childs) {
-                    newchildren.push(child.map(|cases| {
+                    newchildren.push(child.map(|mut cases| {
                         std::mem::take(&mut cases[piece]).expect("speculation broke, somehow")
                     }));
                 }
@@ -399,11 +399,12 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         let mut node = self.root;
         let mut plan = vec![];
         let mut board = self.board.clone();
-        for gen in self.generations {
-            let done = gen.rent(|gen| match gen.children {
-                Children::Known(_, c) => match c[node as usize].and_then(|c| c.first()) {
+        for gen in &self.generations {
+            let done = gen.rent(|gen| match &gen.children {
+                Children::Known(_, c) => match c[node as usize].as_ref().and_then(|c| c.first()) {
                     Some(child) => {
                         plan.push((child.placement, advance(&mut board, child.placement)));
+                        node = child.node;
                         false
                     }
                     None => true
@@ -468,17 +469,17 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         self.generations[0].rent(|gen| {
             let mut candidates = vec![];
             if let Children::Known(_, children) = &gen.children {
-                if let Some(children) = children[self.root as usize] {
+                if let Some(children) = &children[self.root as usize] {
                     for (i, child) in children.iter().enumerate() {
                         let mut board = self.board.clone();
                         let lock = advance(&mut board, child.placement);
                         let eval = self.generations[1].rent(
-                            |gen| gen.nodes[child.node as usize].evaluation
+                            |gen| gen.nodes[child.node as usize].evaluation.clone()
                         );
                         candidates.push(MoveCandidate {
                             mv: child.placement,
                             hold: self.board.hold_piece != board.hold_piece,
-                            evaluation: eval + child.reward,
+                            evaluation: eval + child.reward.clone(),
                             original_rank: i as u32,
                             lock, board,
                         });
@@ -487,6 +488,22 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             }
             candidates
         })
+    }
+
+    pub fn advance_move(&mut self, mv: FallingPiece) {
+        let new_root = self.generations[0].rent(|gen|
+            if let Children::Known(_, children) = &gen.children {
+                children[self.root as usize].as_ref().and_then(
+                    |children| children.iter().find(|c| c.placement == mv)
+                ).map(|c| c.node)
+            } else {
+                None
+            }
+        ).expect("An invalid move was chosen");
+
+        self.root = new_root;
+        advance(&mut self.board, mv);
+        self.generations.pop_front();
     }
 
     pub fn nodes(&self) -> u32 {
