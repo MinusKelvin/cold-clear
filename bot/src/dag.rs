@@ -67,7 +67,7 @@
 //! piece laid flat in the center is represented as `0x7F 0x1E 0x81 0x4D 0x81 0x7F 0x1E`.
 #![allow(dead_code)]
 
-use libtetris::{ Board, Piece, FallingPiece };
+use libtetris::{ Board, Piece, FallingPiece, LockResult };
 use std::collections::{ HashMap, VecDeque };
 use arrayvec::ArrayVec;
 use enumset::EnumSet;
@@ -344,12 +344,19 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             self.generations.push_back(rented::Generation::speculated());
         }
 
-        // this is legit the easiest way to get mutable references to the relevant generations
-        let mut iter = self.generations.iter_mut().skip(gen);
-        let current_gen = iter.next().unwrap();
-        let next_gen = iter.next().unwrap();
-
-        [current_gen, next_gen]
+        // need to do something a little weird to get mutable references to both generations
+        let (a, b) = self.generations.as_mut_slices();
+        if gen < a.len() {
+            if gen + 1 == a.len() {
+                [&mut a[gen], &mut b[0]]
+            } else {
+                let (a, b) = a.split_at_mut(gen+1);
+                [&mut a[gen], &mut b[0]]
+            }
+        } else {
+            let (a, b) = b.split_at_mut(gen - a.len());
+            [&mut a[a.len() - 1], &mut b[0]]
+        }
     }
 
     pub fn unmark(&mut self, node: NodeId) {
@@ -359,6 +366,43 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 |gen| gen.nodes[node.slab_key as usize].marked = false
             );
         }
+    }
+
+    pub fn add_next_piece(&mut self, piece: Piece) {
+        self.board.add_next_piece(piece);
+        for gen in &mut self.generations {
+            let done = gen.rent_mut(|gen| if let Children::Speculated(childs) = &mut gen.children {
+                let mut newchildren = vec![];
+                for child in std::mem::take(childs) {
+                    newchildren.push(child.map(|cases| {
+                        std::mem::take(&mut cases[piece]).expect("speculation broke, somehow")
+                    }));
+                }
+                gen.children = Children::Known(piece, newchildren);
+                true
+            } else { false });
+            if done { break }
+        }
+    }
+
+    pub fn get_plan(&self) -> Vec<(FallingPiece, LockResult)> {
+        let mut node = self.root;
+        let mut plan = vec![];
+        let mut board = self.board.clone();
+        for gen in self.generations {
+            let done = gen.rent(|gen| match gen.children {
+                Children::Known(_, c) => match c[node as usize].and_then(|c| c.first()) {
+                    Some(child) => {
+                        plan.push((child.placement, advance(&mut board, child.placement)));
+                        false
+                    }
+                    None => true
+                }
+                _ => true
+            });
+            if done { break }
+        }
+        plan
     }
 
     pub fn nodes(&self) -> u32 {
@@ -375,14 +419,15 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 }
 
 /// keeps queue state consistent while arbitrarily placing pieces
-fn advance(board: &mut Board, placement: FallingPiece) {
-    board.lock_piece(placement);
+fn advance(board: &mut Board, placement: FallingPiece) -> LockResult {
+    let result = board.lock_piece(placement);
     let next = board.advance_queue().unwrap();
     if next != placement.kind.0 {
         let unheld = board.hold(next);
         let p = unheld.unwrap_or_else(|| board.advance_queue().unwrap());
         assert_eq!(p, placement.kind.0);
     }
+    result
 }
 
 fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
