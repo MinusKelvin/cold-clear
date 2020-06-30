@@ -1,5 +1,5 @@
 use libtetris::{ LockResult, Board, Piece };
-use crate::tree::MoveCandidate;
+use crate::dag::MoveCandidate;
 
 mod misalike;
 pub use self::misalike::Misalike;

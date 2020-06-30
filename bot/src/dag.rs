@@ -98,6 +98,16 @@ pub struct ChildData<E, R> {
     pub reward: R,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MoveCandidate<E> {
+    pub mv: FallingPiece,
+    pub lock: LockResult,
+    pub board: Board,
+    pub evaluation: E,
+    pub hold: bool,
+    pub original_rank: u32
+}
+
 rental! {
     mod rented {
         #[rental]
@@ -452,6 +462,31 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         ));
 
         garbage_lines
+    }
+
+    pub fn get_next_candidates(&self) -> Vec<MoveCandidate<E>> {
+        self.generations[0].rent(|gen| {
+            let mut candidates = vec![];
+            if let Children::Known(_, children) = &gen.children {
+                if let Some(children) = children[self.root as usize] {
+                    for (i, child) in children.iter().enumerate() {
+                        let mut board = self.board.clone();
+                        let lock = advance(&mut board, child.placement);
+                        let eval = self.generations[1].rent(
+                            |gen| gen.nodes[child.node as usize].evaluation
+                        );
+                        candidates.push(MoveCandidate {
+                            mv: child.placement,
+                            hold: self.board.hold_piece != board.hold_piece,
+                            evaluation: eval + child.reward,
+                            original_rank: i as u32,
+                            lock, board,
+                        });
+                    }
+                }
+            }
+            candidates
+        })
     }
 
     pub fn nodes(&self) -> u32 {
