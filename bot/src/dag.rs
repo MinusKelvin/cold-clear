@@ -458,6 +458,14 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         0
     }
 
+    pub fn depth(&self) -> u32 {
+        self.generations.len() as u32
+    }
+
+    pub fn board(&self) -> &Board {
+        &self.board
+    }
+
     pub fn is_dead(&self) -> bool {
         self.generations[0].rent(|gen| match &gen.children {
             Children::Known(_, childrens) =>

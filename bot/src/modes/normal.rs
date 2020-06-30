@@ -123,8 +123,8 @@ impl<E: Evaluator> BotState<E> {
         };
 
         let inputs = crate::moves::find_moves(
-            &self.tree.board,
-            FallingPiece::spawn(child.mv.kind.0, &self.tree.board).unwrap(),
+            self.tree.board(),
+            FallingPiece::spawn(child.mv.kind.0, self.tree.board()).unwrap(),
             self.options.mode
         ).into_iter().find(|p| p.location == child.mv).unwrap().inputs;
         let mv = Move {
