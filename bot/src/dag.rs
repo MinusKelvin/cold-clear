@@ -81,7 +81,7 @@ pub struct DagState<E: 'static, R: 'static> {
     board: Board,
     generations: VecDeque<rented::Generation<E, R>>,
     root: u32,
-    pieces: u32
+    gens_passed: u32
 }
 
 #[derive(Serialize, Deserialize)]
@@ -175,7 +175,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             board,
             generations,
             root: 0,
-            pieces: 0
+            gens_passed: 0
         }
     }
 
@@ -278,7 +278,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 // found a valid leaf, so mark it and return
                 self.generations[gen_index].rent_mut(|gen| gen.nodes[node_key].marked = true);
                 return Some((NodeId {
-                    generation: gen_index as u32 + self.pieces,
+                    generation: gen_index as u32 + self.gens_passed,
                     slab_key: node_key as u32
                 }, board))
             }
@@ -287,10 +287,10 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
     pub fn update_known(&mut self, node: NodeId, children: Vec<ChildData<E, R>>) {
         // make sure we weren't given a NodeId for an expired node. it could happen.
-        if node.generation < self.pieces {
+        if node.generation < self.gens_passed {
             return
         }
-        let gen = (node.generation - self.pieces) as usize;
+        let gen = (node.generation - self.gens_passed) as usize;
 
         let [parent_gen, child_gen] = self.get_gen_and_next(gen);
 
@@ -309,10 +309,10 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         mut children: EnumMap<Piece, Option<Vec<ChildData<E, R>>>>
     ) {
         // make sure we weren't given a NodeId for an expired node. it could happen.
-        if node.generation < self.pieces {
+        if node.generation < self.gens_passed {
             return
         }
-        let gen = (node.generation - self.pieces) as usize;
+        let gen = (node.generation - self.gens_passed) as usize;
 
         let [parent_gen, child_gen] = self.get_gen_and_next(gen);
 
@@ -361,8 +361,8 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
     pub fn unmark(&mut self, node: NodeId) {
         // make sure we weren't given a NodeId for an expired node. it could happen.
-        if node.generation >= self.pieces {
-            self.generations[(node.generation - self.pieces) as usize].rent_mut(
+        if node.generation >= self.gens_passed {
+            self.generations[(node.generation - self.gens_passed) as usize].rent_mut(
                 |gen| gen.nodes[node.slab_key as usize].marked = false
             );
         }
@@ -403,6 +403,55 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             if done { break }
         }
         plan
+    }
+
+    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) -> Option<i32> {
+        let garbage_lines;
+        if b2b == self.board.b2b_bonus && combo == self.board.combo {
+            let mut b = Board::<u16>::new();
+            b.set_field(field);
+            let dif = self.board.column_heights().iter()
+                .zip(b.column_heights().iter())
+                .map(|(&y1, &y2)| y2 - y1)
+                .min().unwrap();
+            let mut is_garbage_receive = true;
+            for y in 0..(40 - dif) {
+                if b.get_row(y + dif) != self.board.get_row(y) {
+                    is_garbage_receive = false;
+                    break;
+                }
+            }
+            if is_garbage_receive {
+                garbage_lines = Some(dif);
+            } else {
+                garbage_lines = None;
+            }
+        } else {
+            garbage_lines = None;
+        }
+
+        self.board.set_field(field);
+        self.board.combo = combo;
+        self.board.b2b_bonus = b2b;
+
+        self.gens_passed += self.generations.len() as u32 + 1;
+        self.root = 0;
+        self.generations.clear();
+        self.generations.push_back(rented::Generation::new(
+            Box::new(bumpalo::Bump::new()),
+            |bump| Generation {
+                nodes: vec![Node {
+                    parents: BumpVec::new_in(bump),
+                    evaluation: E::default(),
+                    marked: false,
+                    death: false
+                }],
+                children: Children::Known(Piece::I, vec![None]), // nonsense piece never used
+                deduplicator: HashMap::new() // nothing else will ever be put in this generation
+            }
+        ));
+
+        garbage_lines
     }
 
     pub fn nodes(&self) -> u32 {
