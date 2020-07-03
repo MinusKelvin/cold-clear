@@ -91,7 +91,8 @@ pub struct DagState<E: 'static, R: 'static> {
     board: Board,
     generations: VecDeque<rented::Generation<E, R>>,
     root: u32,
-    gens_passed: u32
+    gens_passed: u32,
+    use_hold: bool
 }
 
 #[derive(Serialize, Deserialize)]
@@ -168,13 +169,24 @@ struct SimplifiedBoard<'c> {
 
 impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     pub fn new(board: Board, use_hold: bool) -> Self {
-        let mut generations = VecDeque::new();
-        let mut next_pieces = board.next_queue();
+        let mut this = DagState {
+            board,
+            generations: VecDeque::new(),
+            root: 0,
+            gens_passed: 0,
+            use_hold
+        };
+        this.init_generations();
+        this
+    }
+
+    fn init_generations(&mut self) {
+        let mut next_pieces = self.board.next_queue();
         // if hold is enabled and hold is empty, the generation piece is later than normal.
-        if use_hold && board.hold_piece.is_none() {
+        if self.use_hold && self.board.hold_piece.is_none() {
             next_pieces.next().expect("Not enough next pieces provided to initialize");
         }
-        generations.push_back(rented::Generation::new(
+        self.generations.push_back(rented::Generation::new(
             Box::new(bumpalo::Bump::new()),
             |bump| Generation {
                 nodes: vec![Node {
@@ -195,13 +207,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         ));
         // initialize the remaining known generations
         for piece in next_pieces {
-            generations.push_back(rented::Generation::known(piece));
-        }
-        DagState {
-            board,
-            generations,
-            root: 0,
-            gens_passed: 0
+            self.generations.push_back(rented::Generation::known(piece));
         }
     }
 
@@ -326,14 +332,15 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
         let [parent_gen, child_gen] = self.get_gen_and_next(gen);
 
-        parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next|
+        parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next| {
             match &mut current.data.children {
                 Children::Known(_, c) => c[node.slab_key as usize] = Some(build_children(
                     current.arena, &mut next, children, node.slab_key
                 )),
                 Children::Speculated(_) => unreachable!()
             }
-        ));
+            current.data.nodes[node.slab_key as usize].marked = false;
+        }));
 
         self.backpropogate(gen, node.slab_key as usize);
     }
@@ -350,15 +357,17 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
         let [parent_gen, child_gen] = self.get_gen_and_next(gen);
 
-        parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next|
+        parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next| {
             match &mut current.data.children {
                 // Deal with the case that the generation has been resolved 
-                Children::Known(piece, c) => c[node.slab_key as usize] = Some(build_children(
-                    current.arena,
-                    &mut next,
-                    children[*piece].take().unwrap_or_else(|| speculation_broke(*piece, &children)),
-                    node.slab_key
-                )),
+                Children::Known(piece, c) => if let Some(children) = children[*piece].take() {
+                    c[node.slab_key as usize] = Some(build_children(
+                        current.arena,
+                        &mut next,
+                        children,
+                        node.slab_key
+                    ))
+                }
                 Children::Speculated(c) => {
                     let mut childs = EnumMap::new();
                     for (p, data) in children {
@@ -371,7 +380,8 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                     c[node.slab_key as usize] = Some(childs);
                 }
             }
-        ));
+            current.data.nodes[node.slab_key as usize].marked = false;
+        }));
 
         self.backpropogate(gen, node.slab_key as usize);
     }
@@ -403,9 +413,9 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
         // need to do something a little weird to get mutable references to both generations
         let (a, b) = self.generations.as_mut_slices();
-        if gen + 1 == a.len() {
+        if a.len() - 1 == gen {
             [&mut a[gen], &mut b[0]]
-        } else if gen < a.len() {
+        } else if a.len() > gen {
             get2_mut(a, gen)
         } else {
             get2_mut(b, gen - a.len())
@@ -429,10 +439,8 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 Children::Speculated(childs) => {
                     let mut newchildren = vec![];
                     for child in std::mem::take(childs) {
-                        newchildren.push(child.map(|mut cases|
-                            std::mem::take(&mut cases[piece]).unwrap_or_else(
-                                || speculation_broke(piece, &cases)
-                            )
+                        newchildren.push(child.and_then(|mut cases|
+                            std::mem::take(&mut cases[piece])
                         ));
                     }
                     gen.children = Children::Known(piece, newchildren);
@@ -499,20 +507,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         self.gens_passed += self.generations.len() as u32 + 1;
         self.root = 0;
         self.generations.clear();
-        self.generations.push_back(rented::Generation::new(
-            Box::new(bumpalo::Bump::new()),
-            |bump| Generation {
-                nodes: vec![Node {
-                    parents: BumpVec::new_in(bump),
-                    evaluation: E::default(),
-                    nodes: 1,
-                    marked: false,
-                    death: false
-                }],
-                children: Children::Known(Piece::I, vec![None]), // nonsense piece never used
-                deduplicator: HashMap::new() // nothing else will ever be put in this generation
-            }
-        ));
+        self.init_generations();
 
         garbage_lines
     }
@@ -556,6 +551,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         self.root = new_root;
         advance(&mut self.board, mv);
         self.generations.pop_front();
+        self.gens_passed += 1;
     }
 
     pub fn nodes(&self) -> u32 {
@@ -683,12 +679,3 @@ impl<E: 'static, R: 'static> rented::Generation<E, R> {
     }
 }
 
-fn speculation_broke<T>(piece: Piece, cases: &EnumMap<Piece, Option<T>>) -> ! {
-    let mut expected = ArrayVec::<[_; 7]>::new();
-    for (p, v) in cases {
-        if v.is_some() {
-            expected.push(p);
-        }
-    }
-    panic!("speculation broke; expected {:?}, got {:?}", expected, piece)
-}
