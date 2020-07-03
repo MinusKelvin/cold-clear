@@ -1,5 +1,5 @@
 //! This file implements the DAG structure Cold Clear uses to store think results and facilitate the
-//! Monte Carlo Tree Search. The is by far the most complicated file in Cold Clear.
+//! Monte Carlo Tree Search. This is by far the most complicated file in Cold Clear.
 //! 
 //! ## Implementation notes
 //! 
@@ -22,7 +22,17 @@
 //! 3. Hold is full: The reserve piece is the hold piece, the generation piece is the next piece.
 //! The same board state with the same reserve piece can be reached but one path may leave hold
 //! empty and the other fill the hold slot. `SimplifiedBoard.reserve_is_hold` distinguishes these
-//! cases.
+//! cases. Note that we still need to know what the reserve piece is even when it's not the hold
+//! piece due to speculation.
+//! 
+//! Visualization of the way generation pieces work:
+//! ```plain
+//! Gen piece: S        ( )ZST
+//!                    /      \
+//! Gen piece: T   (Z)T        ( )ST
+//!               /    \      /     \
+//! Speculated   (T)?  (Z)?  (S)?   ( )T?
+//! ```
 //! 
 //! Traversing the DAG requires cloning the `DagState.board` and calling `Board::lock_piece` every
 //! time you traverse down if you want information relating to the board anywhere in the DAG. This
@@ -134,8 +144,9 @@ enum Children<'c, R> {
 struct Node<'c, E> {
     parents: BumpVec<'c, u32>,
     evaluation: E,
+    nodes: u32,
     marked: bool,
-    death: bool
+    death: bool,
 }
 
 struct Child<R> {
@@ -159,28 +170,33 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     pub fn new(board: Board, use_hold: bool) -> Self {
         let mut generations = VecDeque::new();
         let mut next_pieces = board.next_queue();
-        // if hold is enabled and hold is empty, we start the generations later than normal.
+        // if hold is enabled and hold is empty, the generation piece is later than normal.
         if use_hold && board.hold_piece.is_none() {
-            next_pieces.next();
+            next_pieces.next().expect("Not enough next pieces provided to initialize");
         }
-        for piece in next_pieces {
-            // technically the piece given here is never used, but might as well put it here
-            generations.push_back(rented::Generation::known(piece));
-        }
-        let root_generation = rented::Generation::new(
+        generations.push_back(rented::Generation::new(
             Box::new(bumpalo::Bump::new()),
             |bump| Generation {
                 nodes: vec![Node {
                     parents: BumpVec::new_in(bump),
                     evaluation: E::default(),
+                    nodes: 1,
                     marked: false,
                     death: false
                 }],
-                children: Children::Known(Piece::I, vec![None]), // nonsense piece never used
-                deduplicator: HashMap::new() // nothing else will ever be put in this generation
+                children: match next_pieces.next() {
+                    Some(p) => Children::Known(p, vec![None]),
+                    None => Children::Speculated(vec![None])
+                },
+                // nothing new will ever be put in the root generation, so we won't bother to
+                // put anything in the hashmap.
+                deduplicator: HashMap::new()
             }
-        );
-        generations.push_front(root_generation);
+        ));
+        // initialize the remaining known generations
+        for piece in next_pieces {
+            generations.push_back(rented::Generation::known(piece));
+        }
         DagState {
             board,
             generations,
@@ -193,17 +209,14 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         &mut self, forced_analysis_lines: &mut Vec<Vec<FallingPiece>>
     ) -> Option<(NodeId, Board)> {
         for i in (0..forced_analysis_lines.len()).rev() {
+            // Attempt to search forced lines first
             let mut path = &*forced_analysis_lines[i];
             let mut done = false;
             let choice = self.find_and_mark_leaf_with_chooser(|_, children| {
                 if let &[next, ref rest @ ..] = path {
-                    let mut target = next.cells();
-                    target.sort();
                     for child in children {
-                        let mut cells = child.placement.cells();
-                        cells.sort();
-                        if cells == target {
-                            // found the next step on the path
+                        if next.same_location(&child.placement) {
+                            // found the next step on the path; traverse
                             if rest.is_empty() {
                                 // this is last step on path, so we're done with it
                                 done = true;
@@ -213,7 +226,8 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                         }
                     }
                 }
-                // can't find the next step on the path, so we're done with it
+                // either there isn't a next step on the path or we failed to find a child on the
+                // next step of the path. In both cases we're done with the path and cease searching
                 done = true;
                 None
             });
@@ -226,7 +240,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         }
 
         self.find_and_mark_leaf_with_chooser(|next_gen_nodes, children| {
-            // Pick non-death nodes in a weighted-random fashion (the Monte Carlo part)
+            // This returns None for death, and the raw evaluation otherwise.
             let evaluation = |c: &Child<R>| {
                 let node = &next_gen_nodes[c.node as usize];
                 if node.death {
@@ -235,9 +249,15 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                     Some(node.evaluation.clone() + c.reward.clone())
                 }
             };
-            let min_eval = children.iter().filter_map(evaluation).min()?;
-            let weights = children.iter().enumerate()
-                .map(|(i, c)| evaluation(c).map_or(0, |e| e.weight(&min_eval, i)));
+            // Since children is sorted best-to-worst, the minimum evaluation will be the last item
+            // in the iterator. filter_map allows us to ignore death nodes.
+            let min_eval = children.iter().rev().filter_map(evaluation).next()?;
+            let weights = children.iter().enumerate().map(
+                |(i, c)| evaluation(c).map_or(0,
+                    |e| e.weight(&min_eval, i)
+                )
+            );
+            // Choose a node randomly (the Monte-Carlo part)
             let sampler = rand::distributions::WeightedIndex::new(weights).ok()?;
             Some(&children[thread_rng().sample(sampler)])
         })
@@ -251,12 +271,13 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         let mut gen_index = 0;
         let mut node_key = self.root as usize;
         loop {
+            // Get the list of childs of the current node, or None if this is a leaf
             let children = self.generations[gen_index].maybe_ref_rent(|gen| match &gen.children {
                 Children::Known(_, childrens) => childrens[node_key].as_deref(),
                 Children::Speculated(childrens) => {
                     // We must select a single group of children to search further. We do this by
-                    // randomly selecting a valid next piece and using the child group associated
-                    // with that piece.
+                    // finding the set of valid next pieces and randomly selecting one uniformly.
+                    // We then take the group of children associated with that piece.
                     let children = childrens[node_key].as_ref()?;
                     let mut pick_from = ArrayVec::<[_; 7]>::new();
                     for (p, c) in children {
@@ -271,6 +292,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             });
 
             if let Some(children) = children {
+                // Branch case. Call the chooser to pick the branch to take.
                 self.generations[gen_index+1].rent(|gen| {
                     let child = chooser(
                         &gen.nodes,
@@ -279,13 +301,13 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                     advance(&mut board, child.placement);
                     gen_index += 1;
                     node_key = child.node as usize;
-                    Ok(())
+                    Some(())
                 })?;
             } else if self.generations[gen_index].rent(|gen| gen.nodes[node_key].marked) {
                 // this leaf has already been returned for processing, so it's not valid
                 return None
             } else {
-                // found a valid leaf, so mark it and return
+                // found a valid leaf, so mark it and return it
                 self.generations[gen_index].rent_mut(|gen| gen.nodes[node_key].marked = true);
                 return Some((NodeId {
                     generation: gen_index as u32 + self.gens_passed,
@@ -312,6 +334,8 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 Children::Speculated(_) => unreachable!()
             }
         ));
+
+        self.backpropogate(gen, node.slab_key as usize);
     }
 
     pub fn update_speculated(
@@ -328,8 +352,12 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
         parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next|
             match &mut current.data.children {
+                // Deal with the case that the generation has been resolved 
                 Children::Known(piece, c) => c[node.slab_key as usize] = Some(build_children(
-                    current.arena, &mut next, children[*piece].take().unwrap(), node.slab_key
+                    current.arena,
+                    &mut next,
+                    children[*piece].take().unwrap_or_else(|| speculation_broke(*piece, &children)),
+                    node.slab_key
                 )),
                 Children::Speculated(c) => {
                     let mut childs = EnumMap::new();
@@ -344,6 +372,20 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 }
             }
         ));
+
+        self.backpropogate(gen, node.slab_key as usize);
+    }
+
+    fn backpropogate(&mut self, gen: usize, node: usize) {
+        let mut to_update = VecDeque::new();
+        to_update.push_back((gen, node));
+
+        while let Some((gen, node)) = to_update.pop_front() {
+            let [parent_gen, children_gen] = self.get_gen_and_next(gen);
+            parent_gen.rent_mut(|parent_gen| children_gen.rent(|children_gen| {
+                // TODO
+            }));
+        }
     }
 
     fn get_gen_and_next(&mut self, gen: usize) -> [&mut rented::Generation<E, R>; 2] {
@@ -354,18 +396,19 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             self.generations.push_back(rented::Generation::speculated());
         }
 
+        fn get2_mut<T>(s: &mut [T], i: usize) -> [&mut T; 2] {
+            let (a, b) = s.split_at_mut(i+1);
+            [&mut a[a.len() - 1], &mut b[0]]
+        }
+
         // need to do something a little weird to get mutable references to both generations
         let (a, b) = self.generations.as_mut_slices();
-        if gen < a.len() {
-            if gen + 1 == a.len() {
-                [&mut a[gen], &mut b[0]]
-            } else {
-                let (a, b) = a.split_at_mut(gen+1);
-                [&mut a[gen], &mut b[0]]
-            }
+        if gen + 1 == a.len() {
+            [&mut a[gen], &mut b[0]]
+        } else if gen < a.len() {
+            get2_mut(a, gen)
         } else {
-            let (a, b) = b.split_at_mut(gen - a.len());
-            [&mut a[a.len() - 1], &mut b[0]]
+            get2_mut(b, gen - a.len())
         }
     }
 
@@ -380,19 +423,27 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
     pub fn add_next_piece(&mut self, piece: Piece) {
         self.board.add_next_piece(piece);
+        // resolve a speculated generation if possible
         for gen in &mut self.generations {
-            let done = gen.rent_mut(|gen| if let Children::Speculated(childs) = &mut gen.children {
-                let mut newchildren = vec![];
-                for child in std::mem::take(childs) {
-                    newchildren.push(child.map(|mut cases| {
-                        std::mem::take(&mut cases[piece]).expect("speculation broke, somehow")
-                    }));
+            let done = gen.rent_mut(|gen| match &mut gen.children {
+                Children::Speculated(childs) => {
+                    let mut newchildren = vec![];
+                    for child in std::mem::take(childs) {
+                        newchildren.push(child.map(|mut cases|
+                            std::mem::take(&mut cases[piece]).unwrap_or_else(
+                                || speculation_broke(piece, &cases)
+                            )
+                        ));
+                    }
+                    gen.children = Children::Known(piece, newchildren);
+                    true
                 }
-                gen.children = Children::Known(piece, newchildren);
-                true
-            } else { false });
-            if done { break }
+                _ => false
+            });
+            if done { return }
         }
+        // if are no speculated generations, add a known generation
+        self.generations.push_back(rented::Generation::known(piece));
     }
 
     pub fn get_plan(&self) -> Vec<(FallingPiece, LockResult)> {
@@ -454,6 +505,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 nodes: vec![Node {
                     parents: BumpVec::new_in(bump),
                     evaluation: E::default(),
+                    nodes: 1,
                     marked: false,
                     death: false
                 }],
@@ -507,11 +559,11 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     }
 
     pub fn nodes(&self) -> u32 {
-        0
+        self.generations[0].rent(|gen| gen.nodes[self.root as usize].nodes)
     }
 
     pub fn depth(&self) -> u32 {
-        self.generations.len() as u32
+        self.generations.len() as u32 - 1
     }
 
     pub fn board(&self) -> &Board {
@@ -521,8 +573,9 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     pub fn is_dead(&self) -> bool {
         self.generations[0].rent(|gen| match &gen.children {
             Children::Known(_, childrens) =>
-                childrens[self.root as usize].as_ref().unwrap().is_empty(),
-            Children::Speculated(_) => unreachable!()
+                childrens[self.root as usize].as_ref().map_or(false, |s| s.is_empty()),
+            Children::Speculated(childrens) =>
+                childrens[self.root as usize].as_ref().map_or(false, |s| s.is_empty()),
         })
     }
 }
@@ -545,19 +598,22 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
     mut children: Vec<ChildData<E, R>>,
     parent: u32
 ) -> &'arena mut [Child<R>] {
-    // best to worst
+    // sort best to worst
     children.sort_by_key(
         |c| std::cmp::Reverse(c.evaluation.clone() + c.reward.clone())
     );
-    parent_arena.alloc_slice_fill_iter(
-        children.into_iter().enumerate().map(|(i, data)| {
-            // maybe i should expose the backing array in libtetris::Board; it would avoid a copy
+    parent_arena.alloc_slice_fill_iter(children.into_iter().enumerate().map(
+        |(i, data)| {
+            // this arrayvec will almost always be shorter than 40 elements,
+            // since it won't store the upper empty rows. this is to save memory.
             let mut simple_grid = ArrayVec::<[_; 40]>::new();
-            for y in 0..*data.board.column_heights().iter().max().unwrap() {
+            let terrain_height = data.board.column_heights().iter().copied().max().unwrap();
+            for y in 0..terrain_height {
                 simple_grid.push(*data.board.get_row(y));
             }
+
             let simple_board = SimplifiedBoard {
-                grid: children_gen.arena.alloc_slice_copy(&simple_grid),
+                grid: &simple_grid,
                 back_to_back: data.board.b2b_bonus,
                 combo: data.board.combo,
                 bag: data.board.next_bag(),
@@ -567,21 +623,30 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
                 reserve_is_hold: data.board.hold_piece.is_some()
             };
 
-            let nodes = &mut children_gen.data.nodes;
-            let evaluation = data.evaluation;
-            let children_arena = &children_gen.arena;
-            let &mut node = children_gen.data.deduplicator
-                .entry(simple_board)
-                .or_insert_with(|| {
-                    let node = nodes.len();
-                    nodes.push(Node {
-                        parents: BumpVec::with_capacity_in(2, children_arena),
-                        evaluation,
+            // check if the board is duplicated
+            let node = match children_gen.data.deduplicator.get(&simple_board) {
+                Some(&node) => node,
+                None => {
+                    // new board; create node, children, deduplicator entry
+                    let node = children_gen.data.nodes.len();
+                    children_gen.data.nodes.push(Node {
+                        parents: BumpVec::new_in(&children_gen.arena),
+                        evaluation: data.evaluation,
+                        nodes: 1,
                         death: false,
                         marked: false
                     });
+                    match &mut children_gen.data.children {
+                        Children::Known(_, children) => children.push(None),
+                        Children::Speculated(children) => children.push(None)
+                    }
+                    children_gen.data.deduplicator.insert(SimplifiedBoard {
+                        grid: children_gen.arena.alloc_slice_copy(&simple_grid),
+                        ..simple_board
+                    }, node as u32);
                     node as u32
-                });
+                }
+            };
             children_gen.data.nodes[node as usize].parents.push(parent);
 
             Child {
@@ -590,8 +655,8 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
                 reward: data.reward,
                 node
             }
-        })
-    )
+        }
+    ))
 }
 
 impl<E: 'static, R: 'static> rented::Generation<E, R> {
@@ -616,4 +681,14 @@ impl<E: 'static, R: 'static> rented::Generation<E, R> {
             }
         )
     }
+}
+
+fn speculation_broke<T>(piece: Piece, cases: &EnumMap<Piece, Option<T>>) -> ! {
+    let mut expected = ArrayVec::<[_; 7]>::new();
+    for (p, v) in cases {
+        if v.is_some() {
+            expected.push(p);
+        }
+    }
+    panic!("speculation broke; expected {:?}, got {:?}", expected, piece)
 }
