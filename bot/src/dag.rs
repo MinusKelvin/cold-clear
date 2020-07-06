@@ -526,7 +526,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             let mut to_update = vec![];
             let done = gen.rent_mut(|gen| match &mut gen.children {
                 Children::Speculated(childs) => {
-                    let mut newchildren = vec![];
+                    let mut newchildren = Vec::with_capacity(childs.len());
                     for (j, child) in std::mem::take(childs).into_iter().enumerate() {
                         newchildren.push(child.and_then(|mut cases|
                             std::mem::take(&mut cases[piece])
@@ -778,22 +778,22 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
 impl<E: 'static, R: 'static> rented::Generation<E, R> {
     pub fn known(piece: Piece) -> Self {
         rented::Generation::new(
-            Box::new(bumpalo::Bump::new()),
+            Box::new(bumpalo::Bump::with_capacity(1 << 20)),
             |_| Generation {
-                nodes: vec![],
-                deduplicator: HashMap::new(),
-                children: Children::Known(piece, vec![])
+                nodes: Vec::with_capacity(1 << 17),
+                deduplicator: HashMap::with_capacity(1 << 17),
+                children: Children::Known(piece, Vec::with_capacity(1 << 17))
             }
         )
     }
 
     pub fn speculated() -> Self {
         rented::Generation::new(
-            Box::new(bumpalo::Bump::new()),
+            Box::new(bumpalo::Bump::with_capacity(1 << 20)),
             |_| Generation {
-                nodes: vec![],
-                deduplicator: HashMap::new(),
-                children: Children::Speculated(vec![])
+                nodes: Vec::with_capacity(1 << 17),
+                deduplicator: HashMap::with_capacity(1 << 17),
+                children: Children::Speculated(Vec::with_capacity(1 << 17))
             }
         )
     }
