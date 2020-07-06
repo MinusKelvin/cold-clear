@@ -129,6 +129,14 @@ impl FallingPiece {
         target.ccw();
         self.rotate(target, board)
     }
+
+    pub fn same_location(&self, other: &Self) -> bool {
+        let mut self_cells = self.cells();
+        self_cells.sort();
+        let mut other_cells = other.cells();
+        other_cells.sort();
+        self_cells == other_cells
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]

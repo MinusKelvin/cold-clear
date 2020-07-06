@@ -16,6 +16,8 @@ odds = { version = "0.3.1", features = ["std-vec"] }
 serde = { version = "1", features = ["derive"] }
 smallvec = "1.0.0"
 serde-big-array = "0.2.0"
+bumpalo = { version = "3.4.0", features = ["collections"] }
+rental = "0.5.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1.2.1"
