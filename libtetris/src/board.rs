@@ -42,6 +42,21 @@ impl<R: Row> Board<R> {
         }
     }
 
+    /// Creates a board with existing field, remain pieces in the bag, hold piece, back-to-back status and combo count.
+    pub fn new_with_state(field: [[bool; 10]; 40], bag_remain: EnumSet<Piece>, hold: Option<Piece>, b2b: bool, combo: u32) -> Self {
+        let mut board = Board {
+            cells: [*R::EMPTY; 40].into(),
+            column_heights: [0; 10],
+            combo: combo,
+            b2b_bonus: b2b,
+            hold_piece: hold,
+            next_pieces: VecDeque::new(),
+            bag: bag_remain,
+        };
+        board.set_field(field);
+        board
+    }
+
     /// Randomly selects a piece from the bag.
     /// 
     /// This function does not remove the generated piece from the bag.

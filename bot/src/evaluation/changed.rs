@@ -51,11 +51,11 @@ impl Default for Standard {
             height: -39,
             top_half: -150,
             top_quarter: -511,
-            jeopardy: -5,
-            cavity_cells: -158,
-            cavity_cells_sq: -7,
-            overhang_cells: -48,
-            overhang_cells_sq: 1,
+            jeopardy: -11,
+            cavity_cells: -173,
+            cavity_cells_sq: -3,
+            overhang_cells: -34,
+            overhang_cells_sq: -1,
             covered_cells: -17,
             covered_cells_sq: -1,
             tslot: [8, 148, 192, 407],
@@ -796,7 +796,7 @@ impl Evaluation<Reward> for Value {
 
     fn weight(self, min: &Value, rank: usize) -> i64 {
         let e = (self.value - min.value) as i64 + 10;
-        e * e / (rank + 1) as i64
+        e * e / (rank*rank + 1) as i64
     }
 
     fn improve(&mut self, new_result: Self) {

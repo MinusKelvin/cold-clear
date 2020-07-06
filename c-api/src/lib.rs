@@ -1,3 +1,6 @@
+use std::mem::MaybeUninit;
+use enumset::EnumSet;
+
 type CCAsyncBot = cold_clear::Interface;
 
 macro_rules! cenum {
@@ -41,12 +44,18 @@ macro_rules! cenum {
 cenum! {
     enum CCPiece => libtetris::Piece {
         CC_I => I,
-        CC_T => T,
         CC_O => O,
-        CC_S => S,
-        CC_Z => Z,
+        CC_T => T,
         CC_L => L,
-        CC_J => J
+        CC_J => J,
+        CC_S => S,
+        CC_Z => Z
+    }
+
+    enum CCTspinStatus => libtetris::TspinStatus {
+        CC_NONE => None,
+        CC_MINI => Mini,
+        CC_FULL => Full
     }
 
     enum CCMovement => libtetris::PieceMovement {
@@ -55,6 +64,11 @@ cenum! {
         CC_CW => Cw,
         CC_CCW => Ccw,
         CC_DROP => SonicDrop
+    }
+
+    enum CCSpawnRule => libtetris::SpawnRule {
+        CC_ROW_19_OR_20 => Row19Or20,
+        CC_ROW_21_AND_FALL => Row21AndFall
     }
 
     enum CCMovementMode => cold_clear::moves::MovementMode {
@@ -87,8 +101,19 @@ struct CCMove {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct CCPlanPlacement {
+    piece: CCPiece,
+    tspin: CCTspinStatus,
+    expected_x: [u8; 4],
+    expected_y: [u8; 4],
+    cleared_lines: [i32; 4],
+}
+
+#[repr(C)]
 struct CCOptions {
     mode: CCMovementMode,
+    spawn_rule: CCSpawnRule,
     use_hold: bool,
     speculate: bool,
     pcloop: bool,
@@ -135,56 +160,84 @@ struct CCWeights {
     use_bag: bool,
 }
 
+fn convert_hold(hold: *mut CCPiece) -> Option<libtetris::Piece> {
+    if hold.is_null() {
+        None
+    } else {
+        Some(unsafe{*hold}.into())
+    }
+}
+
+
+fn convert_from_c_options(options: &CCOptions) -> cold_clear::Options {
+    cold_clear::Options {
+        max_nodes: options.max_nodes,
+        min_nodes: options.min_nodes,
+        use_hold: options.use_hold,
+        speculate: options.speculate,
+        pcloop: options.pcloop,
+        mode: options.mode.into(),
+        spawn_rule: options.spawn_rule.into(),
+        threads: options.threads
+    }
+}
+
+fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standard {
+    cold_clear::evaluation::Standard {
+        back_to_back: weights.back_to_back,
+        bumpiness: weights.bumpiness,
+        bumpiness_sq: weights.bumpiness_sq,
+        height: weights.height,
+        top_half: weights.top_half,
+        top_quarter: weights.top_quarter,
+        jeopardy: weights.jeopardy,
+        cavity_cells: weights.cavity_cells,
+        cavity_cells_sq: weights.cavity_cells_sq,
+        overhang_cells: weights.overhang_cells,
+        overhang_cells_sq: weights.overhang_cells_sq,
+        covered_cells: weights.covered_cells,
+        covered_cells_sq: weights.covered_cells_sq,
+        tslot: weights.tslot,
+        well_depth: weights.well_depth,
+        max_well_depth: weights.max_well_depth,
+        well_column: weights.well_column,
+
+        b2b_clear: weights.b2b_clear,
+        clear1: weights.clear1,
+        clear2: weights.clear2,
+        clear3: weights.clear3,
+        clear4: weights.clear4,
+        tspin1: weights.tspin1,
+        tspin2: weights.tspin2,
+        tspin3: weights.tspin3,
+        mini_tspin1: weights.mini_tspin1,
+        mini_tspin2: weights.mini_tspin2,
+        perfect_clear: weights.perfect_clear,
+        combo_garbage: weights.combo_garbage,
+        move_time: weights.move_time,
+        wasted_t: weights.wasted_t,
+
+        use_bag: weights.use_bag,
+        sub_name: None
+    }
+}
+
+#[no_mangle]
+extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeights, field: &[[bool; 10]; 40], 
+    bag_remain: u32, hold: *mut CCPiece, b2b: bool, combo: u32) -> *mut CCAsyncBot {
+    Box::into_raw(Box::new(cold_clear::Interface::launch(
+        libtetris::Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
+        convert_from_c_options(options),
+        convert_from_c_weights(weights)
+    )))
+}
+
 #[no_mangle]
 extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut CCAsyncBot {
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         libtetris::Board::new(),
-        cold_clear::Options {
-            max_nodes: options.max_nodes,
-            min_nodes: options.min_nodes,
-            use_hold: options.use_hold,
-            speculate: options.speculate,
-            pcloop: options.pcloop,
-            mode: options.mode.into(),
-            threads: options.threads
-        },
-        cold_clear::evaluation::Standard {
-            back_to_back: weights.back_to_back,
-            bumpiness: weights.bumpiness,
-            bumpiness_sq: weights.bumpiness_sq,
-            height: weights.height,
-            top_half: weights.top_half,
-            top_quarter: weights.top_quarter,
-            jeopardy: weights.jeopardy,
-            cavity_cells: weights.cavity_cells,
-            cavity_cells_sq: weights.cavity_cells_sq,
-            overhang_cells: weights.overhang_cells,
-            overhang_cells_sq: weights.overhang_cells_sq,
-            covered_cells: weights.covered_cells,
-            covered_cells_sq: weights.covered_cells_sq,
-            tslot: weights.tslot,
-            well_depth: weights.well_depth,
-            max_well_depth: weights.max_well_depth,
-            well_column: weights.well_column,
-
-            b2b_clear: weights.b2b_clear,
-            clear1: weights.clear1,
-            clear2: weights.clear2,
-            clear3: weights.clear3,
-            clear4: weights.clear4,
-            tspin1: weights.tspin1,
-            tspin2: weights.tspin2,
-            tspin3: weights.tspin3,
-            mini_tspin1: weights.mini_tspin1,
-            mini_tspin2: weights.mini_tspin2,
-            perfect_clear: weights.perfect_clear,
-            combo_garbage: weights.combo_garbage,
-            move_time: weights.move_time,
-            wasted_t: weights.wasted_t,
-
-            use_bag: weights.use_bag,
-            sub_name: None
-        }
+        convert_from_c_options(options),
+        convert_from_c_weights(weights)
     )))
 }
 
@@ -210,7 +263,49 @@ extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
     bot.request_next_move(incoming);
 }
 
-fn convert((m, info): (cold_clear::Move, cold_clear::Info)) -> CCMove {
+fn convert_plan_placement(
+    (falling_piece, lock_result): &(libtetris::FallingPiece, libtetris::LockResult)
+) -> CCPlanPlacement {
+    let mut expected_x = [0; 4];
+    let mut expected_y = [0; 4];
+    for (i, &(x, y)) in falling_piece.cells().iter().enumerate() {
+        expected_x[i] = x as u8;
+        expected_y[i] = y as u8;
+    }
+
+    let mut cleared_lines = [-1; 4];
+    for (i, &cl) in lock_result.cleared_lines.iter().enumerate() {
+        cleared_lines[i] = cl;
+    }
+
+    CCPlanPlacement {
+        piece: falling_piece.kind.0.into(),
+        tspin: falling_piece.tspin.into(),
+        expected_x: expected_x,
+        expected_y: expected_y,
+        cleared_lines: cleared_lines,
+    }
+}
+
+fn convert_plan(
+    info: &cold_clear::Info,
+    plan: *mut MaybeUninit<CCPlanPlacement>,
+    plan_length: *mut u32
+) {
+    if !plan.is_null() && !plan_length.is_null() {
+        let plan_length = unsafe { &mut *plan_length };
+        let plan = unsafe {
+            std::slice::from_raw_parts_mut(plan, *plan_length as usize)
+        };
+        let n = info.plan.len().min(plan.len());
+        for i in 0..n {
+            plan[i] = MaybeUninit::new(convert_plan_placement(&info.plan[i]));
+        }
+        *plan_length = n as u32;
+    }
+}
+
+fn convert(m: cold_clear::Move, info: cold_clear::Info) -> CCMove {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
     for (i, &(x, y)) in m.expected_location.cells().iter().enumerate() {
@@ -234,10 +329,16 @@ fn convert((m, info): (cold_clear::Move, cold_clear::Info)) -> CCMove {
 }
 
 #[no_mangle]
-extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotPollStatus {
+extern "C" fn cc_poll_next_move(
+    bot: &mut CCAsyncBot,
+    mv: *mut CCMove,
+    plan: *mut MaybeUninit<CCPlanPlacement>,
+    plan_length: *mut u32
+) -> CCBotPollStatus {
     match bot.poll_next_move() {
-        Ok(result) => {
-            *mv = convert(result);
+        Ok((m, info)) => {
+            convert_plan(&info, plan, plan_length);
+            unsafe { mv.write(convert(m, info)) };
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         Err(cold_clear::BotPollState::Waiting) => CCBotPollStatus::CC_WAITING,
@@ -246,10 +347,16 @@ extern "C" fn cc_poll_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotP
 }
 
 #[no_mangle]
-extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBotPollStatus {
+extern "C" fn cc_block_next_move(
+    bot: &mut CCAsyncBot,
+    mv: *mut CCMove,
+    plan: *mut MaybeUninit<CCPlanPlacement>,
+    plan_length: *mut u32
+) -> CCBotPollStatus {
     match bot.block_next_move() {
-        Some(result) => {
-            *mv = convert(result);
+        Some((m, info)) => {
+            convert_plan(&info, plan, plan_length);
+            unsafe { mv.write(convert(m, info)) };
             CCBotPollStatus::CC_MOVE_PROVIDED
         }
         None => CCBotPollStatus::CC_BOT_DEAD,
@@ -257,21 +364,22 @@ extern "C" fn cc_block_next_move(bot: &mut CCAsyncBot, mv: &mut CCMove) -> CCBot
 }
 
 #[no_mangle]
-extern "C" fn cc_default_options(options: &mut CCOptions) {
+unsafe extern "C" fn cc_default_options(options: *mut CCOptions) {
     let o = cold_clear::Options::default();
-    *options = CCOptions {
+    options.write(CCOptions {
         max_nodes: o.max_nodes,
         min_nodes: o.min_nodes,
         use_hold: o.use_hold,
         speculate: o.speculate,
         pcloop: o.pcloop,
         mode: o.mode.into(),
+        spawn_rule: o.spawn_rule.into(),
         threads: o.threads
-    }
+    });
 }
 
-fn put_weights(weights: &mut CCWeights, w: cold_clear::evaluation::Standard) {
-    *weights = CCWeights {
+fn convert_weights(w: cold_clear::evaluation::Standard) -> CCWeights {
+    CCWeights {
         back_to_back: w.back_to_back,
         bumpiness: w.bumpiness,
         bumpiness_sq: w.bumpiness_sq,
@@ -310,11 +418,11 @@ fn put_weights(weights: &mut CCWeights, w: cold_clear::evaluation::Standard) {
 }
 
 #[no_mangle]
-extern "C" fn cc_default_weights(weights: &mut CCWeights) {
-    put_weights(weights, cold_clear::evaluation::Standard::default())
+unsafe extern "C" fn cc_default_weights(weights: *mut CCWeights) {
+    weights.write(convert_weights(cold_clear::evaluation::Standard::default()));
 }
 
 #[no_mangle]
-extern "C" fn cc_fast_weights(weights: &mut CCWeights) {
-    put_weights(weights, cold_clear::evaluation::Standard::fast_config())
+unsafe extern "C" fn cc_fast_weights(weights: *mut CCWeights) {
+    weights.write(convert_weights(cold_clear::evaluation::Standard::fast_config()));
 }

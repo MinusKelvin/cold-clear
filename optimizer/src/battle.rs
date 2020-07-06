@@ -87,7 +87,7 @@ pub fn do_battle(
     p1: impl Evaluator + Clone, p2: impl Evaluator + Clone
 ) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
-        GameConfig::fast_config(), GameConfig::fast_config(),
+        GameConfig::default(), GameConfig::default(),
         thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
     );
 

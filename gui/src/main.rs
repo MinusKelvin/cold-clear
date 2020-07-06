@@ -7,6 +7,7 @@ use game_util::glutin::dpi::LogicalSize;
 use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
 use std::collections::HashSet;
+use cold_clear::evaluation::Evaluator;
 
 mod player_draw;
 mod battle_ui;
@@ -210,8 +211,8 @@ fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Options {
-    p1: PlayerConfig,
-    p2: PlayerConfig
+    p1: PlayerConfig<cold_clear::evaluation::Standard>,
+    p2: PlayerConfig<cold_clear::evaluation::Standard>
 }
 
 impl Default for Options {
@@ -227,16 +228,15 @@ impl Default for Options {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
-struct PlayerConfig {
+struct PlayerConfig<E: Default> {
     controls: input::UserInput,
     game: GameConfig,
-    bot_config: BotConfig,
+    bot_config: BotConfig<E>,
     is_bot: bool,
 }
 
-impl PlayerConfig {
+impl<E: Evaluator + Default + Clone + 'static> PlayerConfig<E> {
     pub fn to_player(&self, board: libtetris::Board) -> (Box<dyn input::InputSource>, String) {
-        use cold_clear::evaluation::Evaluator;
         use crate::input::BotInput;
         if self.is_bot {
             let mut name = format!("Cold Clear\n{}", self.bot_config.weights.name());
@@ -258,8 +258,8 @@ impl PlayerConfig {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
-struct BotConfig {
-    weights: cold_clear::evaluation::Standard,
+struct BotConfig<E> {
+    weights: E,
     options: cold_clear::Options,
     speed_limit: u32
 }
