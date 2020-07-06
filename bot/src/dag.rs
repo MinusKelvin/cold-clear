@@ -635,7 +635,18 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     }
 
     pub fn depth(&self) -> u32 {
-        self.generations.len() as u32 - 1
+        let mut depth = self.generations.len() as u32 - 1;
+        for gen in self.generations.iter().rev() {
+            if gen.rent(|gen| match &gen.children {
+                Children::Known(_, c) if c.is_empty() => true,
+                _ => false
+            }) {
+                depth -= 1;
+            } else {
+                break
+            }
+        }
+        depth
     }
 
     pub fn board(&self) -> &Board {

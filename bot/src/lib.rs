@@ -6,7 +6,6 @@ extern crate rental;
 pub mod evaluation;
 pub mod moves;
 mod modes;
-mod tree;
 mod dag;
 
 #[cfg(not(target_arch = "wasm32"))]
