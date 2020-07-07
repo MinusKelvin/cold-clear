@@ -145,7 +145,6 @@ enum Children<'c, R> {
 struct Node<'c, E> {
     parents: BumpVec<'c, u32>,
     evaluation: E,
-    nodes: u32,
     marked: bool,
     death: bool,
 }
@@ -192,7 +191,6 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 nodes: vec![Node {
                     parents: BumpVec::new_in(bump),
                     evaluation: E::default(),
-                    nodes: 0,
                     marked: false,
                     death: false
                 }],
@@ -389,11 +387,10 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                 let [parent_gen, children_gen] = self.get_gen_and_next(gen);
                 parent_gen.rent_mut(|parent_gen| children_gen.rent(|children_gen| {
                     let node = &mut parent_gen.nodes[node_id as usize];
-                    let mut node_count = 0;
 
                     // Strategy for dealing with children lists.
                     let eval_of = &child_eval_fn(&children_gen.nodes);
-                    let mut process_children = |children: &mut [_]| {
+                    let process_children = |children: &mut [_]| {
                         // Sort best-to-worst. The index of a move is now its rank, as desired.
                         children.sort_by_key(|c| std::cmp::Reverse(eval_of(c)));
                         // Find the evaluation of this list, or None if this path is death.
@@ -409,10 +406,6 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                                 Some(ref mut v) => v.improve(eval)
                             }
                         }
-                        // maintain node counts
-                        node_count += children.iter()
-                            .map(|c| children_gen.nodes[c.node as usize].nodes + 1)
-                            .sum::<u32>();
                         new_eval
                     };
 
@@ -462,7 +455,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                         }
                     };
 
-                    let continue_propogation = node.nodes != node_count || match &new_eval {
+                    let continue_propogation = match &new_eval {
                         Some(eval) => *eval != node.evaluation,
                         None => !node.death
                     };
@@ -473,7 +466,6 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                             }
                         }
                     }
-                    node.nodes = node_count;
                     match new_eval {
                         Some(eval) => node.evaluation = eval,
                         None => node.death = true
@@ -649,7 +641,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     }
 
     pub fn nodes(&self) -> u32 {
-        self.generations[0].rent(|gen| gen.nodes[self.root as usize].nodes)
+        self.generations.iter().map(|gen| gen.rent(|gen| gen.nodes.len() as u32)).sum()
     }
 
     pub fn depth(&self) -> u32 {
@@ -748,7 +740,6 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
                     children_gen.data.nodes.push(Node {
                         parents: BumpVec::new_in(&children_gen.arena),
                         evaluation: data.evaluation,
-                        nodes: 0,
                         death: false,
                         marked: false
                     });
