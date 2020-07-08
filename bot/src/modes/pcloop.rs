@@ -134,7 +134,7 @@ impl PcLooper {
                     depth: self.current_pc.len() as u32 + 1,
                     nodes: 0,
                     original_rank: 0,
-                    evaluation_result: 0,
+                    evaluation_result: self.current_pc.len() as i32,
                     plan: vec![]
                 };
                 info.plan.push((mv.expected_location, lock));
