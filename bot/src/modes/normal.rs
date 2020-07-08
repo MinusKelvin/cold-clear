@@ -119,6 +119,7 @@ impl<E: Evaluator> BotState<E> {
             nodes: self.tree.nodes(),
             depth: self.tree.depth() as u32,
             original_rank: child.original_rank,
+            evaluation_result: eval.get_result(&child.evaluation),
             plan,
         };
 

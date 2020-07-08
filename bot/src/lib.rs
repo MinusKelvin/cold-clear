@@ -53,6 +53,7 @@ pub struct Info {
     pub nodes: u32,
     pub depth: u32,
     pub original_rank: u32,
+    pub evaluation_result: i32,
     pub plan: Vec<(FallingPiece, LockResult)>
 }
 

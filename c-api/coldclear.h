@@ -65,6 +65,7 @@ typedef struct CCMove {
     uint32_t nodes;
     uint32_t depth;
     uint32_t original_rank;
+    int32_t evaluation_result;
 } CCMove;
 
 typedef struct CCOptions {

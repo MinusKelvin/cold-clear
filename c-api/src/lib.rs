@@ -98,6 +98,7 @@ struct CCMove {
     nodes: u32,
     depth: u32,
     original_rank: u32,
+    evaluation_result: i32,
 }
 
 #[repr(C)]
@@ -325,6 +326,7 @@ fn convert(m: cold_clear::Move, info: cold_clear::Info) -> CCMove {
         nodes: info.nodes as u32,
         depth: info.depth as u32,
         original_rank: info.original_rank as u32,
+        evaluation_result: info.evaluation_result,
     }
 }
 
