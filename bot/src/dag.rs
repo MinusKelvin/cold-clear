@@ -320,12 +320,13 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         }
         let gen = (node.generation - self.gens_passed) as usize;
 
+        let use_hold = self.use_hold;
         let [parent_gen, child_gen] = self.get_gen_and_next(gen);
 
         parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next| {
             match &mut current.data.children {
                 Children::Known(_, c) => c[node.slab_key as usize] = Some(build_children(
-                    current.arena, &mut next, children, node.slab_key
+                    current.arena, &mut next, children, node.slab_key, use_hold
                 )),
                 Children::Speculated(_) => unreachable!()
             }
@@ -345,6 +346,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         }
         let gen = (node.generation - self.gens_passed) as usize;
 
+        let use_hold = self.use_hold;
         let [parent_gen, child_gen] = self.get_gen_and_next(gen);
 
         parent_gen.rent_all_mut(|current| child_gen.rent_all_mut(|mut next| {
@@ -355,7 +357,8 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                         current.arena,
                         &mut next,
                         children,
-                        node.slab_key
+                        node.slab_key,
+                        use_hold
                     ))
                 }
                 Children::Speculated(c) => {
@@ -363,7 +366,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                     for (p, data) in children {
                         if let Some(data) = data {
                             childs[p] = Some(build_children(
-                                current.arena, &mut next, data, node.slab_key
+                                current.arena, &mut next, data, node.slab_key, use_hold
                             ));
                         }
                     }
@@ -704,7 +707,8 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
     parent_arena: &'arena bumpalo::Bump,
     children_gen: &mut rented::Generation_BorrowMut<E, R>,
     mut children: Vec<ChildData<E, R>>,
-    parent: u32
+    parent: u32,
+    hold_allowed: bool
 ) -> &'arena mut [Child<R>] {
     // sort best to worst
     children.sort_by_key(
@@ -725,9 +729,11 @@ fn build_children<'arena, E: Evaluation<R> + 'static, R: Clone + 'static>(
                 back_to_back: data.board.b2b_bonus,
                 combo: data.board.combo,
                 bag: data.board.next_bag(),
-                reserve: data.board.hold_piece.unwrap_or_else(
-                    || data.board.next_queue().next().unwrap()
-                ),
+                reserve: if hold_allowed {
+                    data.board.hold_piece.unwrap_or_else(
+                        || data.board.next_queue().next().unwrap()
+                    )
+                } else { Piece::I },
                 reserve_is_hold: data.board.hold_piece.is_some()
             };
 
