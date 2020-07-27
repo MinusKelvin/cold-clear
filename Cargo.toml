@@ -5,6 +5,7 @@ members = [
     "libtetris",
     "battle",
     "gui",
+    "opening-book",
     "c-api",
     "compare",
     "optimizer"
