@@ -35,9 +35,9 @@ impl Default for PositionData {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-struct Move {
-    location: FallingPiece,
-    value: Option<f64>
+pub struct Move {
+    pub location: FallingPiece,
+    pub value: Option<f64>
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -76,7 +76,7 @@ impl Book {
         self.value_of_raw(position, next, &q.collect::<Vec<_>>(), state.bag)
     }
 
-    fn value_of_raw(
+    pub fn value_of_raw(
         &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
     ) -> f64 {
         let values = match self.0.get(&pos) {
@@ -171,90 +171,14 @@ impl Book {
         next
     }
 
-    pub fn dump(&self) {
-        fn name(pos: Position) -> String {
-            let mut s = String::new();
-            for &r in &pos.rows {
-                s.push_str(&format!("{},", r));
-            }
-            for p in pos.bag {
-                s.push(p.to_char());
-            }
-            if let Some(p) = pos.extra {
-                s.push(p.to_char());
-            }
-            s
-        }
-        for (&pos, data) in &self.0 {
-            use std::io::Write;
-            let mut f = std::fs::File::create(format!("book/{}.html", name(pos))).unwrap();
-            write!(f, r"
-                <DOCTYPE html>
-                <html>
-                <head>
-                    <style>
-                        td {{
-                            width: 16px;
-                            height: 16px;
-                            border: 1px solid black;
-                        }}
-                        table {{
-                            border-collapse: collapse;
-                        }}
-                    </style>
-                </head>
-                <body>"
-            ).unwrap();
-            write!(f, "<p>Value: {:.5}", self.value_of_position(pos)).unwrap();
-            write!(f, "<p>Bag: ").unwrap();
-            for p in pos.bag.iter().chain(pos.extra.iter().copied()) {
-                write!(f, "{}", p.to_char()).unwrap();
-            }
-            for mv in &data.moves {
-                let cells = mv.location.cells();
-                let target = pos.advance(mv.location);
-                write!(f, "<div><a href='{}.html'>", name(target)).unwrap();
-                match mv.value {
-                    Some(v) => write!(f, "V={}", v),
-                    None => write!(f, "E(V)={:.5}", self.value_of_position(target))
-                }.unwrap();
-                write!(f, "<table>").unwrap();
-                for y in (0..6).rev() {
-                    write!(f, "<tr>").unwrap();
-                    for x in 0..10 {
-                        write!(
-                            f, "<td style='background-color: {}'></td>",
-                            if pos.rows[y] & 1<<x != 0 {
-                                "gray"
-                            } else if cells.contains(&(x, y as i32)) {
-                                match mv.location.kind.0 {
-                                    Piece::I => "cyan",
-                                    Piece::J => "blue",
-                                    Piece::L => "orange",
-                                    Piece::Z => "red",
-                                    Piece::S => "green",
-                                    Piece::T => "purple",
-                                    Piece::O => "yellow"
-                                }
-                            } else {
-                                "black"
-                            }
-                        ).unwrap();
-                    }
-                    write!(f, "</tr>").unwrap();
-                }
-                write!(f, "</table></a></div>").unwrap();
-            }
-            for (next, b) in pos.next_possibilities() {
-                for (queue, _) in possible_sequences(vec![], b) {
-                    let &v = data.values.get(&Sequence { next, queue }).unwrap_or(&0.0);
-                    if v != 1.0 {
-                        write!(f, "<p>({:?}){:?} = {}", next, queue, v).unwrap();
-                    }
-                }
-            }
-            write!(f, "</body></html>").unwrap();
-        }
+    pub fn moves(&self, pos: Position) -> &[Move] {
+        self.0.get(&pos)
+            .map(|data| &*data.moves)
+            .unwrap_or(&[])
+    }
+
+    pub fn positions<'a>(&'a self) -> impl Iterator<Item=Position> + 'a {
+        self.0.keys().copied()
     }
 }
 
@@ -321,7 +245,7 @@ impl Position {
         position
     }
 
-    fn next_possibilities(&self) -> Vec<(EnumSet<Piece>, EnumSet<Piece>)> {
+    pub fn next_possibilities(&self) -> Vec<(EnumSet<Piece>, EnumSet<Piece>)> {
         let mut next_possibilities = vec![];
         match self.extra {
             Some(p) => for other in self.bag {
@@ -339,6 +263,18 @@ impl Position {
             }
         }
         next_possibilities
+    }
+
+    pub fn bag(&self) -> EnumSet<Piece> {
+        self.bag
+    }
+
+    pub fn extra(&self) -> Option<Piece> {
+        self.extra
+    }
+
+    pub fn rows(&self) -> &[u16] {
+        &self.rows
     }
 }
 

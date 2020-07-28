@@ -90,7 +90,7 @@ fn main() {
 
     dbg!(book.value_of_position(Board::new().into()));
 
-    book.dump();
+    dump(&book);
 }
 
 fn convert(p: fumen::Piece) -> FallingPiece {
@@ -159,5 +159,90 @@ fn mirror_placement(p: FallingPiece) -> FallingPiece {
             _ => p.y
         },
         tspin: p.tspin
+    }
+}
+
+fn dump(book: &opening_book::Book) {
+    fn name(pos: opening_book::Position) -> String {
+        let mut s = String::new();
+        for &r in pos.rows() {
+            s.push_str(&format!("{},", r));
+        }
+        for p in pos.bag() {
+            s.push(p.to_char());
+        }
+        if let Some(p) = pos.extra() {
+            s.push(p.to_char());
+        }
+        s
+    }
+    for pos in book.positions() {
+        let mut f = std::fs::File::create(format!("book/{}.html", name(pos))).unwrap();
+        write!(f, r"
+            <DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    td {{
+                        width: 16px;
+                        height: 16px;
+                        border: 1px solid black;
+                    }}
+                    table {{
+                        border-collapse: collapse;
+                    }}
+                </style>
+            </head>
+            <body>"
+        ).unwrap();
+        write!(f, "<p>Value: {:.5}", book.value_of_position(pos)).unwrap();
+        write!(f, "<p>Bag: ").unwrap();
+        for p in pos.bag().iter().chain(pos.extra().iter().copied()) {
+            write!(f, "{}", p.to_char()).unwrap();
+        }
+        for mv in book.moves(pos) {
+            let cells = mv.location.cells();
+            let target = pos.advance(mv.location);
+            write!(f, "<div><a href='{}.html'>", name(target)).unwrap();
+            match mv.value {
+                Some(v) => write!(f, "V={}", v),
+                None => write!(f, "E(V)={:.5}", book.value_of_position(target))
+            }.unwrap();
+            write!(f, "<table>").unwrap();
+            for y in (0..6).rev() {
+                write!(f, "<tr>").unwrap();
+                for x in 0..10 {
+                    write!(
+                        f, "<td style='background-color: {}'></td>",
+                        if pos.rows()[y] & 1<<x != 0 {
+                            "gray"
+                        } else if cells.contains(&(x, y as i32)) {
+                            match mv.location.kind.0 {
+                                Piece::I => "cyan",
+                                Piece::J => "blue",
+                                Piece::L => "orange",
+                                Piece::Z => "red",
+                                Piece::S => "green",
+                                Piece::T => "purple",
+                                Piece::O => "yellow"
+                            }
+                        } else {
+                            "black"
+                        }
+                    ).unwrap();
+                }
+                write!(f, "</tr>").unwrap();
+            }
+            write!(f, "</table></a></div>").unwrap();
+        }
+        for (next, b) in pos.next_possibilities() {
+            for (queue, bag) in opening_book::possible_sequences(vec![], b) {
+                let v = book.value_of_raw(pos, next, &queue, bag);
+                if v != 1.0 {
+                    write!(f, "<p>({:?}){:?} = {}", next, queue, v).unwrap();
+                }
+            }
+        }
+        write!(f, "</body></html>").unwrap();
     }
 }
