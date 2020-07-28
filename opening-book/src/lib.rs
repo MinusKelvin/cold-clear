@@ -1,7 +1,7 @@
 use libtetris::{ FallingPiece, Piece, Board };
 use enumset::EnumSet;
 use serde::{ Serialize, Deserialize };
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 
 const NEXT_PIECES: usize = 4;
 
@@ -17,10 +17,21 @@ pub struct Position {
     extra: Option<Piece>
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
     values: HashMap<Sequence, f64>,
-    moves: Vec<Move>
+    moves: Vec<Move>,
+    dirty: bool
+}
+
+impl Default for PositionData {
+    fn default() -> Self {
+        PositionData {
+            values: HashMap::new(),
+            moves: vec![],
+            dirty: true
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -82,7 +93,12 @@ impl Book {
     }
 
     fn update_value(&mut self, pos: Position) -> bool {
-        let mut any_updated = false;
+        let children_dirty = self.0.get(&pos).unwrap().moves.iter()
+            .any(|m| self.0.get(&pos.advance(m.location)).unwrap().dirty);
+        if !self.0.get(&pos).unwrap().dirty && !children_dirty {
+            return false;
+        }
+        self.0.get_mut(&pos).unwrap().dirty = false;
         for (next, bag) in pos.next_possibilities() {
             for (queue, qbag) in possible_sequences(vec![], bag) {
                 let this = self.0.get(&pos).unwrap();
@@ -110,15 +126,13 @@ impl Book {
                     });
                 }
                 if best != 0.0 {
-                    let old = self.0.get_mut(&pos).unwrap().values
-                        .insert(Sequence { next, queue }, best);
-                    if old != Some(best) {
-                        any_updated = true;
-                    }
+                    let this = self.0.get_mut(&pos).unwrap();
+                    let old = this.values.insert(Sequence { next, queue }, best);
+                    this.dirty |= old != Some(best);
                 }
             }
         }
-        any_updated
+        self.0.get(&pos).unwrap().dirty
     }
 
     pub fn recalculate_graph(&mut self) {
@@ -131,6 +145,13 @@ impl Book {
             if !any_updated {
                 break;
             }
+        }
+        self.0.retain(|_, v| !v.values.is_empty());
+        let positions: HashSet<Position> = self.0.keys().copied().collect();
+        for &pos in &positions {
+            self.0.get_mut(&pos).unwrap().moves.retain(
+                |m| m.value.is_some() || positions.contains(&pos.advance(m.location))
+            );
         }
     }
 
@@ -223,6 +244,14 @@ impl Book {
                     write!(f, "</tr>").unwrap();
                 }
                 write!(f, "</table></a></div>").unwrap();
+            }
+            for (next, b) in pos.next_possibilities() {
+                for (queue, _) in possible_sequences(vec![], b) {
+                    let &v = data.values.get(&Sequence { next, queue }).unwrap_or(&0.0);
+                    if v != 1.0 {
+                        write!(f, "<p>({:?}){:?} = {}", next, queue, v).unwrap();
+                    }
+                }
             }
             write!(f, "</body></html>").unwrap();
         }

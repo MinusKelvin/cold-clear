@@ -61,7 +61,12 @@ fn main() {
             use permutator::Permutation;
             for permutation in placements.permutation() {
                 let mut b = b.clone();
+                let mut offset = 0;
                 for (p, allow_sd) in permutation {
+                    let p = FallingPiece {
+                        y: p.y - offset,
+                        ..p
+                    };
                     if !b.on_stack(&p) || !allow_sd && !b.above_stack(&p) {
                         break
                     }
@@ -69,7 +74,7 @@ fn main() {
                     book.add_move(&b, p, None);
                     b.add_next_piece(p.kind.0);
                     b.advance_queue();
-                    b.lock_piece(p);
+                    offset += b.lock_piece(p).cleared_lines.len() as i32;
                 }
             }
         }
