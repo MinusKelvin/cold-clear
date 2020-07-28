@@ -16,7 +16,7 @@ fn main() {
                 field[y][x] = fumen.pages[0].field[y][x] != fumen::CellColor::Empty;
             }
         }
-        let mut comment_parts = fumen.pages[0].comment.as_ref().unwrap().split('/');
+        let mut comment_parts = fumen.pages[0].comment.as_deref().unwrap_or("").split('/');
         let bagspec = comment_parts.next().unwrap();
         let value = comment_parts.next().map(str::parse).map(Result::unwrap);
 
@@ -39,6 +39,10 @@ fn main() {
             } else {
                 b.bag |= p;
             }
+        }
+        if b.hold_piece.is_none() && b.bag.len() <= 1 {
+            b.hold_piece = b.bag.iter().next();
+            b.bag = enumset::EnumSet::all();
         }
 
         if fumen.pages.len() == 1 {
