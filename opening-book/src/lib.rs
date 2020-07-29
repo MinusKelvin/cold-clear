@@ -19,7 +19,7 @@ pub struct Position {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
-    values: HashMap<Sequence, MoveValue>,
+    values: HashMap<Sequence, (MoveValue, Vec<FallingPiece>)>,
     moves: Vec<Move>,
     dirty: bool
 }
@@ -83,7 +83,9 @@ impl Book {
             queue.iter().copied().take(NEXT_PIECES).collect(), bag
         );
         possibilities.into_iter()
-            .map(|(queue, _)| values.get(&Sequence { next, queue }).copied().unwrap_or_default())
+            .map(|(queue, _)| values.get(&Sequence { next, queue })
+                .map(|&(v, _)| v)
+                .unwrap_or_default())
             .sum()
     }
 
@@ -98,11 +100,12 @@ impl Book {
             for (queue, qbag) in possible_sequences(vec![], bag) {
                 let this = self.0.get(&pos).unwrap();
                 let mut best = MoveValue::default();
+                let mut best_moves = vec![];
                 for &mv in &this.moves {
                     if !next.contains(mv.location.kind.0) {
                         continue;
                     }
-                    best = best.max(if let Some(value) = mv.value {
+                    let value = if let Some(value) = mv.value {
                         MoveValue {
                             long_moves: 0.0,
                             value
@@ -118,12 +121,19 @@ impl Book {
                         };
                         v.long_moves += long_moves;
                         v
-                    });
+                    };
+                    if value > best {
+                        best = value;
+                        best_moves.clear();
+                        best_moves.push(mv.location);
+                    } else if value == best {
+                        best_moves.push(mv.location);
+                    }
                 }
                 if best != MoveValue::default() {
                     let this = self.0.get_mut(&pos).unwrap();
-                    let old = this.values.insert(Sequence { next, queue }, best);
-                    this.dirty |= old != Some(best);
+                    let old = this.values.insert(Sequence { next, queue }, (best, best_moves));
+                    this.dirty |= old.map(|v| v.0) != Some(best);
                 }
             }
         }
