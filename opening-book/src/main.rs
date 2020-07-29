@@ -202,23 +202,28 @@ fn dump(book: &opening_book::Book) {
             </head>
             <body>"
         ).unwrap();
-        write!(f, "<p>Value: {:.5}", book.value_of_position(pos)).unwrap();
+        let value = book.value_of_position(pos);
+        write!(f, "<p>E(V): {:.5}", value.value).unwrap();
+        write!(f, "<br>E(t): {:.5}", value.long_moves).unwrap();
         write!(f, "<p>Bag: ").unwrap();
         for p in pos.bag().iter().chain(pos.extra().iter().copied()) {
             write!(f, "{}", p.to_char()).unwrap();
         }
         write!(f, "<p>").unwrap();
         let mut moves: Vec<_> = book.moves(pos).into_iter()
-            .map(|mv| (mv, book.value_of_position(pos.advance(mv.location))))
+            .map(|mv| (mv, book.value_of_position(pos.advance(mv.location).0)))
             .collect();
         moves.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
         for (mv, v) in moves {
             let cells = mv.location.cells();
-            write!(f, "<a href='{}.html'>", name(pos.advance(mv.location))).unwrap();
+            write!(f, "<a href='{}.html'>", name(pos.advance(mv.location).0)).unwrap();
             match mv.value {
-                Some(v) => write!(f, "V={}", v),
-                None => write!(f, "E(V)={:.5}", v)
-            }.unwrap();
+                Some(v) => write!(f, "V={}", v).unwrap(),
+                None => {
+                    write!(f, "E(V)={:.5}", v.value).unwrap();
+                    write!(f, "<br>E(t)={:.5}", v.long_moves).unwrap();
+                }
+            };
             write!(f, "<table>").unwrap();
             for y in (0..10).rev() {
                 write!(f, "<tr>").unwrap();
@@ -249,8 +254,8 @@ fn dump(book: &opening_book::Book) {
         // for (next, b) in pos.next_possibilities() {
         //     for (queue, bag) in opening_book::possible_sequences(vec![], b) {
         //         let v = book.value_of_raw(pos, next, &queue, bag);
-        //         if v != 1.0 {
-        //             write!(f, "<p>({:?}){:?} = {}", next, queue, v).unwrap();
+        //         if v == Default::default() {
+        //             write!(f, "<p>({:?}){:?} = {:?}", next, queue, v).unwrap();
         //         }
         //     }
         // }

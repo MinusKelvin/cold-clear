@@ -19,7 +19,7 @@ pub struct Position {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
-    values: HashMap<Sequence, f64>,
+    values: HashMap<Sequence, MoveValue>,
     moves: Vec<Move>,
     dirty: bool
 }
@@ -53,17 +53,13 @@ impl Book {
         Book(HashMap::new())
     }
 
-    pub fn value_of_position(&self, pos: Position) -> f64 {
-        let mut value = 0.0;
-        let mut count = 0;
-        for (next, bag) in pos.next_possibilities() {
-            count += 1;
-            value += self.value_of_raw(pos, next, &[], bag);
-        }
-        value / count as f64
+    pub fn value_of_position(&self, pos: Position) -> MoveValue {
+        pos.next_possibilities().into_iter()
+            .map(|(next, bag)| self.value_of_raw(pos, next, &[], bag))
+            .sum()
     }
 
-    pub fn value_of(&self, state: &Board) -> f64 {
+    pub fn value_of(&self, state: &Board) -> MoveValue {
         let position = state.into();
         let mut next = EnumSet::empty();
         let mut q = state.next_queue();
@@ -78,23 +74,22 @@ impl Book {
 
     pub fn value_of_raw(
         &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
-    ) -> f64 {
+    ) -> MoveValue {
         let values = match self.0.get(&pos) {
             Some(data) => &data.values,
-            None => return 0.0
+            None => return Default::default()
         };
         let possibilities = possible_sequences(
             queue.iter().copied().take(NEXT_PIECES).collect(), bag
         );
-        let count = possibilities.len();
         possibilities.into_iter()
-            .map(|(queue, _)| values.get(&Sequence { next, queue }).unwrap_or(&0.0))
-            .sum::<f64>() / count as f64
+            .map(|(queue, _)| values.get(&Sequence { next, queue }).copied().unwrap_or_default())
+            .sum()
     }
 
     fn update_value(&mut self, pos: Position) -> bool {
         let children_dirty = self.0.get(&pos).unwrap().moves.iter()
-            .any(|m| self.0.get(&pos.advance(m.location)).unwrap().dirty);
+            .any(|m| self.0.get(&pos.advance(m.location).0).unwrap().dirty);
         if !self.0.get(&pos).unwrap().dirty && !children_dirty {
             return false;
         }
@@ -102,30 +97,30 @@ impl Book {
         for (next, bag) in pos.next_possibilities() {
             for (queue, qbag) in possible_sequences(vec![], bag) {
                 let this = self.0.get(&pos).unwrap();
-                let mut best = 0.0f64;
+                let mut best = MoveValue::default();
                 for &mv in &this.moves {
                     if !next.contains(mv.location.kind.0) {
                         continue;
                     }
-                    best = best.max(if let Some(v) = mv.value {
-                        v
-                    } else if next.len() == 1 {
-                        self.value_of_raw(
-                            pos.advance(mv.location),
-                            next | queue[0],
-                            &queue[1..],
-                            qbag
-                        )
+                    best = best.max(if let Some(value) = mv.value {
+                        MoveValue {
+                            long_moves: 0.0,
+                            value
+                        }
                     } else {
-                        self.value_of_raw(
-                            pos.advance(mv.location),
-                            next - mv.location.kind.0 | queue[0],
-                            &queue[1..],
-                            qbag
-                        )
+                        let (pos, long_moves) = pos.advance(mv.location);
+                        let mut v = if next.len() == 1 {
+                            self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
+                        } else {
+                            self.value_of_raw(
+                                pos, next - mv.location.kind.0 | queue[0], &queue[1..], qbag
+                            )
+                        };
+                        v.long_moves += long_moves;
+                        v
                     });
                 }
-                if best != 0.0 {
+                if best != MoveValue::default() {
                     let this = self.0.get_mut(&pos).unwrap();
                     let old = this.values.insert(Sequence { next, queue }, best);
                     this.dirty |= old != Some(best);
@@ -150,7 +145,7 @@ impl Book {
         let positions: HashSet<Position> = self.0.keys().copied().collect();
         for &pos in &positions {
             self.0.get_mut(&pos).unwrap().moves.retain(
-                |m| m.value.is_some() || positions.contains(&pos.advance(m.location))
+                |m| m.value.is_some() || positions.contains(&pos.advance(m.location).0)
             );
         }
     }
@@ -166,7 +161,7 @@ impl Book {
                 value
             });
         }
-        let next = position.advance(mv);
+        let next = position.advance(mv).0;
         self.0.entry(next).or_default();
         next
     }
@@ -216,7 +211,7 @@ pub fn possible_sequences(
 }
 
 impl Position {
-    pub fn advance(&self, mv: FallingPiece) -> Position {
+    pub fn advance(&self, mv: FallingPiece) -> (Position, f64) {
         let mut field = [[false; 10]; 40];
         for y in 0..10 {
             for x in 0..10 {
@@ -224,7 +219,8 @@ impl Position {
             }
         }
         let mut board = Board::new_with_state(field, self.bag, self.extra, false, 0);
-        board.lock_piece(mv);
+        let soft_drop = !board.above_stack(&mv);
+        let clear = board.lock_piece(mv).placement_kind.is_clear();
         let mut position = *self;
         for y in 0..10 {
             position.rows[y] = *board.get_row(y as i32);
@@ -242,7 +238,7 @@ impl Position {
                 position.bag = EnumSet::all();
             }
         }
-        position
+        (position, soft_drop as u8 as f64 + clear as u8 as f64)
     }
 
     pub fn next_possibilities(&self) -> Vec<(EnumSet<Piece>, EnumSet<Piece>)> {
@@ -306,5 +302,53 @@ impl From<&Board> for Position {
 impl From<Board> for Position {
     fn from(v: Board) -> Position {
         (&v).into()
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct MoveValue {
+    pub value: f64,
+    pub long_moves: f64
+}
+
+impl MoveValue {
+    pub fn max(self, other: Self) -> Self {
+        if self < other {
+            other
+        } else {
+            self
+        }
+    }
+}
+
+impl std::cmp::PartialOrd for MoveValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.value.partial_cmp(&other.value) {
+            Some(std::cmp::Ordering::Equal) => other.long_moves.partial_cmp(&self.long_moves),
+            order => order
+        }
+    }
+}
+
+impl std::iter::Sum for MoveValue {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut this = MoveValue::default();
+        let mut long_count = 0;
+        let mut value_count = 0;
+        for v in iter {
+            value_count += 1;
+            this.value += v.value;
+            if v.value != 0.0 {
+                long_count += 1;
+                this.long_moves += v.long_moves;
+            }
+        }
+        if long_count != 0 {
+            this.long_moves /= long_count as f64;
+        }
+        if value_count != 0 {
+            this.value /= value_count as f64;
+        }
+        this
     }
 }
