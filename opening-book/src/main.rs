@@ -185,11 +185,18 @@ fn dump(book: &opening_book::Book) {
                 <style>
                     td {{
                         width: 16px;
-                        height: 16px;
                         border: 1px solid black;
+                    }}
+                    td::after {{
+                        content: '';
+                        margin-top: 100%;
+                        display: block;
                     }}
                     table {{
                         border-collapse: collapse;
+                    }}
+                    a {{
+                        display: inline-block;
                     }}
                 </style>
             </head>
@@ -200,16 +207,20 @@ fn dump(book: &opening_book::Book) {
         for p in pos.bag().iter().chain(pos.extra().iter().copied()) {
             write!(f, "{}", p.to_char()).unwrap();
         }
-        for mv in book.moves(pos) {
+        write!(f, "<p>").unwrap();
+        let mut moves: Vec<_> = book.moves(pos).into_iter()
+            .map(|mv| (mv, book.value_of_position(pos.advance(mv.location))))
+            .collect();
+        moves.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
+        for (mv, v) in moves {
             let cells = mv.location.cells();
-            let target = pos.advance(mv.location);
-            write!(f, "<div><a href='{}.html'>", name(target)).unwrap();
+            write!(f, "<a href='{}.html'>", name(pos.advance(mv.location))).unwrap();
             match mv.value {
                 Some(v) => write!(f, "V={}", v),
-                None => write!(f, "E(V)={:.5}", book.value_of_position(target))
+                None => write!(f, "E(V)={:.5}", v)
             }.unwrap();
             write!(f, "<table>").unwrap();
-            for y in (0..6).rev() {
+            for y in (0..10).rev() {
                 write!(f, "<tr>").unwrap();
                 for x in 0..10 {
                     write!(
@@ -233,16 +244,16 @@ fn dump(book: &opening_book::Book) {
                 }
                 write!(f, "</tr>").unwrap();
             }
-            write!(f, "</table></a></div>").unwrap();
+            write!(f, "</table></a> ").unwrap();
         }
-        for (next, b) in pos.next_possibilities() {
-            for (queue, bag) in opening_book::possible_sequences(vec![], b) {
-                let v = book.value_of_raw(pos, next, &queue, bag);
-                if v != 1.0 {
-                    write!(f, "<p>({:?}){:?} = {}", next, queue, v).unwrap();
-                }
-            }
-        }
+        // for (next, b) in pos.next_possibilities() {
+        //     for (queue, bag) in opening_book::possible_sequences(vec![], b) {
+        //         let v = book.value_of_raw(pos, next, &queue, bag);
+        //         if v != 1.0 {
+        //             write!(f, "<p>({:?}){:?} = {}", next, queue, v).unwrap();
+        //         }
+        //     }
+        // }
         write!(f, "</body></html>").unwrap();
     }
 }
