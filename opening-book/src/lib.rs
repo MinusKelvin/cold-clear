@@ -53,6 +53,55 @@ impl Book {
         Book(HashMap::new())
     }
 
+    pub fn load_from(src: impl std::io::Read) -> bincode::Result<Self> {
+        bincode::deserialize_from(libflate::gzip::Decoder::new(src)?)
+    }
+
+    pub fn save_to(&self, dst: impl std::io::Write) -> bincode::Result<()> {
+        bincode::serialize_into(libflate::gzip::Encoder::new(dst)?, self)
+    }
+
+    pub fn suggest_move(&self, state: &Board) -> Vec<FallingPiece> {
+        let position = state.into();
+        let mut next = EnumSet::empty();
+        let mut q = state.next_queue();
+        next.insert(q.next().unwrap());
+        if let Some(p) = state.hold_piece {
+            next.insert(p);
+        } else {
+            next.insert(q.next().unwrap());
+        }
+        self.suggest_move_raw(position, next, &q.collect::<Vec<_>>(), state.bag)
+    }
+
+    pub fn suggest_move_raw(
+        &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
+    ) -> Vec<FallingPiece> {
+        let values = match self.0.get(&pos) {
+            Some(data) => &data.values,
+            None => return Default::default()
+        };
+        let possibilities = possible_sequences(
+            queue.iter().copied().take(NEXT_PIECES).collect(), bag
+        );
+        let mut move_values = HashMap::new();
+        let v = 1.0 / possibilities.len() as f64;
+        let mut moves = vec![];
+        for (queue, _) in possibilities {
+            if let Some((_, best)) = values.get(&Sequence { next, queue }) {
+                for &mv in best {
+                    *move_values.entry(mv).or_insert(0.0) += v;
+                    moves.push(mv);
+                }
+            }
+        }
+        moves.sort_by(|a, b| move_values.get(a).unwrap()
+            .partial_cmp(move_values.get(b).unwrap())
+            .unwrap()
+        );
+        moves
+    }
+
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
         pos.next_possibilities().into_iter()
             .map(|(next, bag)| self.value_of_raw(pos, next, &[], bag))

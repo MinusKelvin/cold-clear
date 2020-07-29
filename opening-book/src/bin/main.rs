@@ -90,6 +90,8 @@ fn main() {
 
     dbg!(book.value_of_position(Board::new().into()));
 
+    book.save_to(std::fs::File::create("book.ccbook").unwrap()).unwrap();
+
     dump(&book);
 }
 
@@ -176,6 +178,7 @@ fn dump(book: &opening_book::Book) {
         }
         s
     }
+    std::fs::create_dir_all("book").unwrap();
     for pos in book.positions() {
         let mut f = std::fs::File::create(format!("book/{}.html", name(pos))).unwrap();
         write!(f, r"
