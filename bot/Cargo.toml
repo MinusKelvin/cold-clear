@@ -11,6 +11,7 @@ arrayvec = "0.4.11"
 rand = "0.7.0"
 enumset = "0.4.0"
 libtetris = { path = "../libtetris" }
+opening-book = { path = "../opening-book" }
 enum-map = { version = "0.6.0", features = ["serde"] }
 odds = { version = "0.3.1", features = ["std-vec"] }
 serde = { version = "1", features = ["derive"] }

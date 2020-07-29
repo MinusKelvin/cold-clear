@@ -1,4 +1,5 @@
 use serde::{ Serialize, Deserialize };
+pub use opening_book::Book;
 
 #[macro_use]
 extern crate rental;

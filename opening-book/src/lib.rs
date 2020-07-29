@@ -54,11 +54,11 @@ impl Book {
     }
 
     pub fn load_from(src: impl std::io::Read) -> bincode::Result<Self> {
-        bincode::deserialize_from(libflate::gzip::Decoder::new(src)?)
+        bincode::deserialize_from(src)
     }
 
     pub fn save_to(&self, dst: impl std::io::Write) -> bincode::Result<()> {
-        bincode::serialize_into(libflate::gzip::Encoder::new(dst)?, self)
+        bincode::serialize_into(dst, self)
     }
 
     pub fn suggest_move(&self, state: &Board) -> Vec<FallingPiece> {

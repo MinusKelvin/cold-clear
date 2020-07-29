@@ -1,6 +1,7 @@
 use crossbeam_channel::{ Sender, Receiver, TryRecvError, unbounded, select };
 use std::sync::Arc;
 use libtetris::*;
+use opening_book::Book;
 use crate::evaluation::Evaluator;
 use crate::moves::Move;
 use crate::modes::ModeSwitchedBot;
@@ -14,11 +15,14 @@ pub struct Interface {
 impl Interface {
     /// Launches a bot thread with the specified starting board and options.
     pub fn launch(
-        board: Board, options: Options, evaluator: impl Evaluator + Send + 'static
+        board: Board,
+        options: Options,
+        evaluator: impl Evaluator + Send + 'static,
+        book: Option<Arc<Book>>
     ) -> Self {
         let (bot_send, recv) = unbounded();
         let (send, bot_recv) = unbounded();
-        std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options));
+        std::thread::spawn(move || run(bot_recv, bot_send, board, evaluator, options, book));
 
         Interface {
             send, recv
@@ -103,7 +107,8 @@ fn run(
     send: Sender<(Move, Info)>,
     mut board: Board,
     eval: impl Evaluator + 'static,
-    options: Options
+    options: Options,
+    book: Option<Arc<Book>>
 ) {
     if options.threads == 0 {
         panic!("Invalid number of threads: 0");
@@ -123,7 +128,7 @@ fn run(
         }
     }
 
-    let mut bot = ModeSwitchedBot::new(board, options);
+    let mut bot = ModeSwitchedBot::new(board, options, book.as_deref());
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(options.threads as usize)

@@ -1,6 +1,7 @@
 use serde::{ Serialize, Deserialize };
 use enum_map::EnumMap;
 use libtetris::*;
+use opening_book::Book;
 // use crate::tree::{ ChildData, TreeState, NodeId };
 use crate::dag::{ DagState, NodeId, ChildData };
 use crate::{ Options, Info };
@@ -102,7 +103,9 @@ impl<E: Evaluator> BotState<E> {
         self.tree.nodes() > self.options.min_nodes && self.forced_analysis_lines.is_empty()
     }
 
-    pub fn next_move(&mut self, eval: &E, incoming: u32, f: impl FnOnce(Move, Info)) -> bool {
+    pub fn next_move(
+        &mut self, eval: &E, book: Option<&Book>, incoming: u32, f: impl FnOnce(Move, Info)
+    ) -> bool {
         if !self.min_thinking_reached() {
             return false
         }
@@ -111,13 +114,34 @@ impl<E: Evaluator> BotState<E> {
         if candidates.is_empty() {
             return false
         }
-        let child = eval.pick_move(candidates, incoming);
+        let mut book_move = None;
+        if let Some(book) = book {
+            if self.tree.board().column_heights().iter().all(|&h| h <= 10) {
+                book_move = book.suggest_move(self.tree.board()).first().copied();
+            }
+        }
+        let mut picked = None;
+        if let Some(book_move) = book_move {
+            for mv in &candidates {
+                if mv.mv.same_location(&book_move) {
+                    picked = Some(mv.clone());
+                }
+            }
+        }
+        if picked.is_none() && book_move.is_some() {
+            dbg!("book picked a move we can't do?");
+        }
+        let child = picked.unwrap_or_else(|| eval.pick_move(candidates, incoming));
 
-        let plan = self.tree.get_plan();
+        let plan = if book_move.is_none() {
+            self.tree.get_plan()
+        } else {
+            vec![]
+        };
 
         let info = Info {
-            nodes: self.tree.nodes(),
-            depth: self.tree.depth() as u32,
+            nodes: if book_move.is_some() { 0 } else { self.tree.nodes() },
+            depth: if book_move.is_some() { 6 } else { self.tree.depth() as u32 },
             original_rank: child.original_rank,
             plan,
         };

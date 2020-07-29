@@ -228,7 +228,8 @@ extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeight
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         libtetris::Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
         convert_from_c_options(options),
-        convert_from_c_weights(weights)
+        convert_from_c_weights(weights),
+        None // TODO
     )))
 }
 
@@ -237,7 +238,8 @@ extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut 
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         libtetris::Board::new(),
         convert_from_c_options(options),
-        convert_from_c_weights(weights)
+        convert_from_c_weights(weights),
+        None // TODO
     )))
 }
 

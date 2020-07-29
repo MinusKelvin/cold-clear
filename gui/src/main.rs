@@ -8,6 +8,7 @@ use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
 use std::collections::HashSet;
 use cold_clear::evaluation::Evaluator;
+use cold_clear::Book;
 
 mod player_draw;
 mod battle_ui;
@@ -248,7 +249,19 @@ impl<E: Evaluator + Default + Clone + 'static> PlayerConfig<E> {
             (Box::new(BotInput::new(cold_clear::Interface::launch(
                 board,
                 self.bot_config.options,
-                self.bot_config.weights.clone()
+                self.bot_config.weights.clone(),
+                self.bot_config.book_path.as_ref().and_then(|path| {
+                    let mut book_cache = self.bot_config.book_cache.borrow_mut();
+                    match &*book_cache {
+                        Some(b) => Some(b.clone()),
+                        None => {
+                            let book = Book::load_from(std::fs::File::open(path).ok()?).ok()?;
+                            let book = std::sync::Arc::new(book);
+                            *book_cache = Some(book.clone());
+                            Some(book)
+                        }
+                    }
+                })
             ), self.bot_config.speed_limit)), name)
         } else {
             (Box::new(self.controls), "Human".to_owned())
@@ -261,5 +274,8 @@ impl<E: Evaluator + Default + Clone + 'static> PlayerConfig<E> {
 struct BotConfig<E> {
     weights: E,
     options: cold_clear::Options,
-    speed_limit: u32
+    speed_limit: u32,
+    book_path: Option<String>,
+    #[serde(skip)]
+    book_cache: std::cell::RefCell<Option<std::sync::Arc<Book>>>
 }

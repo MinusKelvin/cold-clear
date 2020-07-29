@@ -60,7 +60,7 @@ impl<E: Evaluator> BotInput<E> {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
                         let exec = &mut self.executing;
-                        self.bot.next_move(&self.eval, incoming, |mv, inf| {
+                        self.bot.next_move(&self.eval, None, incoming, |mv, inf| {
                             info = Some(inf);
                             *exec = Some((
                                 mv.expected_location,
