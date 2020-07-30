@@ -214,11 +214,14 @@ impl Book {
     ) -> Position {
         let position = position.into();
         let moves = &mut self.0.entry(position).or_default().moves;
-        if !moves.iter().any(|m| m.location == mv) {
-            moves.push(Move {
+        match moves.iter_mut().find(|m| m.location.same_location(&mv)) {
+            Some(mv) => if mv.value < value {
+                mv.value = value;
+            }
+            None => moves.push(Move {
                 location: mv,
                 value
-            });
+            })
         }
         let next = position.advance(mv).0;
         self.0.entry(next).or_default();
