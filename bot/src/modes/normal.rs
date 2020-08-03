@@ -100,7 +100,9 @@ impl<E: Evaluator> BotState<E> {
     }
 
     pub fn min_thinking_reached(&self) -> bool {
-        self.tree.nodes() > self.options.min_nodes && self.forced_analysis_lines.is_empty()
+        self.tree.nodes() > self.options.min_nodes &&
+            self.forced_analysis_lines.is_empty() &&
+            !self.tree.get_next_candidates().is_empty()
     }
 
     pub fn next_move(
