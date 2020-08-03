@@ -54,11 +54,11 @@ impl Book {
     }
 
     pub fn load_from(src: impl std::io::Read) -> bincode::Result<Self> {
-        bincode::deserialize_from(src)
+        bincode::deserialize_from(std::io::BufReader::new(src))
     }
 
     pub fn save_to(&self, dst: impl std::io::Write) -> bincode::Result<()> {
-        bincode::serialize_into(dst, self)
+        bincode::serialize_into(std::io::BufWriter::new(dst), self)
     }
 
     pub fn suggest_move(&self, state: &Board) -> Vec<FallingPiece> {
@@ -154,23 +154,20 @@ impl Book {
                     if !next.contains(mv.location.kind.0) {
                         continue;
                     }
-                    let value = if let Some(value) = mv.value {
+                    let (pos, long_moves) = pos.advance(mv.location);
+                    let mut value = if let Some(value) = mv.value {
                         MoveValue {
                             long_moves: 0.0,
                             value
                         }
+                    } else if next.len() == 1 {
+                        self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
                     } else {
-                        let (pos, long_moves) = pos.advance(mv.location);
-                        let mut v = if next.len() == 1 {
-                            self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
-                        } else {
-                            self.value_of_raw(
-                                pos, next - mv.location.kind.0 | queue[0], &queue[1..], qbag
-                            )
-                        };
-                        v.long_moves += long_moves;
-                        v
+                        self.value_of_raw(
+                            pos, next - mv.location.kind.0 | queue[0], &queue[1..], qbag
+                        )
                     };
+                    value.long_moves += long_moves;
                     if value > best {
                         best = value;
                         best_moves.clear();

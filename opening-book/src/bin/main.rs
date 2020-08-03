@@ -78,7 +78,7 @@ fn main() {
                     book.add_move(&b, p, None);
                     b.add_next_piece(p.kind.0);
                     b.advance_queue();
-                    offset += b.lock_piece(p).cleared_lines.len() as i32;
+                    offset += b.lock_piece(dbg!(p)).cleared_lines.len() as i32;
                 }
             }
         }
@@ -148,9 +148,9 @@ fn mirror_placement(p: FallingPiece) -> FallingPiece {
         }),
         x: match p.kind {
             PieceState(Piece::I, RotationState::North) => 8 - p.x,
-            PieceState(Piece::I, RotationState::South) => 8 - p.x,
+            PieceState(Piece::I, RotationState::South) => 10 - p.x,
             PieceState(Piece::O, RotationState::North) => 8 - p.x,
-            PieceState(Piece::O, RotationState::South) => 8 - p.x,
+            PieceState(Piece::O, RotationState::South) => 10 - p.x,
             _ => 9 - p.x
         },
         y: match p.kind {

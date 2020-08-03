@@ -159,7 +159,9 @@ fn bot_thread<E>(
             });
         }
 
-        let mut state = ModeSwitchedBot::new(board, options);
+        let mut state = ModeSwitchedBot::new(board, options, None);
+        // TODO: expose opening books in web api
+        // (books tend to be very large, possibly not useful?)
 
         loop {
             let new_tasks = state.think(&eval, |mv, info| send.send(&Some((mv, info))));
