@@ -601,6 +601,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     }
 
     pub fn get_next_candidates(&self) -> Vec<MoveCandidate<E>> {
+        if self.generations.len() < 2 { return vec![]; }
         self.generations[0].rent(|gen| self.generations[1].rent(|child_gen| {
             let mut candidates = vec![];
             if let Children::Known(_, children) = &gen.children {
