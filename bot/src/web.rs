@@ -21,6 +21,7 @@ pub struct Interface(Option<Worker<BotMsg, Option<(Move, Info)>>>);
 impl Interface {
     /// Launches a bot worker with the specified starting board and options.
     pub async fn launch<E>(
+        worker_uri: &str,
         board: Board,
         options: Options,
         evaluator: E
@@ -34,7 +35,8 @@ impl Interface {
             panic!("Invalid number of threads: 0");
         }
 
-        let worker = Worker::new(bot_thread, &(board, options, evaluator)).await.unwrap();
+        let args = (worker_uri.to_owned(), board, options, evaluator);
+        let worker = Worker::new(worker_uri, bot_thread, &args).await.unwrap();
 
         Interface(Some(worker))
     }
@@ -134,7 +136,7 @@ impl Interface {
 }
 
 fn bot_thread<E>(
-    (board, options, eval): (Board, Options, E),
+    (worker_uri, board, options, eval): (String, Board, Options, E),
     recv: Receiver<BotMsg>,
     send: WorkerSender<Option<(Move, Info)>>
 ) where
@@ -150,8 +152,9 @@ fn bot_thread<E>(
             let result_send = result_send.clone();
             let task_recv = task_recv.clone();
             let eval = eval.clone();
+            let worker_uri = worker_uri.clone();
             spawn_local(async move {
-                let worker = Worker::new(worker, &eval).await.unwrap();
+                let worker = Worker::new(&worker_uri, worker, &eval).await.unwrap();
                 while let Some(task) = task_recv.recv().await {
                     worker.send(&task).unwrap();
                     result_send.send(worker.recv().await).ok().unwrap();
