@@ -20,6 +20,8 @@ pub trait Evaluator : Send + Sync {
     ) -> MoveCandidate<Self::Value> {
         candidates.into_iter().next().unwrap()
     }
+
+    fn get_result(&self, v: &Self::Value) -> i32;
 }
 
 pub trait Evaluation<R> : Eq + Ord + Default + Clone
@@ -52,5 +54,9 @@ impl<T: Evaluator> Evaluator for std::sync::Arc<T> {
         &self, candidates: Vec<MoveCandidate<Self::Value>>, incoming: u32
     ) -> MoveCandidate<Self::Value> {
         (**self).pick_move(candidates, incoming)
+    }
+
+    fn get_result(&self, v: &Self::Value) -> i32 {
+        (**self).get_result(v)
     }
 }

@@ -145,6 +145,7 @@ impl<E: Evaluator> BotState<E> {
             nodes: if book_move.is_some() { 0 } else { self.tree.nodes() },
             depth: if book_move.is_some() { 6 } else { self.tree.depth() as u32 },
             original_rank: child.original_rank,
+            evaluation_result: eval.get_result(&child.evaluation),
             plan,
         };
 

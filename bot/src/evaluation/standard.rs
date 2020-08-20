@@ -325,6 +325,10 @@ impl Evaluator for Standard {
             attack: if lock.placement_kind.is_clear() { lock.garbage_sent as i32 } else { -1 }
         })
     }
+
+    fn get_result(&self, v: &Self::Value) -> i32 {
+        v.value
+    }
 }
 
 /// Evaluates the bumpiness of the playfield.
