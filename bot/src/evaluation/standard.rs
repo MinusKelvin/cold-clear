@@ -142,8 +142,9 @@ impl Evaluator for Standard {
     ) -> MoveCandidate<Value> {
         let mut backup = None;
         for mv in candidates.into_iter() {
-            if mv.board.column_heights()[3..6].iter()
-                    .all(|h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20) {
+            if incoming == 0 || mv.board.column_heights()[3..6].iter().all(
+                |h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20
+            ) {
                 return mv
             }
 
