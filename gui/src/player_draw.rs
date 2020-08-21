@@ -248,9 +248,22 @@ impl PlayerDrawState {
         if let Some(ref info) = self.info {
             // Bot info
             lines.push(("", "".to_owned()));
-            lines.push(("Depth", format!("{}", info.depth)));
-            lines.push(("Nodes", format!("{}", info.nodes)));
-            lines.push(("O. Rank", format!("{}", info.original_rank)));
+            match info {
+                cold_clear::Info::Normal(info) => {
+                    lines.push(("Freestyle", "".to_owned()));
+                    lines.push(("Depth", format!("{}", info.depth)));
+                    lines.push(("Nodes", format!("{}", info.nodes)));
+                    lines.push(("O. Rank", format!("{}", info.original_rank)));
+                }
+                cold_clear::Info::Book(info) => {
+                    lines.push(("Book", "".to_owned()));
+                    lines.push(("", info.name.clone()));
+                }
+                cold_clear::Info::PcLoop(info) => {
+                    lines.push(("PC Loop", "".to_owned()));
+                    lines.push(("Depth", format!("{}", info.depth)));
+                }
+            }
         }
         let mut labels = String::new();
         let mut values = String::new();
@@ -265,7 +278,7 @@ impl PlayerDrawState {
 
         if let Some(ref info) = self.info {
             let mut has_pc = false;
-            for (_, l) in &info.plan {
+            for (_, l) in info.plan() {
                 if l.perfect_clear {
                     has_pc = true;
                 }
@@ -276,7 +289,7 @@ impl PlayerDrawState {
             for i in 0..40 {
                 y_map[i] = i as i32;
             }
-            for (placement, lock) in &info.plan {
+            for (placement, lock) in info.plan() {
                 for &(x, y, d) in &placement.cells_with_connections() {
                     res.sprite_batch.draw(
                         &res.sprites.plan[d.to_bits() as usize],

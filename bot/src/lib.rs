@@ -50,11 +50,20 @@ enum BotMsg {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub struct Info {
-    pub nodes: u32,
-    pub depth: u32,
-    pub original_rank: u32,
-    pub plan: Vec<(FallingPiece, LockResult)>
+pub enum Info {
+    Normal(modes::normal::Info),
+    Book(modes::normal::BookInfo),
+    PcLoop(modes::pcloop::Info)
+}
+
+impl Info {
+    pub fn plan(&self) -> &[(FallingPiece, LockResult)] {
+        match self {
+            Info::Normal(info) => &info.plan,
+            Info::PcLoop(info) => &info.plan,
+            Info::Book(_) => &[]
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

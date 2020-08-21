@@ -299,9 +299,9 @@ fn convert_plan(
         let plan = unsafe {
             std::slice::from_raw_parts_mut(plan, *plan_length as usize)
         };
-        let n = info.plan.len().min(plan.len());
+        let n = info.plan().len().min(plan.len());
         for i in 0..n {
-            plan[i] = MaybeUninit::new(convert_plan_placement(&info.plan[i]));
+            plan[i] = MaybeUninit::new(convert_plan_placement(&info.plan()[i]));
         }
         *plan_length = n as u32;
     }
@@ -324,9 +324,21 @@ fn convert(m: cold_clear::Move, info: cold_clear::Info) -> CCMove {
         expected_y,
         movement_count: m.inputs.len() as u8,
         movements,
-        nodes: info.nodes as u32,
-        depth: info.depth as u32,
-        original_rank: info.original_rank as u32,
+        nodes: match &info {
+            cold_clear::Info::Normal(info) => info.nodes as u32,
+            cold_clear::Info::PcLoop(_) => 0,
+            cold_clear::Info::Book(_) => 0,
+        },
+        depth: match &info {
+            cold_clear::Info::Normal(info) => info.depth as u32,
+            cold_clear::Info::PcLoop(info) => info.depth as u32,
+            cold_clear::Info::Book(_) => 0,
+        },
+        original_rank: match &info {
+            cold_clear::Info::Normal(info) => info.original_rank as u32,
+            cold_clear::Info::PcLoop(_) => 0,
+            cold_clear::Info::Book(_) => 0,
+        }
     }
 }
 

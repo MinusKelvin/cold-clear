@@ -4,7 +4,7 @@ use libtetris::*;
 use opening_book::Book;
 // use crate::tree::{ ChildData, TreeState, NodeId };
 use crate::dag::{ DagState, NodeId, ChildData };
-use crate::{ Options, Info };
+use crate::Options;
 pub use crate::moves::Move;
 use crate::evaluation::Evaluator;
 
@@ -106,7 +106,11 @@ impl<E: Evaluator> BotState<E> {
     }
 
     pub fn next_move(
-        &mut self, eval: &E, book: Option<&Book>, incoming: u32, f: impl FnOnce(Move, Info)
+        &mut self,
+        eval: &E,
+        book: Option<&Book>,
+        incoming: u32,
+        f: impl FnOnce(Move, crate::Info)
     ) -> bool {
         if !self.min_thinking_reached() {
             return false
@@ -141,11 +145,16 @@ impl<E: Evaluator> BotState<E> {
             vec![]
         };
 
-        let info = Info {
-            nodes: if book_move.is_some() { 0 } else { self.tree.nodes() },
-            depth: if book_move.is_some() { 6 } else { self.tree.depth() as u32 },
-            original_rank: child.original_rank,
-            plan,
+        let info = match book_move {
+            Some(mv) => crate::Info::Book(BookInfo {
+                name: "".to_string()
+            }),
+            None => crate::Info::Normal(Info {
+                nodes: if book_move.is_some() { 0 } else { self.tree.nodes() },
+                depth: if book_move.is_some() { 6 } else { self.tree.depth() as u32 },
+                original_rank: child.original_rank,
+                plan,
+            })
         };
 
         let inputs = crate::moves::find_moves(
@@ -271,4 +280,17 @@ impl Thinker {
             }
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct Info {
+    pub nodes: u32,
+    pub depth: u32,
+    pub original_rank: u32,
+    pub plan: Vec<(FallingPiece, LockResult)>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct BookInfo {
+    pub name: String
 }

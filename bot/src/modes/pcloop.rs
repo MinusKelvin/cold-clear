@@ -4,7 +4,8 @@ use std::sync::atomic::{ AtomicBool, Ordering };
 use arrayvec::ArrayVec;
 use libtetris::{ Piece, RotationState, PieceState, TspinStatus, FallingPiece, Board, LockResult };
 use crossbeam_channel::{ Sender, unbounded };
-use crate::{ Move, Info };
+use serde::{ Serialize, Deserialize };
+use crate::Move;
 use crate::moves::MovementMode;
 
 pub struct PcLooper {
@@ -132,8 +133,6 @@ impl PcLooper {
             Some((mv, lock)) => {
                 let mut info = Info {
                     depth: self.current_pc.len() as u32 + 1,
-                    nodes: 0,
-                    original_rank: 0,
                     plan: vec![]
                 };
                 info.plan.push((mv.expected_location, lock));
@@ -291,4 +290,10 @@ impl<T> Drop for SendOnDrop<T> {
     fn drop(&mut self) {
         self.1.send(unsafe { std::mem::ManuallyDrop::take(&mut self.0) }).ok();
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct Info {
+    pub depth: u32,
+    pub plan: Vec<(FallingPiece, LockResult)>
 }

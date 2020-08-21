@@ -7,7 +7,7 @@ use arrayvec::ArrayVec;
 
 pub mod normal;
 #[cfg(not(target_arch = "wasm32"))]
-mod pcloop;
+pub mod pcloop;
 
 enum Mode<E: Evaluator> {
     Normal(normal::BotState<E>),
@@ -157,7 +157,7 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
                 if let Some(_) = self.do_move {
                     match bot.next_move() {
                         Ok((mv, info)) => {
-                            send_move(mv, info);
+                            send_move(mv, Info::PcLoop(info));
                             self.do_move = None;
                         }
                         Err(false) => {}
