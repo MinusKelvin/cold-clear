@@ -8,6 +8,7 @@ pub struct Standard {
     pub back_to_back: i32,
     pub bumpiness: i32,
     pub bumpiness_sq: i32,
+    pub row_transitions: i32,
     pub height: i32,
     pub top_half: i32,
     pub top_quarter: i32,
@@ -48,6 +49,7 @@ impl Default for Standard {
             back_to_back: 52,
             bumpiness: -24,
             bumpiness_sq: -7,
+            row_transitions: -5,
             height: -39,
             top_half: -150,
             top_quarter: -511,
@@ -90,6 +92,7 @@ impl Standard {
             back_to_back: 10,
             bumpiness: -7,
             bumpiness_sq: -28,
+            row_transitions: -5,
             height: -46,
             top_half: -126,
             top_quarter: -493,
@@ -294,6 +297,14 @@ impl Evaluator for Standard {
         transient_eval += self.well_depth * depth;
         if depth != 0 {
             transient_eval += self.well_column[well];
+        }
+
+        if self.row_transitions != 0 {
+            transient_eval += self.row_transitions * (0..40)
+                .map(|y| *board.get_row(y))
+                .map(|r| (r | 0b1_00000_00000) ^ (1 | r << 1))
+                .map(|d| d.count_ones() as i32)
+                .sum::<i32>();
         }
 
         if self.bumpiness | self.bumpiness_sq != 0 {
