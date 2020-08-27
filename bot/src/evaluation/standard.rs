@@ -40,6 +40,8 @@ pub struct Standard {
     pub wasted_t: i32,
 
     pub use_bag: bool,
+    pub timed_jeopardy: bool,
+    pub stack_pc_damage: bool,
     pub sub_name: Option<String>
 }
 
@@ -81,6 +83,8 @@ impl Default for Standard {
             combo_garbage: 150,
 
             use_bag: true,
+            timed_jeopardy: true,
+            stack_pc_damage: false,
             sub_name: None
         }
     }
@@ -122,6 +126,8 @@ impl Standard {
             move_time: -1,
             wasted_t: -147,
             use_bag: true,
+            timed_jeopardy: false,
+            stack_pc_damage: false,
             sub_name: None
         }
     }
@@ -169,7 +175,8 @@ impl Evaluator for Standard {
 
         if lock.perfect_clear {
             acc_eval += self.perfect_clear;
-        } else {
+        }
+        if self.stack_pc_damage || !lock.perfect_clear {
             if lock.b2b {
                 acc_eval += self.b2b_clear;
             }
@@ -232,7 +239,10 @@ impl Evaluator for Standard {
         transient_eval += self.top_quarter * (highest_point - 15).max(0);
         transient_eval += self.top_half * (highest_point - 10).max(0);
 
-        acc_eval += (self.jeopardy * (highest_point - 10).max(0) * move_time) / 10;
+        acc_eval += self.jeopardy
+            * (highest_point - 10).max(0)
+            * if self.timed_jeopardy { move_time } else { 10 }
+            / 10;
 
         let ts = if self.use_bag {
             board.next_bag().contains(Piece::T) as usize

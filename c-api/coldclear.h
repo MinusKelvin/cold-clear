@@ -82,6 +82,7 @@ typedef struct CCWeights {
     int32_t back_to_back;
     int32_t bumpiness;
     int32_t bumpiness_sq;
+    int32_t row_transitions;
     int32_t height;
     int32_t top_half;
     int32_t top_quarter;
@@ -113,6 +114,8 @@ typedef struct CCWeights {
     int32_t wasted_t;
 
     bool use_bag;
+    bool timed_jeopardy;
+    bool stack_pc_damage;
 } CCWeights;
 
 /* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag, using the

@@ -15,6 +15,7 @@ impl Mutateable for Standard {
             back_to_back: thread_rng().gen_range(-999, 1000),
             bumpiness: thread_rng().gen_range(-999, 1000),
             bumpiness_sq: thread_rng().gen_range(-999, 1000),
+            row_transitions: thread_rng().gen_range(-999, 1000),
             height: thread_rng().gen_range(-999, 1000),
             top_half: thread_rng().gen_range(-999, 1000),
             top_quarter: thread_rng().gen_range(-999, 1000),
@@ -62,6 +63,8 @@ impl Mutateable for Standard {
             combo_garbage: thread_rng().gen_range(-999, 1000),
 
             use_bag: true,
+            timed_jeopardy: true,
+            stack_pc_damage: false,
             sub_name: Some(sub_name)
         }
     }
@@ -71,6 +74,7 @@ impl Mutateable for Standard {
             back_to_back: crossover_gene(parent1.back_to_back, parent2.back_to_back),
             bumpiness: crossover_gene(parent1.bumpiness, parent2.bumpiness),
             bumpiness_sq: crossover_gene(parent1.bumpiness_sq, parent2.bumpiness_sq),
+            row_transitions: crossover_gene(parent1.row_transitions, parent2.row_transitions),
             height: crossover_gene(parent1.height, parent2.height),
             top_half: crossover_gene(parent1.top_half, parent2.top_half),
             top_quarter: crossover_gene(parent1.top_quarter, parent2.top_quarter),
@@ -118,6 +122,8 @@ impl Mutateable for Standard {
             combo_garbage: crossover_gene(parent1.combo_garbage, parent2.combo_garbage),
 
             use_bag: true,
+            timed_jeopardy: true,
+            stack_pc_damage: false,
             sub_name: Some(sub_name)
         }
     }

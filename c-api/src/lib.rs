@@ -127,6 +127,7 @@ struct CCWeights {
     back_to_back: i32,
     bumpiness: i32,
     bumpiness_sq: i32,
+    row_transitions: i32,
     height: i32,
     top_half: i32,
     top_quarter: i32,
@@ -158,6 +159,8 @@ struct CCWeights {
     wasted_t: i32,
 
     use_bag: bool,
+    timed_jeopardy: bool,
+    stack_pc_damage: bool,
 }
 
 fn convert_hold(hold: *mut CCPiece) -> Option<libtetris::Piece> {
@@ -187,6 +190,7 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
         back_to_back: weights.back_to_back,
         bumpiness: weights.bumpiness,
         bumpiness_sq: weights.bumpiness_sq,
+        row_transitions: weights.row_transitions,
         height: weights.height,
         top_half: weights.top_half,
         top_quarter: weights.top_quarter,
@@ -218,6 +222,8 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
         wasted_t: weights.wasted_t,
 
         use_bag: weights.use_bag,
+        timed_jeopardy: weights.timed_jeopardy,
+        stack_pc_damage: weights.stack_pc_damage,
         sub_name: None
     }
 }
@@ -397,6 +403,7 @@ fn convert_weights(w: cold_clear::evaluation::Standard) -> CCWeights {
         back_to_back: w.back_to_back,
         bumpiness: w.bumpiness,
         bumpiness_sq: w.bumpiness_sq,
+        row_transitions: w.row_transitions,
         height: w.height,
         top_half: w.top_half,
         top_quarter: w.top_quarter,
@@ -427,7 +434,9 @@ fn convert_weights(w: cold_clear::evaluation::Standard) -> CCWeights {
         move_time: w.move_time,
         wasted_t: w.wasted_t,
 
-        use_bag: w.use_bag
+        use_bag: w.use_bag,
+        timed_jeopardy: w.timed_jeopardy,
+        stack_pc_damage: w.stack_pc_damage
     }
 }
 
