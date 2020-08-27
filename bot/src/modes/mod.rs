@@ -6,7 +6,6 @@ use serde::{ Serialize, Deserialize };
 use arrayvec::ArrayVec;
 
 pub mod normal;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod pcloop;
 
 enum Mode<E: Evaluator> {
@@ -196,6 +195,7 @@ impl Task {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn can_pc_loop(board: &Board, hold_enabled: bool) -> bool {
     if board.get_row(0) != <u16 as Row>::EMPTY {
         return false;
@@ -206,30 +206,5 @@ fn can_pc_loop(board: &Board, hold_enabled: bool) -> bool {
         pieces >= 11
     } else {
         pieces >= 10
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-/// dummy wasm32 types because pcf can't really work on web until wasm threads come out
-mod pcloop {
-    use serde::{ Serialize, Deserialize };
-    use crate::{ Move, Info };
-    use libtetris::{ Piece, FallingPiece };
-    use arrayvec::ArrayVec;
-
-    #[derive(Serialize, Deserialize)]
-    pub struct PcSolver;
-    #[derive(Serialize, Deserialize)]
-    pub struct PcLooper;
-
-    impl PcLooper {
-        pub fn add_next_piece(&mut self, _: Piece) { unreachable!() }
-        pub fn think(&mut self) -> Option<PcSolver> { unreachable!() }
-        pub fn next_move(&mut self) -> Result<(Move, Info), bool> { unreachable!() }
-        pub fn solution(&mut self, _: Option<ArrayVec<[FallingPiece; 10]>>) { unreachable!() }
-    }
-
-    impl PcSolver {
-        pub fn solve(&self) -> Option<ArrayVec<[FallingPiece; 10]>> { unreachable!() }
     }
 }
