@@ -211,10 +211,10 @@ fn can_pc_loop(board: &Board, hold_enabled: bool) -> bool {
 
 #[cfg(target_arch = "wasm32")]
 /// dummy wasm32 types because pcf can't really work on web until wasm threads come out
-mod pcloop {
+pub mod pcloop {
     use serde::{ Serialize, Deserialize };
-    use crate::{ Move, Info };
-    use libtetris::{ Piece, FallingPiece };
+    use crate::Move;
+    use libtetris::{ Piece, FallingPiece, LockResult };
     use arrayvec::ArrayVec;
 
     #[derive(Serialize, Deserialize)]
@@ -231,5 +231,10 @@ mod pcloop {
 
     impl PcSolver {
         pub fn solve(&self) -> Option<ArrayVec<[FallingPiece; 10]>> { unreachable!() }
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
+    pub struct Info {
+        pub plan: Vec<(FallingPiece, LockResult)>
     }
 }
