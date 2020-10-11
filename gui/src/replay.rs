@@ -47,6 +47,7 @@ impl ReplayGame {
 impl crate::State for ReplayGame {
     fn update(
         &mut self,
+        _log: &mut crate::LogFile,
         res: &mut Resources,
         _keys: &HashSet<VirtualKeyCode>,
         _p1: Option<Gamepad>,

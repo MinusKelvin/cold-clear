@@ -7,6 +7,7 @@ use game_util::glutin::dpi::LogicalSize;
 use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
 use std::collections::HashSet;
+use std::io::prelude::*;
 use cold_clear::evaluation::Evaluator;
 use cold_clear::Book;
 
@@ -21,6 +22,7 @@ use realtime::RealtimeGame;
 use replay::ReplayGame;
 
 struct CCGui<'a> {
+    log: LogFile,
     context: &'a WindowedContext<PossiblyCurrent>,
     lsize: LogicalSize,
     res: res::Resources,
@@ -36,7 +38,9 @@ impl game_util::Game for CCGui<'_> {
         let gilrs = &self.gilrs;
         let p1 = self.p1.map(|id| gilrs.gamepad(id));
         let p2 = self.p2.map(|id| gilrs.gamepad(id));
-        if let Some(new_state) = self.state.update(&mut self.res, &self.keys, p1, p2) {
+        if let Some(new_state) = self.state.update(
+            &mut self.log, &mut self.res, &self.keys, p1, p2
+        ) {
             self.state = new_state;
         }
         GameloopCommand::Continue
@@ -115,26 +119,8 @@ impl game_util::Game for CCGui<'_> {
 }
 
 fn main() {
-    let mut replay = false;
-    let mut replay_file = None;
-    for arg in std::env::args() {
-        if replay {
-            replay_file = Some(arg);
-            break
-        }
-        if arg == "--help" {
-            println!("Cold Clear gameplay interface");
-            println!("Options:");
-            println!("  --play    <path>       View a replay");
-            return
-        } else if arg == "--play" {
-            replay = true;
-        }
-    }
-    if replay && replay_file.is_none() {
-        eprintln!("--play requires argument");
-        return
-    }
+    let mut log = LogFile::default();
+    let replay_file = std::env::args().skip(1).next();
 
     let mut events = EventsLoop::new();
 
@@ -143,7 +129,13 @@ fn main() {
             .with_title("Cold Clear")
             .with_dimensions((1280.0, 720.0).into()),
         0, true, &mut events
-    );
+    ).unwrap_or_else(|e| {
+        writeln!(
+            log, "Failure initializing OpenGL context. Does your computer suport OpenGL 3.3?"
+        ).ok();
+        writeln!(log, "{}", e).ok();
+        panic!()
+    });
 
     unsafe {
         gl::Enable(gl::BLEND);
@@ -151,16 +143,26 @@ fn main() {
     }
 
     let Options { p1, p2 } = read_options().unwrap_or_else(|e| {
-        eprintln!("An error occured while loading options.yaml: {}", e);
+        writeln!(log, "An error occured while loading options.yaml: {}", e).ok();
         Options::default()
     });
     let p1_game_config = p1.game;
     let p2_game_config = p2.game;
 
-    let gilrs = Gilrs::new().unwrap();
+    let gilrs = Gilrs::new().unwrap_or_else(|e| match e {
+        gilrs::Error::NotImplemented(g) => {
+            writeln!(log, "Gamepads are not supported on this platform.").ok();
+            g
+        },
+        e => {
+            writeln!(log, "Failure initializing gamepad support: {}", e).ok();
+            panic!()
+        }
+    });
     let mut gamepads = gilrs.gamepads();
 
     let mut game = CCGui {
+        log,
         context: &context,
         lsize,
         res: res::Resources::load(),
@@ -184,6 +186,7 @@ fn main() {
 trait State {
     fn update(
         &mut self,
+        log: &mut LogFile,
         res: &mut res::Resources,
         keys: &HashSet<VirtualKeyCode>,
         p1: Option<Gamepad>,
@@ -278,4 +281,27 @@ struct BotConfig<E> {
     book_path: Option<String>,
     #[serde(skip)]
     book_cache: std::cell::RefCell<Option<std::sync::Arc<Book>>>
+}
+
+#[derive(Default)]
+struct LogFile(Vec<u8>);
+
+impl Write for LogFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl Drop for LogFile {
+    fn drop(&mut self) {
+        if !self.0.is_empty() {
+            std::fs::write("error.log", &self.0).ok();
+        } else {
+            std::fs::remove_file("error.log").ok();
+        }
+    }
 }

@@ -8,7 +8,7 @@ default-run = "gui"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "558fd05" }
+game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "8621d0f" }
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 battle = { path = "../battle" }
@@ -21,4 +21,4 @@ bincode = "1.2"
 libflate = "0.1"
 
 [build-dependencies]
-build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "558fd05" }
+build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "8621d0f" }

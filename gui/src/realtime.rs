@@ -2,6 +2,7 @@ use game_util::glutin::VirtualKeyCode;
 use battle::{ Battle, GameConfig };
 use libtetris::Board;
 use std::collections::{ HashSet, VecDeque };
+use std::io::prelude::*;
 use rand::prelude::*;
 use gilrs::Gamepad;
 use crate::res::Resources;
@@ -66,6 +67,7 @@ impl RealtimeGame {
 impl crate::State for RealtimeGame {
     fn update(
         &mut self,
+        log: &mut crate::LogFile,
         res: &mut Resources,
         keys: &HashSet<VirtualKeyCode>,
         p1: Option<Gamepad>,
@@ -73,18 +75,24 @@ impl crate::State for RealtimeGame {
     ) -> Option<Box<dyn crate::State>> {
         let do_update = match self.state {
             State::GameOver(0) => {
-                let mut encoder = libflate::deflate::Encoder::new(
-                    std::fs::File::create("replay.dat"
-                ).unwrap());
-                bincode::serialize_into(
-                    &mut encoder,
-                    &InfoReplay {
-                        replay: self.battle.replay.clone(),
-                        p1_info_updates: self.p1_info_updates.clone(),
-                        p2_info_updates: self.p2_info_updates.clone()
-                    }
-                ).unwrap();
-                encoder.finish().unwrap();
+                let r: Result<(), Box<dyn std::error::Error>> = (|| {
+                    let mut encoder = libflate::deflate::Encoder::new(
+                        std::fs::File::create("replay.dat"
+                    )?);
+                    bincode::serialize_into(
+                        &mut encoder,
+                        &InfoReplay {
+                            replay: self.battle.replay.clone(),
+                            p1_info_updates: self.p1_info_updates.clone(),
+                            p2_info_updates: self.p2_info_updates.clone()
+                        }
+                    )?;
+                    encoder.finish().into_result()?;
+                    Ok(())
+                })();
+                if let Err(e) = r {
+                    writeln!(log, "Failure saving replay: {}", e).ok();
+                }
 
                 self.battle = Battle::new(
                     self.p1_config, self.p2_config,
