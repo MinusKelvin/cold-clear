@@ -219,7 +219,6 @@ impl BookBuilder {
                 moves
             });
         }
-        dbg!(book.len());
         Book(book)
     }
 
@@ -234,7 +233,6 @@ impl BookBuilder {
         }
         sequences.sort_by_key(|&(s, _)| s);
         sequences.dedup_by_key(|&mut (_, m)| m);
-        dbg!(sequences.len());
         sequences
     }
 }
