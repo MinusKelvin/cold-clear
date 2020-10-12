@@ -10,7 +10,7 @@ fn main() {
         .chain(pcf::PIECES.iter())
         .chain(pcf::PIECES.iter())
         .copied().collect();
-    let (send, recv) = std::sync::mpsc::channel::<ArrayVec<[_; 10]>>();
+    let (send, recv) = crossbeam_channel::unbounded::<ArrayVec<[_; 10]>>();
     let t = std::time::Instant::now();
     pcf::find_combinations_mt(
         first_pc_bag, pcf::BitBoard(0), &AtomicBool::new(false), 4,
@@ -26,7 +26,7 @@ fn main() {
     let mut book = BookBuilder::new();
 
     rayon::scope(|s| {
-        let (send, recv) = std::sync::mpsc::sync_channel(1 << 16);
+        let (send, recv) = crossbeam_channel::bounded(256);
 
         let mut queued_bags = HashSet::new();
         let mut bags = vec![EnumSet::empty()];
@@ -35,7 +35,7 @@ fn main() {
         while let Some(initial_bag) = bags.pop() {
             for (seq, bag) in all_sequences(initial_bag) {
                 if queued_bags.insert(bag) {
-                    // bags.push(bag);
+                    bags.push(bag);
                 }
                 let send = send.clone();
                 let combos = all_combinations.get(

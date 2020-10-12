@@ -13,3 +13,4 @@ enumset = "0.4.0"
 pcf = { git = "https://github.com/MinusKelvin/pcf" }
 arrayvec = "0.5.1"
 rayon = "1.4.1"
+crossbeam-channel = "0.5.0"
