@@ -131,11 +131,16 @@ impl FallingPiece {
     }
 
     pub fn same_location(&self, other: &Self) -> bool {
-        let mut self_cells = self.cells();
-        self_cells.sort();
-        let mut other_cells = other.cells();
-        other_cells.sort();
-        self_cells == other_cells
+        if self.kind.0 != other.kind.0 {
+            return false
+        }
+        let other_cells = other.cells();
+        for c in &self.cells() {
+            if !other_cells.contains(c) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -220,23 +225,29 @@ impl PieceState {
 
     /// Returns the cells this piece and orientation occupy relative to rotation point 1, as well
     /// as the connection directions, in no particular order.
-    #[inline]
+    #[inline(always)]
     pub fn cells(&self) -> [(i32, i32); 4] {
-        let rotate = |x: i32, y| match self.1 {
-            RotationState::North => (x, y),
-            RotationState::East => (y, -x),
-            RotationState::South => (-x, -y),
-            RotationState::West => (-y, x)
-        };
-        match self.0 {
-            Piece::I => [rotate(-1, 0), rotate( 0, 0), rotate( 1, 0), rotate( 2, 0)],
-            Piece::O => [rotate( 0, 0), rotate( 1, 0), rotate( 0, 1), rotate( 1, 1)],
-            Piece::L => [rotate(-1, 0), rotate( 0, 0), rotate( 1, 0), rotate( 1, 1)],
-            Piece::J => [rotate(-1, 0), rotate( 0, 0), rotate( 1, 0), rotate(-1, 1)],
-            Piece::T => [rotate(-1, 0), rotate( 0, 0), rotate( 1, 0), rotate( 0, 1)],
-            Piece::S => [rotate(-1, 0), rotate( 0, 0), rotate( 0, 1), rotate( 1, 1)],
-            Piece::Z => [rotate(-1, 1), rotate( 0, 1), rotate( 0, 0), rotate( 1, 0)],
+        macro_rules! gen_cells {
+            ($([$(($x:expr, $y:expr)),*]),*) => {
+                [$(
+                    [$(($x, $y)),*],   // North
+                    [$((-$x, -$y)),*], // South
+                    [$(($y, -$x)),*],  // East
+                    [$((-$y, $x)),*]   // West
+                ),*]
+            };
         }
+        const CELLS: &'static [[(i32, i32); 4]] = &gen_cells![
+            [(-1, 0), ( 0, 0), ( 1, 0), ( 2, 0)], // I
+            [( 0, 0), ( 1, 0), ( 0, 1), ( 1, 1)], // O
+            [(-1, 0), ( 0, 0), ( 1, 0), ( 0, 1)], // T
+            [(-1, 0), ( 0, 0), ( 1, 0), ( 1, 1)], // L
+            [(-1, 0), ( 0, 0), ( 1, 0), (-1, 1)], // J
+            [(-1, 0), ( 0, 0), ( 0, 1), ( 1, 1)], // S
+            [(-1, 1), ( 0, 1), ( 0, 0), ( 1, 0)]  // Z
+        ];
+        let index = self.0 as usize * 4 + self.1 as usize;
+        CELLS[index]
     }
 
     pub fn cells_with_connections(&self) -> [(i32, i32, EnumSet<Direction>); 4] {

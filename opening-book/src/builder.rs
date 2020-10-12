@@ -178,7 +178,7 @@ impl BookBuilder {
 
     pub fn add_move(
         &mut self, position: impl Into<Position>, mv: FallingPiece, value: Option<f64>
-    ) -> Position {
+    ) {
         let position = position.into();
         let moves = &mut self.0.entry(position).or_default().moves;
         match moves.iter_mut().find(|m| m.location.same_location(&mv)) {
@@ -190,9 +190,6 @@ impl BookBuilder {
                 value
             })
         }
-        let next = position.advance(mv).0;
-        self.0.entry(next).or_default();
-        next
     }
 
     pub fn moves(&self, pos: Position) -> &[Move] {

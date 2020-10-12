@@ -1,4 +1,5 @@
-use opening_book::BookBuilder;
+use opening_book::{ BookBuilder, Position };
+use libtetris::FallingPiece;
 use std::sync::atomic::AtomicBool;
 use std::collections::{ HashSet, HashMap };
 use enumset::EnumSet;
@@ -25,7 +26,7 @@ fn main() {
     let mut book = BookBuilder::new();
 
     rayon::scope(|s| {
-        let (send, recv) = std::sync::mpsc::channel::<(_, ArrayVec<[_; 10]>)>();
+        let (send, recv) = std::sync::mpsc::sync_channel(1 << 16);
 
         let mut queued_bags = HashSet::new();
         let mut bags = vec![EnumSet::empty()];
@@ -34,7 +35,7 @@ fn main() {
         while let Some(initial_bag) = bags.pop() {
             for (seq, bag) in all_sequences(initial_bag) {
                 if queued_bags.insert(bag) {
-                    bags.push(bag);
+                    // bags.push(bag);
                 }
                 let send = send.clone();
                 let combos = all_combinations.get(
@@ -42,9 +43,9 @@ fn main() {
                 ).map(|v| &**v).unwrap_or(&[]);
                 s.spawn(move |_| for combo in combos {
                     pcf::solve_placement_combination(
-                        &seq, pcf::BitBoard(0), combo, true, true, &AtomicBool::new(false),
+                        &seq, pcf::BitBoard(0), combo, true, false, &AtomicBool::new(false),
                         pcf::placeability::simple_srs_spins,
-                        |soln| send.send((initial_bag, soln.iter().copied().collect())).unwrap()
+                        |soln| send.send(process_soln(soln, initial_bag)).unwrap()
                     );
                 });
             }
@@ -54,32 +55,12 @@ fn main() {
         drop(send);
 
         let t = std::time::Instant::now();
-        for (bag, soln) in recv {
-            let mut pos: opening_book::Position = libtetris::Board::new_with_state(
-                [[false; 10]; 40], bag, None, false, 0
-            ).into();
-            let mut b = pcf::BitBoard(0);
-            for p in soln {
-                let mv = *p.srs_piece(b).first().unwrap();
-                let mv = libtetris::FallingPiece {
-                    kind: libtetris::PieceState(libtetris_piece(mv.piece), match mv.rotation {
-                        pcf::Rotation::West => libtetris::RotationState::West,
-                        pcf::Rotation::East => libtetris::RotationState::East,
-                        pcf::Rotation::North => libtetris::RotationState::North,
-                        pcf::Rotation::South => libtetris::RotationState::South,
-                    }),
-                    x: mv.x,
-                    y: mv.y,
-                    tspin: libtetris::TspinStatus::None
-                };
-                b = b.combine(p.board());
-                book.add_move(pos, mv, if b == pcf::BitBoard::filled(4) {
-                    Some(1.0)
-                } else {
-                    None
-                });
-                pos = pos.advance(mv).0;
+        for soln in recv {
+            for &(pos, mv) in &soln {
+                book.add_move(pos, mv, None);
             }
+            let &(pos, mv) = soln.last().unwrap();
+            book.add_move(pos, mv, Some(1.0));
         }
         println!("Took {:?} to add moves to the book", t.elapsed());
     });
@@ -93,6 +74,34 @@ fn main() {
         std::fs::File::create("pc.ccbook").unwrap()
     ).unwrap();
     println!("Took {:?} to save the book", t.elapsed());
+}
+
+fn process_soln(
+    soln: &[pcf::Placement], bag: EnumSet<libtetris::Piece>
+) -> ArrayVec<[(Position, FallingPiece); 10]> {
+    let mut poses = ArrayVec::new();
+    let mut pos: Position = libtetris::Board::new_with_state(
+        [[false; 10]; 40], bag, None, false, 0
+    ).into();
+    let mut b = pcf::BitBoard(0);
+    for p in soln {
+        let mv = *p.srs_piece(b).first().unwrap();
+        let mv = FallingPiece {
+            kind: libtetris::PieceState(libtetris_piece(mv.piece), match mv.rotation {
+                pcf::Rotation::West => libtetris::RotationState::West,
+                pcf::Rotation::East => libtetris::RotationState::East,
+                pcf::Rotation::North => libtetris::RotationState::North,
+                pcf::Rotation::South => libtetris::RotationState::South,
+            }),
+            x: mv.x,
+            y: mv.y,
+            tspin: libtetris::TspinStatus::None
+        };
+        poses.push((pos, mv));
+        b = b.combine(p.board());
+        pos = pos.advance(mv).0;
+    }
+    poses
 }
 
 fn all_sequences(
