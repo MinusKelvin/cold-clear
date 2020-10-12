@@ -1,0 +1,15 @@
+[package]
+name = "pc-gen"
+version = "0.1.0"
+authors = ["MinusKelvin <mark.carlson@minuskelvin.net>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+opening-book = { path = "..", features = ["builder"] }
+libtetris = { path = "../../libtetris" }
+enumset = "0.4.0"
+pcf = { git = "https://github.com/MinusKelvin/pcf" }
+arrayvec = "0.5.1"
+rayon = "1.4.1"
