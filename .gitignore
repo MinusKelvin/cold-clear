@@ -4,3 +4,5 @@ playout*
 Cargo.lock
 options.yaml
 replay.dat
+/opening-book/book
+*.ccbook

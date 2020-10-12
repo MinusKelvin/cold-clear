@@ -1,8 +1,9 @@
 use libtetris::*;
 use std::io::prelude::*;
+use opening_book::BookBuilder;
 
 fn main() {
-    let mut book = opening_book::Book::new();
+    let mut book = BookBuilder::new();
 
     for l in std::io::BufReader::new(std::io::stdin()).lines() {
         let fumen = match fumen::Fumen::decode(&l.unwrap()) {
@@ -78,7 +79,7 @@ fn main() {
                     book.add_move(&b, p, None);
                     b.add_next_piece(p.kind.0);
                     b.advance_queue();
-                    offset += b.lock_piece(dbg!(p)).cleared_lines.len() as i32;
+                    offset += b.lock_piece(p).cleared_lines.len() as i32;
                 }
             }
         }
@@ -90,7 +91,9 @@ fn main() {
 
     dbg!(book.value_of_position(Board::new().into()));
 
-    book.save_to(std::fs::File::create("book.ccbook").unwrap()).unwrap();
+    book.compile(&[Board::new().into()]).save(
+        std::fs::File::create("book.ccbook").unwrap()
+    ).unwrap();
 
     dump(&book);
 }
@@ -164,7 +167,7 @@ fn mirror_placement(p: FallingPiece) -> FallingPiece {
     }
 }
 
-fn dump(book: &opening_book::Book) {
+fn dump(book: &opening_book::BookBuilder) {
     fn name(pos: opening_book::Position) -> String {
         let mut s = String::new();
         for &r in pos.rows() {
@@ -254,14 +257,16 @@ fn dump(book: &opening_book::Book) {
             }
             write!(f, "</table></a> ").unwrap();
         }
-        // for (next, b) in pos.next_possibilities() {
-        //     for (queue, bag) in opening_book::possible_sequences(vec![], b) {
-        //         let v = book.value_of_raw(pos, next, &queue, bag);
-        //         if v == Default::default() {
-        //             write!(f, "<p>({:?}){:?} = {:?}", next, queue, v).unwrap();
-        //         }
-        //     }
-        // }
+        if pos.bag() == enumset::EnumSet::all() {
+            for (next, b) in pos.next_possibilities() {
+                for (queue, bag) in opening_book::possible_sequences(vec![], b) {
+                    let v = book.value_of_raw(pos, next, &queue, bag);
+                    if v == Default::default() {
+                        write!(f, "<p>({:?}){:?} = {:?}", next, queue, v).unwrap();
+                    }
+                }
+            }
+        }
         write!(f, "</body></html>").unwrap();
     }
 }

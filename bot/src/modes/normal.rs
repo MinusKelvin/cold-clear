@@ -123,7 +123,7 @@ impl<E: Evaluator> BotState<E> {
         let mut book_move = None;
         if let Some(book) = book {
             if self.tree.board().column_heights().iter().all(|&h| h <= 10) {
-                book_move = book.suggest_move(self.tree.board()).first().copied();
+                book_move = book.suggest_move(self.tree.board());
             }
         }
         let mut picked = None;

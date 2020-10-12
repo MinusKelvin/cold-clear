@@ -258,7 +258,8 @@ impl<E: Evaluator + Default + Clone + 'static> PlayerConfig<E> {
                     match &*book_cache {
                         Some(b) => Some(b.clone()),
                         None => {
-                            let book = Book::load_from(std::fs::File::open(path).ok()?).ok()?;
+                            let buf = std::io::BufReader::new(std::fs::File::open(path).ok()?);
+                            let book = Book::load(buf).ok()?;
                             let book = std::sync::Arc::new(book);
                             *book_cache = Some(book.clone());
                             Some(book)
