@@ -39,8 +39,11 @@ fn main() {
         println!("Working on PC book {} ({} queues)", i, total);
         rayon::scope(|s| {
             for (seq, bag) in all_seq {
+                if bag.hold.is_some() {
+                    continue;
+                }
                 if queued_bags.insert(bag) {
-                    //bags.push(bag);
+                    bags.push(bag);
                 }
                 let send = send.clone();
                 let combos = all_combinations.get(
