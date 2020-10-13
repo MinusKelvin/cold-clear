@@ -62,20 +62,20 @@ fn main() {
                 });
             }
             println!("Took {:?} to spawn solve tasks", t.elapsed());
-        });
 
-        drop(send);
+            drop(send);
 
-        let t = std::time::Instant::now();
-        for soln in recv {
-            for &(pos, mv) in &soln {
-                book.add_move(pos, mv, None);
+            let t = std::time::Instant::now();
+            for soln in recv {
+                for &(pos, mv) in &soln {
+                    book.add_move(pos, mv, None);
+                }
+                let &(pos, mv) = soln.last().unwrap();
+                book.add_move(pos, mv, Some(1.0));
             }
-            let &(pos, mv) = soln.last().unwrap();
-            book.add_move(pos, mv, Some(1.0));
-        }
-        println!("Took {:?} to add moves to the book", t.elapsed());
-        println!("book is {} positions large", book.positions().count());
+            println!("Took {:?} to add moves to the book", t.elapsed());
+            println!("book is {} positions large", book.positions().count());
+        });
 
         let t = std::time::Instant::now();
         book.recalculate_graph();
