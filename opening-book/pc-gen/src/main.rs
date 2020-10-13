@@ -23,19 +23,21 @@ fn main() {
     }
     println!("Took {:?} to generate combinations", t.elapsed());
 
-    let mut book = BookBuilder::new();
-    let count = &std::sync::atomic::AtomicUsize::new(0);
 
-    rayon::scope(|s| {
+    let mut queued_bags = HashSet::new();
+    let mut bags = vec![BagWithHold::default()];
+    queued_bags.insert(BagWithHold::default());
+    let t = std::time::Instant::now();
+    let mut i = 0;
+    while let Some(initial_bag) = bags.pop() {
+        i += 1;
+        let mut book = BookBuilder::new();
         let (send, recv) = crossbeam_channel::bounded(256);
-
-        let mut queued_bags = HashSet::new();
-        let mut bags = vec![EnumSet::empty()];
-        queued_bags.insert(EnumSet::empty());
-        let t = std::time::Instant::now();
-        while let Some(initial_bag) = bags.pop() {
-            let all_seq = all_sequences(initial_bag);
-            let total = all_seq.len();
+        let count = &std::sync::atomic::AtomicUsize::new(0);
+        let all_seq = all_sequences(initial_bag);
+        let total = all_seq.len();
+        println!("Working on PC book {} ({} queues)", i, total);
+        rayon::scope(|s| {
             for (seq, bag) in all_seq {
                 if queued_bags.insert(bag) {
                     //bags.push(bag);
@@ -52,11 +54,14 @@ fn main() {
                             |soln| send.send(process_soln(soln, initial_bag)).unwrap()
                         );
                     }
-                    println!("{}/{}", count.fetch_add(1, std::sync::atomic::Ordering::Relaxed), total);
+                    let c = count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if 100*c / total != 100*(c+1) / total {
+                        println!("{}%", (c+1) / total);
+                    }
                 });
             }
-        }
-        println!("Took {:?} to spawn solve tasks", t.elapsed());
+            println!("Took {:?} to spawn solve tasks", t.elapsed());
+        });
 
         drop(send);
 
@@ -69,27 +74,27 @@ fn main() {
             book.add_move(pos, mv, Some(1.0));
         }
         println!("Took {:?} to add moves to the book", t.elapsed());
-    });
+        println!("book is {} positions large", book.positions().count());
 
-    println!("book is {} positions large", book.positions().count());
+        let t = std::time::Instant::now();
+        book.recalculate_graph();
+        println!("Took {:?} to calculate the book", t.elapsed());
+        println!("{:?}", book.value_of_position(libtetris::Board::new().into()));
 
-    let t = std::time::Instant::now();
-    book.recalculate_graph();
-    println!("Took {:?} to calculate the book", t.elapsed());
-
-    let t = std::time::Instant::now();
-    book.compile(&[libtetris::Board::new().into()]).save(
-        std::fs::File::create("pc.ccbook").unwrap()
-    ).unwrap();
-    println!("Took {:?} to save the book", t.elapsed());
+        let t = std::time::Instant::now();
+        book.compile(&[libtetris::Board::new().into()]).save(
+            std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap()
+        ).unwrap();
+        println!("Took {:?} to save PC book {}", t.elapsed(), i);
+    }
 }
 
 fn process_soln(
-    soln: &[pcf::Placement], bag: EnumSet<libtetris::Piece>
+    soln: &[pcf::Placement], bag: BagWithHold
 ) -> ArrayVec<[(Position, FallingPiece); 10]> {
     let mut poses = ArrayVec::new();
     let mut pos: Position = libtetris::Board::new_with_state(
-        [[false; 10]; 40], bag, None, false, 0
+        [[false; 10]; 40], bag.bag, bag.hold, false, 0
     ).into();
     let mut b = pcf::BitBoard(0);
     for p in soln {
@@ -113,24 +118,21 @@ fn process_soln(
 }
 
 fn all_sequences(
-    bag: EnumSet<libtetris::Piece>
-) -> Vec<([pcf::Piece; 10], EnumSet<libtetris::Piece>)> {
+    bag: BagWithHold
+) -> Vec<([pcf::Piece; 10], BagWithHold)> {
     let mut result = vec![];
     all_sequences_impl(&mut result, &mut ArrayVec::new(), bag);
     result
 }
 
 fn all_sequences_impl(
-    into: &mut Vec<([pcf::Piece; 10], EnumSet<libtetris::Piece>)>,
+    into: &mut Vec<([pcf::Piece; 10], BagWithHold)>,
     q: &mut ArrayVec<[pcf::Piece; 10]>,
-    mut bag: EnumSet<libtetris::Piece>
+    bag: BagWithHold
 ) {
     if q.is_full() {
         into.push((q.clone().into_inner().unwrap(), bag));
     } else {
-        if bag.is_empty() {
-            bag = EnumSet::all();
-        }
         for p in bag {
             q.push(pcf_piece(p));
             all_sequences_impl(into, q, bag - p);
@@ -160,5 +162,52 @@ fn pcf_piece(p: libtetris::Piece) -> pcf::Piece {
         libtetris::Piece::J => pcf::Piece::J,
         libtetris::Piece::S => pcf::Piece::S,
         libtetris::Piece::Z => pcf::Piece::Z,
+    }
+}
+
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+struct BagWithHold {
+    bag: EnumSet<libtetris::Piece>,
+    hold: Option<libtetris::Piece>
+}
+
+impl Default for BagWithHold {
+    fn default() -> Self {
+        BagWithHold {
+            bag: EnumSet::all(),
+            hold: None
+        }
+    }
+}
+
+impl std::ops::Sub<libtetris::Piece> for BagWithHold {
+    type Output = Self;
+    fn sub(self, rhs: libtetris::Piece) -> Self {
+        let base = match self.hold {
+            Some(p) if p == rhs => BagWithHold {
+                bag: self.bag,
+                hold: None
+            },
+            _ => BagWithHold {
+                bag: self.bag - rhs,
+                hold: self.hold
+            }
+        };
+        if base.bag.len() == 1 && base.hold.is_none() {
+            BagWithHold {
+                bag: EnumSet::all(),
+                hold: base.bag.iter().next()
+            }
+        } else {
+            base
+        }
+    }
+}
+
+impl IntoIterator for BagWithHold {
+    type IntoIter = std::iter::Chain<enumset::EnumSetIter<libtetris::Piece>, std::option::IntoIter<libtetris::Piece>>;
+    type Item = libtetris::Piece;
+    fn into_iter(self) -> Self::IntoIter {
+        self.bag.iter().chain(self.hold.into_iter())
     }
 }
