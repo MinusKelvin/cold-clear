@@ -24,6 +24,7 @@ fn main() {
     println!("Took {:?} to generate combinations", t.elapsed());
 
     let mut book = BookBuilder::new();
+    let count = &std::sync::atomic::AtomicUsize::new(0);
 
     rayon::scope(|s| {
         let (send, recv) = crossbeam_channel::bounded(256);
@@ -33,20 +34,25 @@ fn main() {
         queued_bags.insert(EnumSet::empty());
         let t = std::time::Instant::now();
         while let Some(initial_bag) = bags.pop() {
-            for (seq, bag) in all_sequences(initial_bag) {
+            let all_seq = all_sequences(initial_bag);
+            let total = all_seq.len();
+            for (seq, bag) in all_seq {
                 if queued_bags.insert(bag) {
-                    bags.push(bag);
+                    //bags.push(bag);
                 }
                 let send = send.clone();
                 let combos = all_combinations.get(
                     &seq.iter().copied().collect()
                 ).map(|v| &**v).unwrap_or(&[]);
-                s.spawn(move |_| for combo in combos {
-                    pcf::solve_placement_combination(
-                        &seq, pcf::BitBoard(0), combo, true, false, &AtomicBool::new(false),
-                        pcf::placeability::simple_srs_spins,
-                        |soln| send.send(process_soln(soln, initial_bag)).unwrap()
-                    );
+                s.spawn(move |_| {
+                    for combo in combos {
+                        pcf::solve_placement_combination(
+                            &seq, pcf::BitBoard(0), combo, false, false, &AtomicBool::new(false),
+                            pcf::placeability::simple_srs_spins,
+                            |soln| send.send(process_soln(soln, initial_bag)).unwrap()
+                        );
+                    }
+                    println!("{}/{}", count.fetch_add(1, std::sync::atomic::Ordering::Relaxed), total);
                 });
             }
         }
@@ -64,6 +70,8 @@ fn main() {
         }
         println!("Took {:?} to add moves to the book", t.elapsed());
     });
+
+    println!("book is {} positions large", book.positions().count());
 
     let t = std::time::Instant::now();
     book.recalculate_graph();

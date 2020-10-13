@@ -51,7 +51,11 @@ impl<R: Row> Board<R> {
             b2b_bonus: b2b,
             hold_piece: hold,
             next_pieces: VecDeque::new(),
-            bag: bag_remain,
+            bag: if bag_remain.is_empty() {
+                EnumSet::all()
+            } else {
+                bag_remain
+            },
         };
         board.set_field(field);
         board

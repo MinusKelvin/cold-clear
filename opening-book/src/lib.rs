@@ -70,7 +70,7 @@ struct Sequence {
 }
 
 impl Position {
-    pub fn advance(&self, mv: FallingPiece) -> (Position, f64) {
+    pub fn advance(&self, mv: FallingPiece) -> (Position, f32) {
         let mut field = [[false; 10]; 40];
         for y in 0..10 {
             for x in 0..10 {
@@ -97,7 +97,7 @@ impl Position {
                 position.bag = EnumSet::all();
             }
         }
-        (position, soft_drop as u8 as f64 + clear as u8 as f64)
+        (position, soft_drop as u8 as f32 + clear as u8 as f32)
     }
 
     pub fn next_possibilities(&self) -> Vec<(EnumSet<Piece>, EnumSet<Piece>)> {

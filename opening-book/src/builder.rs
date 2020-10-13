@@ -5,7 +5,7 @@ pub struct BookBuilder(HashMap<Position, PositionData>);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
-    values: HashMap<Sequence, (MoveValue, Vec<FallingPiece>)>,
+    values: HashMap<Sequence, (MoveValue, FallingPiece)>,
     moves: Vec<Move>,
     dirty: bool
 }
@@ -23,7 +23,7 @@ impl Default for PositionData {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Move {
     pub location: FallingPiece,
-    pub value: Option<f64>
+    pub value: Option<f32>
 }
 
 impl BookBuilder {
@@ -31,7 +31,7 @@ impl BookBuilder {
         BookBuilder(HashMap::new())
     }
 
-    pub fn suggest_move(&self, state: &Board) -> Vec<FallingPiece> {
+    pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
         let position = state.into();
         let mut next = EnumSet::empty();
         let mut q = state.next_queue();
@@ -46,30 +46,12 @@ impl BookBuilder {
 
     pub fn suggest_move_raw(
         &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
-    ) -> Vec<FallingPiece> {
-        let values = match self.0.get(&pos) {
-            Some(data) => &data.values,
-            None => return Default::default()
-        };
-        let possibilities = possible_sequences(
-            queue.iter().copied().take(NEXT_PIECES).collect(), bag
-        );
-        let mut move_values = HashMap::new();
-        let v = 1.0 / possibilities.len() as f64;
-        let mut moves = vec![];
-        for (queue, _) in possibilities {
-            if let Some((_, best)) = values.get(&Sequence { next, queue }) {
-                for &mv in best {
-                    *move_values.entry(mv).or_insert(0.0) += v;
-                    moves.push(mv);
-                }
-            }
-        }
-        moves.sort_by(|a, b| move_values.get(a).unwrap()
-            .partial_cmp(move_values.get(b).unwrap())
-            .unwrap()
-        );
-        moves
+    ) -> Option<FallingPiece> {
+        let values = &self.0.get(&pos)?.values;
+        let queue = queue.iter().copied().take(NEXT_PIECES)
+            .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
+            .into_inner().ok()?;
+        values.get(&Sequence { next, queue }).map(|&(_, mv)| mv)
     }
 
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
@@ -110,7 +92,7 @@ impl BookBuilder {
 
     fn update_value(&mut self, pos: Position) -> bool {
         let children_dirty = self.0.get(&pos).unwrap().moves.iter()
-            .any(|m| self.0.get(&pos.advance(m.location).0).unwrap().dirty);
+            .any(|m| self.0.get(&pos.advance(m.location).0).map_or(true, |v| v.dirty));
         if !self.0.get(&pos).unwrap().dirty && !children_dirty {
             return false;
         }
@@ -119,7 +101,7 @@ impl BookBuilder {
             for (queue, qbag) in possible_sequences(vec![], bag) {
                 let this = self.0.get(&pos).unwrap();
                 let mut best = MoveValue::default();
-                let mut best_moves = vec![];
+                let mut best_move = None;
                 for &mv in &this.moves {
                     if !next.contains(mv.location.kind.0) {
                         continue;
@@ -140,15 +122,21 @@ impl BookBuilder {
                     value.long_moves += long_moves;
                     if value > best {
                         best = value;
-                        best_moves.clear();
-                        best_moves.push(mv.location);
-                    } else if value == best {
-                        best_moves.push(mv.location);
+                        best_move = Some(mv.location);
+                    } else if value == best && best != MoveValue::default() {
+                        let best_mv = best_move.unwrap();
+                        let ord = mv.location.x.cmp(&best_mv.x)
+                            .then(mv.location.y.cmp(&best_mv.y))
+                            .then((mv.location.kind.0 as usize).cmp(&(best_mv.kind.0 as usize)))
+                            .then((mv.location.kind.1 as usize).cmp(&(best_mv.kind.1 as usize)));
+                        if ord == std::cmp::Ordering::Greater {
+                            best_move = Some(mv.location);
+                        }
                     }
                 }
-                if best != MoveValue::default() {
+                if let Some(best_move) = best_move {
                     let this = self.0.get_mut(&pos).unwrap();
-                    let old = this.values.insert(Sequence { next, queue }, (best, best_moves));
+                    let old = this.values.insert(Sequence { next, queue }, (best, best_move));
                     this.dirty |= old.map(|v| v.0) != Some(best);
                 }
             }
@@ -177,7 +165,7 @@ impl BookBuilder {
     }
 
     pub fn add_move(
-        &mut self, position: impl Into<Position>, mv: FallingPiece, value: Option<f64>
+        &mut self, position: impl Into<Position>, mv: FallingPiece, value: Option<f32>
     ) {
         let position = position.into();
         let moves = &mut self.0.entry(position).or_default().moves;
@@ -224,7 +212,7 @@ impl BookBuilder {
         for (next, bag) in pos.next_possibilities() {
             for (queue, b) in possible_sequences(vec![], bag) {
                 let seq = Sequence { next, queue };
-                let mv = self.suggest_move_raw(*pos, next, &queue, b).first().copied();
+                let mv = self.suggest_move_raw(*pos, next, &queue, b);
                 sequences.push((seq, mv));
             }
         }
@@ -236,8 +224,8 @@ impl BookBuilder {
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MoveValue {
-    pub value: f64,
-    pub long_moves: f64
+    pub value: f32,
+    pub long_moves: f32
 }
 
 impl MoveValue {
@@ -273,10 +261,10 @@ impl std::iter::Sum for MoveValue {
             }
         }
         if long_count != 0 {
-            this.long_moves /= long_count as f64;
+            this.long_moves /= long_count as f32;
         }
         if value_count != 0 {
-            this.value /= value_count as f64;
+            this.value /= value_count as f32;
         }
         this
     }
