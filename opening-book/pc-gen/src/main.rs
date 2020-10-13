@@ -34,14 +34,12 @@ fn main() {
         let mut book = BookBuilder::new();
         let (send, recv) = crossbeam_channel::bounded(256);
         let count = &std::sync::atomic::AtomicUsize::new(0);
-        let all_seq = all_sequences(initial_bag);
+        let mut all_seq = all_sequences(initial_bag);
+        all_seq.retain(|(_,b)| b.hold.is_none());
         let total = all_seq.len();
         println!("Working on PC book {} ({} queues)", i, total);
         rayon::scope(|s| {
             for (seq, bag) in all_seq {
-                if bag.hold.is_some() {
-                    continue;
-                }
                 if queued_bags.insert(bag) {
                     bags.push(bag);
                 }
