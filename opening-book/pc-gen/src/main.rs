@@ -31,6 +31,7 @@ fn main() {
     let mut i = 0;
     while let Some(initial_bag) = bags.pop() {
         i += 1;
+        let skip = std::fs::metadata(&format!("pc-{}.ccbook", i)).is_ok();
         let mut book = BookBuilder::new();
         let (send, recv) = crossbeam_channel::bounded(256);
         let count = &std::sync::atomic::AtomicUsize::new(0);
@@ -43,6 +44,7 @@ fn main() {
                 if queued_bags.insert(bag) {
                     bags.push(bag);
                 }
+                if skip { continue }
                 let send = send.clone();
                 let combos = all_combinations.get(
                     &seq.iter().copied().collect()
@@ -57,10 +59,11 @@ fn main() {
                     }
                     let c = count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     if 100*c / total != 100*(c+1) / total {
-                        println!("{}%", (c+1) / total);
+                        println!("{}%", 100*(c+1) / total);
                     }
                 });
             }
+            if skip { return }
             println!("Took {:?} to spawn solve tasks", t.elapsed());
 
             drop(send);
@@ -76,14 +79,18 @@ fn main() {
             println!("Took {:?} to add moves to the book", t.elapsed());
             println!("book is {} positions large", book.positions().count());
         });
+        if skip { continue }
 
         let t = std::time::Instant::now();
         book.recalculate_graph();
         println!("Took {:?} to calculate the book", t.elapsed());
-        println!("{:?}", book.value_of_position(libtetris::Board::new().into()));
+        let initial_position = libtetris::Board::new_with_state(
+            [[false; 10]; 40], initial_bag.bag, initial_bag.hold, false, 0
+        ).into();
+        println!("{:?}", book.value_of_position(initial_position));
 
         let t = std::time::Instant::now();
-        book.compile(&[libtetris::Board::new().into()]).save(
+        book.compile(&[initial_position]).save(
             std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap()
         ).unwrap();
         println!("Took {:?} to save PC book {}", t.elapsed(), i);

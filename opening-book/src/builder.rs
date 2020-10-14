@@ -41,11 +41,11 @@ impl BookBuilder {
         } else {
             next.insert(q.next().unwrap());
         }
-        self.suggest_move_raw(position, next, &q.collect::<Vec<_>>(), state.bag)
+        self.suggest_move_raw(position, next, &q.collect::<Vec<_>>())
     }
 
     pub fn suggest_move_raw(
-        &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
+        &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece]
     ) -> Option<FallingPiece> {
         let values = &self.0.get(&pos)?.values;
         let queue = queue.iter().copied().take(NEXT_PIECES)
@@ -210,9 +210,9 @@ impl BookBuilder {
     fn build_position(&self, pos: &Position) -> Vec<(Sequence, Option<FallingPiece>)> {
         let mut sequences = vec![];
         for (next, bag) in pos.next_possibilities() {
-            for (queue, b) in possible_sequences(vec![], bag) {
+            for (queue, _) in possible_sequences(vec![], bag) {
                 let seq = Sequence { next, queue };
-                let mv = self.suggest_move_raw(*pos, next, &queue, b);
+                let mv = self.suggest_move_raw(*pos, next, &queue);
                 sequences.push((seq, mv));
             }
         }
