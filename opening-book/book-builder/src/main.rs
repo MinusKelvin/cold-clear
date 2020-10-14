@@ -91,11 +91,11 @@ fn main() {
 
     dbg!(book.value_of_position(Board::new().into()));
 
+    dump(&book);
+
     book.compile(&[Board::new().into()]).save(
         std::fs::File::create("book.ccbook").unwrap()
     ).unwrap();
-
-    dump(&book);
 }
 
 fn convert(p: fumen::Piece) -> FallingPiece {

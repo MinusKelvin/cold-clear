@@ -190,7 +190,7 @@ impl BookBuilder {
         self.0.keys().copied()
     }
 
-    pub fn compile(&self, roots: &[Position]) -> Book {
+    pub fn compile(mut self, roots: &[Position]) -> Book {
         let mut book = HashMap::new();
         let mut to_compile = roots.to_vec();
         while let Some(pos) = to_compile.pop() {
@@ -207,7 +207,7 @@ impl BookBuilder {
         Book(book)
     }
 
-    fn build_position(&self, pos: &Position) -> Vec<(Sequence, Option<FallingPiece>)> {
+    fn build_position(&mut self, pos: &Position) -> Vec<(Sequence, Option<FallingPiece>)> {
         let mut sequences = vec![];
         for (next, bag) in pos.next_possibilities() {
             for (queue, _) in possible_sequences(vec![], bag) {
@@ -216,8 +216,10 @@ impl BookBuilder {
                 sequences.push((seq, mv));
             }
         }
+        self.0.remove(pos);
         sequences.sort_by_key(|&(s, _)| s);
         sequences.dedup_by_key(|&mut (_, m)| m);
+        sequences.shrink_to_fit();
         sequences
     }
 }
