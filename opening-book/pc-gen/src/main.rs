@@ -27,7 +27,6 @@ fn main() {
     let mut queued_bags = HashSet::new();
     let mut bags = vec![BagWithHold::default()];
     queued_bags.insert(BagWithHold::default());
-    let t = std::time::Instant::now();
     let mut i = 0;
     while let Some(initial_bag) = bags.pop() {
         i += 1;
@@ -35,6 +34,7 @@ fn main() {
         let mut book = BookBuilder::new();
         let (send, recv) = crossbeam_channel::bounded(256);
         let count = &std::sync::atomic::AtomicUsize::new(0);
+        let t = std::time::Instant::now();
         let mut all_seq = all_sequences(initial_bag);
         all_seq.retain(|(_,b)| b.hold.is_none() || b.bag == EnumSet::all());
         let total = all_seq.len();
@@ -70,11 +70,11 @@ fn main() {
 
             let t = std::time::Instant::now();
             for soln in recv {
+                let &(pos, mv) = soln.last().unwrap();
+                book.add_move(pos, mv, Some(1.0));
                 for &(pos, mv) in &soln {
                     book.add_move(pos, mv, None);
                 }
-                let &(pos, mv) = soln.last().unwrap();
-                book.add_move(pos, mv, Some(1.0));
             }
             println!("Took {:?} to add moves to the book", t.elapsed());
             println!("book is {} positions large", book.positions().count());

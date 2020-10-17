@@ -87,13 +87,19 @@ fn main() {
 
     let t = std::time::Instant::now();
     book.recalculate_graph();
-    println!("{:?}", t.elapsed());
+    println!("Took {:?} to calculate", t.elapsed());
 
     dbg!(book.value_of_position(Board::new().into()));
 
+    let t = std::time::Instant::now();
     dump(&book);
+    println!("Took {:?} to dump info to ./book/", t.elapsed());
 
-    book.compile(&[Board::new().into()]).save(
+    let t = std::time::Instant::now();
+    let compiled = book.compile(&[Board::new().into()]);
+    println!("Took {:?} to compile", t.elapsed());
+
+    compiled.save(
         std::fs::File::create("book.ccbook").unwrap()
     ).unwrap();
 }

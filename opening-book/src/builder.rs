@@ -1,13 +1,18 @@
 use crate::*;
+use std::collections::{ HashMap, HashSet, VecDeque };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BookBuilder(HashMap<Position, PositionData>);
+pub struct BookBuilder {
+    data: HashMap<Position, PositionData>,
+    dirty_positions: HashSet<Position>,
+    dirty_queue: VecDeque<Position>
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
     values: HashMap<Sequence, (MoveValue, FallingPiece)>,
     moves: Vec<Move>,
-    dirty: bool
+    backrefs: Vec<Position>
 }
 
 impl Default for PositionData {
@@ -15,7 +20,7 @@ impl Default for PositionData {
         PositionData {
             values: HashMap::new(),
             moves: vec![],
-            dirty: true
+            backrefs: vec![]
         }
     }
 }
@@ -28,7 +33,11 @@ pub struct Move {
 
 impl BookBuilder {
     pub fn new() -> Self {
-        BookBuilder(HashMap::new())
+        BookBuilder {
+            data: HashMap::new(),
+            dirty_positions: HashSet::new(),
+            dirty_queue: VecDeque::new()
+        }
     }
 
     pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
@@ -47,7 +56,7 @@ impl BookBuilder {
     pub fn suggest_move_raw(
         &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece]
     ) -> Option<FallingPiece> {
-        let values = &self.0.get(&pos)?.values;
+        let values = &self.data.get(&pos)?.values;
         let queue = queue.iter().copied().take(NEXT_PIECES)
             .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
             .into_inner().ok()?;
@@ -76,7 +85,7 @@ impl BookBuilder {
     pub fn value_of_raw(
         &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
     ) -> MoveValue {
-        let values = match self.0.get(&pos) {
+        let values = match self.data.get(&pos) {
             Some(data) => &data.values,
             None => return Default::default()
         };
@@ -90,16 +99,11 @@ impl BookBuilder {
             .sum()
     }
 
-    fn update_value(&mut self, pos: Position) -> bool {
-        let children_dirty = self.0.get(&pos).unwrap().moves.iter()
-            .any(|m| self.0.get(&pos.advance(m.location).0).map_or(true, |v| v.dirty));
-        if !self.0.get(&pos).unwrap().dirty && !children_dirty {
-            return false;
-        }
-        self.0.get_mut(&pos).unwrap().dirty = false;
+    fn update_value(&mut self, pos: Position) {
+        let mut anything_changed = false;
         for (next, bag) in pos.next_possibilities() {
             for (queue, qbag) in possible_sequences(vec![], bag) {
-                let this = self.0.get(&pos).unwrap();
+                let this = self.data.get(&pos).unwrap();
                 let mut best = MoveValue::default();
                 let mut best_move = None;
                 for &mv in &this.moves {
@@ -135,32 +139,25 @@ impl BookBuilder {
                     }
                 }
                 if let Some(best_move) = best_move {
-                    let this = self.0.get_mut(&pos).unwrap();
+                    let this = self.data.get_mut(&pos).unwrap();
                     let old = this.values.insert(Sequence { next, queue }, (best, best_move));
-                    this.dirty |= old.map(|v| v.0) != Some(best);
+                    anything_changed |= old.map(|v| v.0) != Some(best);
                 }
             }
         }
-        self.0.get(&pos).unwrap().dirty
+        if anything_changed {
+            for &parent in &self.data.get(&pos).unwrap().backrefs {
+                if self.dirty_positions.insert(parent) {
+                    self.dirty_queue.push_back(parent);
+                }
+            }
+        }
     }
 
     pub fn recalculate_graph(&mut self) {
-        let positions: Vec<_> = self.0.keys().copied().collect();
-        for _ in 0..positions.len() {
-            let mut any_updated = false;
-            for &pos in &positions {
-                any_updated |= self.update_value(pos);
-            }
-            if !any_updated {
-                break;
-            }
-        }
-        self.0.retain(|_, v| !v.values.is_empty());
-        let positions: HashSet<Position> = self.0.keys().copied().collect();
-        for &pos in &positions {
-            self.0.get_mut(&pos).unwrap().moves.retain(
-                |m| m.value.is_some() || positions.contains(&pos.advance(m.location).0)
-            );
+        while let Some(to_update) = self.dirty_queue.pop_front() {
+            self.dirty_positions.remove(&to_update);
+            self.update_value(to_update);
         }
     }
 
@@ -168,26 +165,45 @@ impl BookBuilder {
         &mut self, position: impl Into<Position>, mv: FallingPiece, value: Option<f32>
     ) {
         let position = position.into();
-        let moves = &mut self.0.entry(position).or_default().moves;
+        let moves = &mut self.data.entry(position).or_default().moves;
+        let mut add_backref = false;
+        let mut remove_backref = false;
         match moves.iter_mut().find(|m| m.location.same_location(&mv)) {
             Some(mv) => if mv.value < value {
+                remove_backref = mv.value.is_none() && value.is_some();
                 mv.value = value;
             }
-            None => moves.push(Move {
-                location: mv,
-                value
-            })
+            None => {
+                add_backref = value.is_none();
+                moves.push(Move {
+                    location: mv,
+                    value
+                });
+            }
+        }
+        if add_backref {
+            self.data.entry(position.advance(mv).0).or_default().backrefs.push(position);
+        }
+        if remove_backref {
+            self.data.entry(position.advance(mv).0).and_modify(
+                |v| v.backrefs.retain(|&p| p != position)
+            );
+        }
+        if value.is_some() {
+            if self.dirty_positions.insert(position) {
+                self.dirty_queue.push_back(position);
+            }
         }
     }
 
     pub fn moves(&self, pos: Position) -> &[Move] {
-        self.0.get(&pos)
+        self.data.get(&pos)
             .map(|data| &*data.moves)
             .unwrap_or(&[])
     }
 
     pub fn positions<'a>(&'a self) -> impl Iterator<Item=Position> + 'a {
-        self.0.keys().copied()
+        self.data.keys().copied()
     }
 
     pub fn compile(mut self, roots: &[Position]) -> Book {
@@ -216,7 +232,7 @@ impl BookBuilder {
                 sequences.push((seq, mv));
             }
         }
-        self.0.remove(pos);
+        self.data.remove(pos);
         sequences.sort_by_key(|&(s, _)| s);
         sequences.dedup_by_key(|&mut (_, m)| m);
         sequences.shrink_to_fit();
