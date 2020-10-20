@@ -393,9 +393,17 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
                     // Strategy for dealing with children lists.
                     let eval_of = &child_eval_fn(&children_gen.nodes);
-                    let process_children = |children: &mut [_]| {
+                    let process_children = |children: &mut &mut [_]| {
                         // Sort best-to-worst. The index of a move is now its rank, as desired.
                         children.sort_by_key(|c| std::cmp::Reverse(eval_of(c)));
+                        // Remove death nodes
+                        while let Some(c) = children.last() {
+                            if eval_of(c).is_none() {
+                                remove_last(children);
+                            } else {
+                                break
+                            }
+                        }
                         // Find the evaluation of this list, or None if this path is death.
                         // We don't just take the eval of the best move because e.g. the standard
                         // eval tracks both move score and largest spike, and those might occur
@@ -414,7 +422,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
 
                     let new_eval = match &mut parent_gen.children {
                         Children::Known(_, children) => {
-                            if let Some(children) = children[node_id as usize].as_deref_mut() {
+                            if let Some(ref mut children) = children[node_id as usize].as_mut() {
                                 process_children(children)
                             } else {
                                 // returns from closure and continues the loop
@@ -434,7 +442,7 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
                                 let mut deaths = 0;
                                 let mut worst = None;
                                 for children in children.values_mut()
-                                        .filter_map(Option::as_deref_mut) {
+                                        .filter_map(Option::as_mut) {
                                     possibilities += 1;
                                     match process_children(children) {
                                         Some(eval) => {
@@ -797,3 +805,12 @@ impl<E: 'static, R: 'static> rented::Generation<E, R> {
     }
 }
 
+fn remove_last<T>(slice: &mut &mut [T]) {
+    if slice.is_empty() {
+        panic!("Slice is empty");
+    } else {
+        *slice = unsafe {
+            std::slice::from_raw_parts_mut(slice.as_mut_ptr(), slice.len()-1)
+        };
+    }
+}
