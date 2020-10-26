@@ -50,6 +50,12 @@ impl Book {
             Result::Err(i) => moves[i-1].1
         }
     }
+
+    pub fn merge(&mut self, other: Book) {
+        for (pos, data) in other.0 {
+            self.0.entry(pos).or_insert(data);
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default, Serialize, Deserialize)]

@@ -1,4 +1,4 @@
-use opening_book::{ BookBuilder, Position };
+use opening_book::{ Book, BookBuilder, Position };
 use libtetris::FallingPiece;
 use std::sync::atomic::AtomicBool;
 use std::collections::{ HashSet, HashMap };
@@ -25,16 +25,18 @@ fn main() {
 
 
     let mut queued_bags = HashSet::new();
-    let mut bags = vec![BagWithHold::default()];
+    let mut bags = vec![(BagWithHold::default(), 0)];
     queued_bags.insert(BagWithHold::default());
     let mut i = 0;
-    while let Some(initial_bag) = bags.pop() {
+    let mut pcs = [vec![], vec![], vec![], vec![], vec![], vec![], vec![]];
+    while let Some((initial_bag, pc_num)) = bags.pop() {
         i += 1;
         let skip = std::fs::metadata(&format!("pc-{}.ccbook", i)).is_ok();
         let mut book = BookBuilder::new();
         let (send, recv) = crossbeam_channel::bounded(256);
         let count = &std::sync::atomic::AtomicUsize::new(0);
         let t = std::time::Instant::now();
+        pcs[pc_num].push(i);
         let mut all_seq = all_sequences(initial_bag);
         all_seq.retain(|(_,b)| b.hold.is_none() || b.bag == EnumSet::all());
         let total = all_seq.len();
@@ -42,7 +44,7 @@ fn main() {
         rayon::scope(|s| {
             for (seq, bag) in all_seq {
                 if queued_bags.insert(bag) {
-                    bags.push(bag);
+                    bags.push((bag, pc_num+1));
                 }
                 if skip { continue }
                 let send = send.clone();
@@ -90,11 +92,49 @@ fn main() {
         println!("{:?}", book.value_of_position(initial_position));
 
         let t = std::time::Instant::now();
+        let f = std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap();
         book.compile(&[initial_position]).save(
-            std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap()
+            std::io::BufWriter::new(f)
         ).unwrap();
         println!("Took {:?} to save PC book {}", t.elapsed(), i);
     }
+
+    for (i, book_set) in pcs.iter().enumerate() {
+        println!("Merging books for PC {}", i);
+        if std::fs::metadata(&format!("fullpc-{}.ccbook", i)).is_ok() {
+            continue
+        }
+        let t = std::time::Instant::now();
+        let mut iter = book_set.iter().map(|&n| {
+            let f = std::fs::File::open(&format!("pc-{}.ccbook", n)).unwrap();
+            Book::load(std::io::BufReader::new(f)).unwrap()
+        });
+        let mut book = iter.next().unwrap();
+        for (i, b) in iter.enumerate() {
+            book.merge(b);
+            println!("{}%", i*100 / (book_set.len()-1));
+        }
+        println!("Saving book...");
+        let f = std::fs::File::create(&format!("fullpc-{}.ccbook", i)).unwrap();
+        book.save(std::io::BufWriter::new(f)).unwrap();
+        println!("Took {:?}", t.elapsed());
+    }
+
+    println!("Merging books for complete PC book");
+    let t = std::time::Instant::now();
+    let mut iter = (0..7).map(|n| {
+        let f = std::fs::File::open(&format!("fullpc-{}.ccbook", n)).unwrap();
+        Book::load(std::io::BufReader::new(f)).unwrap()
+    });
+    let mut book = iter.next().unwrap();
+    for (i, b) in iter.enumerate() {
+        book.merge(b);
+        println!("{}%", i*100 / 6);
+    }
+    println!("Saving book...");
+    let f = std::fs::File::create("pc.ccbook").unwrap();
+    book.save(std::io::BufWriter::new(f)).unwrap();
+    println!("Took {:?}", t.elapsed());
 }
 
 fn process_soln(
