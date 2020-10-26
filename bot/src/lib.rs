@@ -22,6 +22,7 @@ pub use web::Interface;
 use libtetris::*;
 pub use crate::moves::Move;
 pub use crate::modes::normal::{ BotState, ThinkResult, Thinker };
+pub use crate::modes::pcloop::PcPriority;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -30,7 +31,7 @@ pub struct Options {
     pub spawn_rule: SpawnRule,
     pub use_hold: bool,
     pub speculate: bool,
-    pub pcloop: bool,
+    pub pcloop: Option<modes::pcloop::PcPriority>,
     pub min_nodes: u32,
     pub max_nodes: u32,
     pub threads: u32
@@ -79,7 +80,7 @@ impl Default for Options {
             spawn_rule: SpawnRule::Row19Or20,
             use_hold: true,
             speculate: true,
-            pcloop: false,
+            pcloop: None,
             min_nodes: 0,
             max_nodes: 4_000_000_000,
             threads: 1

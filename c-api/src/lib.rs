@@ -1,39 +1,56 @@
 use std::mem::MaybeUninit;
 use enumset::EnumSet;
+use libtetris::{ Piece, TspinStatus, PieceMovement, SpawnRule, FallingPiece, LockResult, Board };
+use cold_clear::moves::MovementMode;
+use cold_clear::PcPriority;
 
 type CCAsyncBot = cold_clear::Interface;
 
 macro_rules! cenum {
-    ($($(#[$a:meta])* enum $name:ident => $t:ty { $($item:ident => $to:ident),* })*) => {
-        $(
-        $(#[$a])*
-        #[repr(C)]
+    (@match $v:ident $name:ident $($item:ident => $to:expr),*) => {
+        #[allow(unreachable_patterns)]
+        match $v {
+            $(
+                $name::$item => $to,
+            )*
+            _ => unreachable!()
+        }
+    };
+    (@rmatch $v:ident $name:ident $($item:ident => $to:pat),*) => {
+        #[allow(unreachable_patterns)]
+        match $v {
+            $(
+                $to => $name::$item,
+            )*
+            _ => unreachable!()
+        }
+    };
+    (@enum $name:ident $($item:ident => $to:expr),*) => {
         #[derive(Copy, Clone, Debug)]
         #[allow(non_camel_case_types)]
+        #[repr(C)]
         enum $name {
-            $($item),*
+            $($item,)*
         }
+    };
+    ($(enum $name:ident => $t:ty { $($rest:tt)* })*) => {
+        $(
+        cenum!(@enum $name $($rest)*);
 
         impl From<$name> for $t {
             fn from(v: $name) -> $t {
-                #[allow(unreachable_patterns)]
-                match v {
-                    $(
-                        $name::$item => <$t>::$to,
-                    )*
-                    _ => unreachable!()
+                cenum! { @match
+                    v $name
+                    $($rest)*
                 }
             }
         }
 
         impl From<$t> for $name {
             fn from(v: $t) -> $name {
-                #[allow(unreachable_patterns)]
-                match v {
-                    $(
-                        <$t>::$to => $name::$item,
-                    )*
-                    _ => unreachable!()
+                cenum! { @rmatch
+                    v $name
+                    $($rest)*
                 }
             }
         }
@@ -42,39 +59,45 @@ macro_rules! cenum {
 }
 
 cenum! {
-    enum CCPiece => libtetris::Piece {
-        CC_I => I,
-        CC_O => O,
-        CC_T => T,
-        CC_L => L,
-        CC_J => J,
-        CC_S => S,
-        CC_Z => Z
+    enum CCPiece => Piece {
+        CC_I => Piece::I,
+        CC_O => Piece::O,
+        CC_T => Piece::T,
+        CC_L => Piece::L,
+        CC_J => Piece::J,
+        CC_S => Piece::S,
+        CC_Z => Piece::Z
     }
 
-    enum CCTspinStatus => libtetris::TspinStatus {
-        CC_NONE => None,
-        CC_MINI => Mini,
-        CC_FULL => Full
+    enum CCTspinStatus => TspinStatus {
+        CC_NONE => TspinStatus::None,
+        CC_MINI => TspinStatus::Mini,
+        CC_FULL => TspinStatus::Full
     }
 
-    enum CCMovement => libtetris::PieceMovement {
-        CC_LEFT => Left,
-        CC_RIGHT => Right,
-        CC_CW => Cw,
-        CC_CCW => Ccw,
-        CC_DROP => SonicDrop
+    enum CCMovement => PieceMovement {
+        CC_LEFT => PieceMovement::Left,
+        CC_RIGHT => PieceMovement::Right,
+        CC_CW => PieceMovement::Cw,
+        CC_CCW => PieceMovement::Ccw,
+        CC_DROP => PieceMovement::SonicDrop
     }
 
-    enum CCSpawnRule => libtetris::SpawnRule {
-        CC_ROW_19_OR_20 => Row19Or20,
-        CC_ROW_21_AND_FALL => Row21AndFall
+    enum CCSpawnRule => SpawnRule {
+        CC_ROW_19_OR_20 => SpawnRule::Row19Or20,
+        CC_ROW_21_AND_FALL => SpawnRule::Row21AndFall
     }
 
-    enum CCMovementMode => cold_clear::moves::MovementMode {
-        CC_0G => ZeroG,
-        CC_20G => TwentyG,
-        CC_HARD_DROP_ONLY => HardDropOnly
+    enum CCMovementMode => MovementMode {
+        CC_0G => MovementMode::ZeroG,
+        CC_20G => MovementMode::TwentyG,
+        CC_HARD_DROP_ONLY => MovementMode::HardDropOnly
+    }
+
+    enum CCPcPriority => Option<PcPriority> {
+        CC_PC_OFF => None,
+        CC_PC_FASTEST => Some(PcPriority::Fastest),
+        CC_PC_ATTACK => Some(PcPriority::HighestAttack)
     }
 }
 
@@ -114,12 +137,12 @@ struct CCPlanPlacement {
 struct CCOptions {
     mode: CCMovementMode,
     spawn_rule: CCSpawnRule,
-    use_hold: bool,
-    speculate: bool,
-    pcloop: bool,
+    pcloop: CCPcPriority,
     min_nodes: u32,
     max_nodes: u32,
     threads: u32,
+    use_hold: bool,
+    speculate: bool,
 }
 
 #[repr(C)]
@@ -163,7 +186,7 @@ struct CCWeights {
     stack_pc_damage: bool,
 }
 
-fn convert_hold(hold: *mut CCPiece) -> Option<libtetris::Piece> {
+fn convert_hold(hold: *mut CCPiece) -> Option<Piece> {
     if hold.is_null() {
         None
     } else {
@@ -178,7 +201,7 @@ fn convert_from_c_options(options: &CCOptions) -> cold_clear::Options {
         min_nodes: options.min_nodes,
         use_hold: options.use_hold,
         speculate: options.speculate,
-        pcloop: options.pcloop,
+        pcloop: options.pcloop.into(),
         mode: options.mode.into(),
         spawn_rule: options.spawn_rule.into(),
         threads: options.threads
@@ -232,7 +255,7 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
 extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeights, field: &[[bool; 10]; 40], 
     bag_remain: u32, hold: *mut CCPiece, b2b: bool, combo: u32) -> *mut CCAsyncBot {
     Box::into_raw(Box::new(cold_clear::Interface::launch(
-        libtetris::Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
+        Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
         convert_from_c_options(options),
         convert_from_c_weights(weights),
         None // TODO
@@ -242,7 +265,7 @@ extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeight
 #[no_mangle]
 extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut CCAsyncBot {
     Box::into_raw(Box::new(cold_clear::Interface::launch(
-        libtetris::Board::new(),
+        Board::new(),
         convert_from_c_options(options),
         convert_from_c_weights(weights),
         None // TODO
@@ -272,7 +295,7 @@ extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
 }
 
 fn convert_plan_placement(
-    (falling_piece, lock_result): &(libtetris::FallingPiece, libtetris::LockResult)
+    (falling_piece, lock_result): &(FallingPiece, LockResult)
 ) -> CCPlanPlacement {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
@@ -391,7 +414,7 @@ unsafe extern "C" fn cc_default_options(options: *mut CCOptions) {
         min_nodes: o.min_nodes,
         use_hold: o.use_hold,
         speculate: o.speculate,
-        pcloop: o.pcloop,
+        pcloop: o.pcloop.into(),
         mode: o.mode.into(),
         spawn_rule: o.spawn_rule.into(),
         threads: o.threads

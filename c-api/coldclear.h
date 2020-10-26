@@ -38,6 +38,12 @@ typedef enum CCBotPollStatus {
     CC_BOT_DEAD
 } CCBotPollStatus;
 
+typedef enum CCPcPriority {
+    CC_PC_OFF,
+    CC_PC_FASTEST,
+    CC_PC_ATTACK
+} CCPcPriority;
+
 typedef struct CCPlanPlacement {
     CCPiece piece;
     CCTspinStatus tspin;
@@ -70,12 +76,12 @@ typedef struct CCMove {
 typedef struct CCOptions {
     CCMovementMode mode;
     CCSpawnRule spawn_rule;
-    bool use_hold;
-    bool speculate;
-    bool pcloop;
+    CCPcPriority pcloop;
     uint32_t min_nodes;
     uint32_t max_nodes;
     uint32_t threads;
+    bool use_hold;
+    bool speculate;
 } CCOptions;
 
 typedef struct CCWeights {
