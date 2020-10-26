@@ -319,14 +319,17 @@ fn check_tspin(p: pcf::Placement, b: pcf::BitBoard) -> bool {
     match p.kind {
         // south states
         pcf::PieceState::TSouth00 =>
-            b.cell_filled(x, 0) && b.cell_filled(x + 2, 0)
-            && (b.cell_filled(x, 2) || b.cell_filled(x + 2, 2)),
+            b.cell_filled(x, 0) && b.cell_filled(x + 2, 0) && if b.line_filled(2) {
+                !b.line_filled(3) && (b.cell_filled(x, 3) || b.cell_filled(x + 2, 3))
+            } else {
+                b.cell_filled(x, 2) || b.cell_filled(x + 2, 2)
+            },
         pcf::PieceState::TSouth01 =>
             b.cell_filled(x, 0) && b.cell_filled(x + 2, 0)
-            && (b.cell_filled(x, 3) || b.cell_filled(x + 2, 3)),
+            && !b.line_filled(3) && (b.cell_filled(x, 3) || b.cell_filled(x + 2, 3)),
         pcf::PieceState::TSouth10 =>
             b.cell_filled(x, 1) && b.cell_filled(x + 2, 1)
-            && (b.cell_filled(x, 3) || b.cell_filled(x + 2, 3)),
+            && !b.line_filled(3) && (b.cell_filled(x, 3) || b.cell_filled(x + 2, 3)),
 
         // east states
         pcf::PieceState::TEast000 =>
