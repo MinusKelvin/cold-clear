@@ -16,16 +16,7 @@ pub struct Book(HashMap<Position, Vec<(Sequence, Option<CompactPiece>)>>);
 
 impl Book {
     pub fn load(from: impl Read) -> Result<Self, bincode::Error> {
-        let old_book: HashMap<Position, Vec<(Sequence, Option<FallingPiece>)>> =
-            bincode::deserialize_from(flate2::read::DeflateDecoder::new(from))?;
-        Ok(Book(old_book.into_iter()
-            .map(|(p, s)| (
-                p,
-                s.into_iter()
-                    .map(|(s, p)| (s, p.map(Into::into)))
-                    .collect()
-            ))
-            .collect()))
+        bincode::deserialize_from(xz2::read::XzDecoder::new(from))
     }
 
     pub fn save(&self, to: impl Write) -> Result<(), bincode::Error> {
