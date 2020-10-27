@@ -1,7 +1,7 @@
 use libtetris::{ FallingPiece, Piece, RotationState, Board };
 use enumset::EnumSet;
 use serde::{ Serialize, Deserialize };
-use std::collections::{ HashMap, HashSet };
+use std::collections::HashMap;
 use std::io::prelude::*;
 
 const NEXT_PIECES: usize = 4;
@@ -12,7 +12,7 @@ mod builder;
 pub use builder::BookBuilder;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Book(HashMap<Position, Vec<(Sequence, Option<FallingPiece>)>>);
+pub struct Book(HashMap<Position, Vec<(Sequence, Option<CompactPiece>)>>);
 
 impl Book {
     pub fn load(from: impl Read) -> Result<Self, bincode::Error> {
@@ -22,7 +22,7 @@ impl Book {
             .map(|(p, s)| (
                 p,
                 s.into_iter()
-                    .map(|(s, p)| (s, p.into()))
+                    .map(|(s, p)| (s, p.map(Into::into)))
                     .collect()
             ))
             .collect()))
@@ -55,8 +55,8 @@ impl Book {
         let to_find = Sequence { next, queue };
         let moves = self.0.get(&pos)?;
         match moves.binary_search_by_key(&to_find, |&(s,_)| s) {
-            Result::Ok(i) => moves[i].1,
-            Result::Err(i) => moves[i-1].1
+            Result::Ok(i) => moves[i].1.map(Into::into),
+            Result::Err(i) => moves[i-1].1.map(Into::into)
         }
     }
 
@@ -251,7 +251,7 @@ impl PartialOrd for PieceOrd {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 struct CompactPiece(std::num::NonZeroU16);
 
 impl std::fmt::Debug for CompactPiece {

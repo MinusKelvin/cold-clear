@@ -211,10 +211,10 @@ impl BookBuilder {
         let mut to_compile = roots.to_vec();
         while let Some(pos) = to_compile.pop() {
             book.entry(pos).or_insert_with(|| {
-                let moves =  self.build_position(&pos);
+                let moves = self.build_position(&pos);
                 for &(_, m) in &moves {
                     if let Some(p) = m {
-                        to_compile.push(pos.advance(p).0);
+                        to_compile.push(pos.advance(p.into()).0);
                     }
                 }
                 moves
@@ -223,13 +223,13 @@ impl BookBuilder {
         Book(book)
     }
 
-    fn build_position(&mut self, pos: &Position) -> Vec<(Sequence, Option<FallingPiece>)> {
+    fn build_position(&mut self, pos: &Position) -> Vec<(Sequence, Option<CompactPiece>)> {
         let mut sequences = vec![];
         for (next, bag) in pos.next_possibilities() {
             for (queue, _) in possible_sequences(vec![], bag) {
                 let seq = Sequence { next, queue };
                 let mv = self.suggest_move_raw(*pos, next, &queue);
-                sequences.push((seq, mv));
+                sequences.push((seq, mv.map(Into::into)));
             }
         }
         self.data.remove(pos);
