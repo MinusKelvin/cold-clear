@@ -13,6 +13,11 @@ serde = "1.0"
 bincode = "1.3.1"
 flate2 = "1.0.18"
 arrayvec = "0.5.1"
+xz2 = "0.1.6"
 
 [features]
 builder = []
+
+[[bin]]
+name = "convert"
+path = "src/convert.rs"

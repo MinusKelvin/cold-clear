@@ -1,4 +1,4 @@
-use libtetris::{ FallingPiece, Piece, Board };
+use libtetris::{ FallingPiece, Piece, RotationState, Board };
 use enumset::EnumSet;
 use serde::{ Serialize, Deserialize };
 use std::collections::{ HashMap, HashSet };
@@ -16,11 +16,20 @@ pub struct Book(HashMap<Position, Vec<(Sequence, Option<FallingPiece>)>>);
 
 impl Book {
     pub fn load(from: impl Read) -> Result<Self, bincode::Error> {
-        bincode::deserialize_from(flate2::read::DeflateDecoder::new(from))
+        let old_book: HashMap<Position, Vec<(Sequence, Option<FallingPiece>)>> =
+            bincode::deserialize_from(flate2::read::DeflateDecoder::new(from))?;
+        Ok(Book(old_book.into_iter()
+            .map(|(p, s)| (
+                p,
+                s.into_iter()
+                    .map(|(s, p)| (s, p.into()))
+                    .collect()
+            ))
+            .collect()))
     }
 
     pub fn save(&self, to: impl Write) -> Result<(), bincode::Error> {
-        let mut to = flate2::write::DeflateEncoder::new(to, flate2::Compression::best());
+        let mut to = xz2::write::XzEncoder::new(to, 9);
         bincode::serialize_into(&mut to, self)?;
         to.finish()?;
         Ok(())
@@ -239,5 +248,66 @@ impl Ord for PieceOrd {
 impl PartialOrd for PieceOrd {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct CompactPiece(std::num::NonZeroU16);
+
+impl std::fmt::Debug for CompactPiece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", FallingPiece::from(*self))
+    }
+}
+
+impl From<FallingPiece> for CompactPiece {
+    fn from(v: FallingPiece) -> Self {
+        let p = match v.kind.0 {
+            Piece::I => 1,
+            Piece::O => 2,
+            Piece::T => 3,
+            Piece::L => 4,
+            Piece::J => 5,
+            Piece::S => 6,
+            Piece::Z => 7,
+        };
+        let r = match v.kind.1 {
+            RotationState::North => 0,
+            RotationState::South => 1,
+            RotationState::East => 2,
+            RotationState::West => 3
+        };
+        CompactPiece(std::num::NonZeroU16::new(
+            p | r << 3 | (v.x as u16) << 5 | (v.y as u16) << 9
+        ).unwrap())
+    }
+}
+
+impl From<CompactPiece> for FallingPiece {
+    fn from(v: CompactPiece) -> FallingPiece {
+        FallingPiece {
+            kind: libtetris::PieceState(
+                match v.0.get() & 0b111 {
+                    1 => Piece::I,
+                    2 => Piece::O,
+                    3 => Piece::T,
+                    4 => Piece::L,
+                    5 => Piece::J,
+                    6 => Piece::S,
+                    7 => Piece::Z,
+                    _ => unreachable!(),
+                },
+                match v.0.get() >> 3 & 0b11 {
+                    0 => RotationState::North,
+                    1 => RotationState::South,
+                    2 => RotationState::East,
+                    3 => RotationState::West,
+                    _ => unreachable!()
+                }
+            ),
+            x: (v.0.get() >> 5 & 0b1111) as i32,
+            y: (v.0.get() >> 9 & 0b111111) as i32,
+            tspin: libtetris::TspinStatus::None
+        }
     }
 }
