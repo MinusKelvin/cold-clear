@@ -10,7 +10,7 @@ pub struct BookBuilder {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
-    values: HashMap<Sequence, (MoveValue, FallingPiece)>,
+    values: HashMap<Sequence, (MoveValue, CompactPiece)>,
     moves: Vec<Move>,
     backrefs: Vec<Position>
 }
@@ -27,8 +27,18 @@ impl Default for PositionData {
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Move {
-    pub location: FallingPiece,
-    pub value: Option<f32>
+    location: CompactPiece,
+    value: OptionNanF32
+}
+
+impl Move {
+    pub fn location(&self) -> FallingPiece {
+        self.location.into()
+    }
+
+    pub fn value(&self) -> Option<f32> {
+        self.value.into()
+    }
 }
 
 impl BookBuilder {
@@ -60,7 +70,7 @@ impl BookBuilder {
         let queue = queue.iter().copied().take(NEXT_PIECES)
             .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
             .into_inner().ok()?;
-        values.get(&Sequence { next, queue }).map(|&(_, mv)| mv)
+        values.get(&Sequence { next, queue }).map(|&(_, mv)| mv.into())
     }
 
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
@@ -107,11 +117,12 @@ impl BookBuilder {
                 let mut best = MoveValue::default();
                 let mut best_move = None;
                 for &mv in &this.moves {
-                    if !next.contains(mv.location.kind.0) {
+                    let current_mv = mv.location();
+                    if !next.contains(current_mv.kind.0) {
                         continue;
                     }
-                    let (pos, long_moves) = pos.advance(mv.location);
-                    let mut value = if let Some(value) = mv.value {
+                    let (pos, long_moves) = pos.advance(mv.location.into());
+                    let mut value = if let Some(value) = mv.value.into() {
                         MoveValue {
                             long_moves: 0.0,
                             value
@@ -120,7 +131,7 @@ impl BookBuilder {
                         self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
                     } else {
                         self.value_of_raw(
-                            pos, next - mv.location.kind.0 | queue[0], &queue[1..], qbag
+                            pos, next - current_mv.kind.0 | queue[0], &queue[1..], qbag
                         )
                     };
                     value.long_moves += long_moves;
@@ -128,11 +139,11 @@ impl BookBuilder {
                         best = value;
                         best_move = Some(mv.location);
                     } else if value == best && best != MoveValue::default() {
-                        let best_mv = best_move.unwrap();
-                        let ord = mv.location.x.cmp(&best_mv.x)
-                            .then(mv.location.y.cmp(&best_mv.y))
-                            .then((mv.location.kind.0 as usize).cmp(&(best_mv.kind.0 as usize)))
-                            .then((mv.location.kind.1 as usize).cmp(&(best_mv.kind.1 as usize)));
+                        let best_mv: FallingPiece = best_move.unwrap().into();
+                        let ord = current_mv.x.cmp(&best_mv.x)
+                            .then(current_mv.y.cmp(&best_mv.y))
+                            .then((current_mv.kind.0 as usize).cmp(&(best_mv.kind.0 as usize)))
+                            .then((current_mv.kind.1 as usize).cmp(&(best_mv.kind.1 as usize)));
                         if ord == std::cmp::Ordering::Greater {
                             best_move = Some(mv.location);
                         }
@@ -168,16 +179,16 @@ impl BookBuilder {
         let moves = &mut self.data.entry(position).or_default().moves;
         let mut add_backref = false;
         let mut remove_backref = false;
-        match moves.iter_mut().find(|m| m.location.same_location(&mv)) {
-            Some(mv) => if mv.value < value {
-                remove_backref = mv.value.is_none() && value.is_some();
-                mv.value = value;
+        match moves.iter_mut().find(|m| m.location().same_location(&mv)) {
+            Some(mv) => if mv.value() < value {
+                remove_backref = mv.value().is_none() && value.is_some();
+                mv.value = value.into();
             }
             None => {
                 add_backref = value.is_none();
                 moves.push(Move {
-                    location: mv,
-                    value
+                    location: mv.into(),
+                    value: value.into()
                 });
             }
         }
@@ -285,5 +296,27 @@ impl std::iter::Sum for MoveValue {
             this.value /= value_count as f32;
         }
         this
+    }
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+struct OptionNanF32(f32);
+
+impl From<Option<f32>> for OptionNanF32 {
+    fn from(v: Option<f32>) -> Self {
+        match v {
+            Some(v) => Self(v),
+            None => Self(std::f32::NAN)
+        }
+    }
+}
+
+impl From<OptionNanF32> for Option<f32> {
+    fn from(v: OptionNanF32) -> Self {
+        if v.0.is_nan() {
+            None
+        } else {
+            Some(v.0)
+        }
     }
 }

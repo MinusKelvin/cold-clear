@@ -223,13 +223,13 @@ fn dump(book: &opening_book::BookBuilder) {
         }
         write!(f, "<p>").unwrap();
         let mut moves: Vec<_> = book.moves(pos).into_iter()
-            .map(|mv| (mv, book.value_of_position(pos.advance(mv.location).0)))
+            .map(|mv| (mv, book.value_of_position(pos.advance(mv.location()).0)))
             .collect();
         moves.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
         for (mv, v) in moves {
-            let cells = mv.location.cells();
-            write!(f, "<a href='{}.html'>", name(pos.advance(mv.location).0)).unwrap();
-            match mv.value {
+            let cells = mv.location().cells();
+            write!(f, "<a href='{}.html'>", name(pos.advance(mv.location()).0)).unwrap();
+            match mv.value() {
                 Some(v) => write!(f, "V={}", v).unwrap(),
                 None => {
                     write!(f, "E(V)={:.5}", v.value).unwrap();
@@ -245,7 +245,7 @@ fn dump(book: &opening_book::BookBuilder) {
                         if pos.rows()[y] & 1<<x != 0 {
                             "gray"
                         } else if cells.contains(&(x, y as i32)) {
-                            match mv.location.kind.0 {
+                            match mv.location().kind.0 {
                                 Piece::I => "cyan",
                                 Piece::J => "blue",
                                 Piece::L => "orange",
