@@ -131,6 +131,7 @@ impl<E: Evaluator> BotState<E> {
             for mv in &candidates {
                 if mv.mv.same_location(&book_move) {
                     picked = Some(mv.clone());
+                    break;
                 }
             }
         }
