@@ -247,4 +247,10 @@ pub mod pcloop {
     pub struct Info {
         pub plan: Vec<(FallingPiece, LockResult)>
     }
+
+    #[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
+    pub enum PcPriority {
+        Fastest,
+        HighestAttack,
+    }
 }
