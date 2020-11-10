@@ -53,7 +53,7 @@ enum BotMsg {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum Info {
     Normal(modes::normal::Info),
-    Book(modes::normal::BookInfo),
+    Book,
     PcLoop(modes::pcloop::Info)
 }
 
@@ -62,7 +62,7 @@ impl Info {
         match self {
             Info::Normal(info) => &info.plan,
             Info::PcLoop(info) => &info.plan,
-            Info::Book(_) => &[]
+            Info::Book => &[]
         }
     }
 }

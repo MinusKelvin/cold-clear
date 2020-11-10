@@ -146,11 +146,10 @@ impl<E: Evaluator> BotState<E> {
             vec![]
         };
 
-        let info = match book_move {
-            Some(mv) => crate::Info::Book(BookInfo {
-                name: "".to_string()
-            }),
-            None => crate::Info::Normal(Info {
+        let info = if book_move.is_some() {
+            crate::Info::Book
+        } else {
+            crate::Info::Normal(Info {
                 nodes: if book_move.is_some() { 0 } else { self.tree.nodes() },
                 depth: if book_move.is_some() { 6 } else { self.tree.depth() as u32 },
                 original_rank: child.original_rank,
@@ -289,9 +288,4 @@ pub struct Info {
     pub depth: u32,
     pub original_rank: u32,
     pub plan: Vec<(FallingPiece, LockResult)>
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub struct BookInfo {
-    pub name: String
 }

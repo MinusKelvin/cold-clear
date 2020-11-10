@@ -255,9 +255,8 @@ impl PlayerDrawState {
                     lines.push(("Nodes", format!("{}", info.nodes)));
                     lines.push(("O. Rank", format!("{}", info.original_rank)));
                 }
-                cold_clear::Info::Book(info) => {
+                cold_clear::Info::Book => {
                     lines.push(("Book", "".to_owned()));
-                    lines.push(("", info.name.clone()));
                 }
                 cold_clear::Info::PcLoop(info) => {
                     lines.push(("PC Loop", "".to_owned()));
