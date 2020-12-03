@@ -1,3 +1,4 @@
+use game_util::prelude::*;
 use game_util::{ TextRenderer, SpriteBatch, sprite_shader, Sound };
 use game_util::rusttype::Font;
 use game_util::rodio::{ self, Sink };
@@ -13,15 +14,15 @@ pub struct Resources {
 }
 
 impl Resources {
-    pub fn load() -> Self {
-        let mut text = TextRenderer::new();
+    pub fn load(gl: &Gl) -> Self {
+        let mut text = TextRenderer::new(gl).unwrap();
         text.screen_size = (40.0, 23.0);
         text.add_style(vec![
             Font::try_from_bytes(include_bytes!("font/NotoSerif-Regular.ttf") as &[_]).unwrap()
         ]);
 
-        let (sprites, sprite_sheet) = sprites::Sprites::load();
-        let mut sprite_batch = SpriteBatch::new(sprite_shader(), sprite_sheet);
+        let (sprites, sprite_sheet) = sprites::Sprites::load(gl).unwrap();
+        let mut sprite_batch = SpriteBatch::new(gl, sprite_shader(gl), sprite_sheet).unwrap();
         sprite_batch.pixels_per_unit = 83.0;
 
         Resources {

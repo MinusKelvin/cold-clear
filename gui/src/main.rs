@@ -3,10 +3,10 @@
 use game_util::prelude::*;
 use game_util::GameloopCommand;
 use game_util::glutin::{ WindowedContext, PossiblyCurrent };
-use game_util::glutin::dpi::{ PhysicalSize, LogicalSize };
-use game_util::glutin::event::{ VirtualKeyCode, WindowEvent, ElementState };
-use game_util::glutin::event_loop::EventLoop;
-use game_util::glutin::window::{ WindowId, WindowBuilder };
+use game_util::winit::dpi::{ PhysicalSize, LogicalSize };
+use game_util::winit::event::{ VirtualKeyCode, WindowEvent, ElementState };
+use game_util::winit::event_loop::EventLoop;
+use game_util::winit::window::{ WindowId, WindowBuilder };
 use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
 use std::collections::HashSet;
@@ -27,6 +27,7 @@ use replay::ReplayGame;
 struct CCGui {
     log: LogFile,
     context: WindowedContext<PossiblyCurrent>,
+    gl: Gl,
     psize: PhysicalSize<u32>,
     res: res::Resources,
     state: Box<dyn State>,
@@ -75,12 +76,12 @@ impl game_util::Game for CCGui {
         self.res.text.dpi = vp.width as f32 / 40.0;
 
         unsafe {
-            gl::Viewport(
+            self.gl.viewport(
                 ((self.psize.width - vp.width) / 2) as i32,
                 ((self.psize.height - vp.height) / 2) as i32,
                 vp.width as i32, vp.height as i32
             );
-            gl::ClearBufferfv(gl::COLOR, 0, [0.0f32; 4].as_ptr());
+            self.gl.clear_buffer_f32_slice(glow::COLOR, 0, &mut [0.0f32; 4]);
         }
 
         self.state.render(&mut self.res);
@@ -123,7 +124,7 @@ fn main() {
 
     let mut events = EventLoop::new();
 
-    let context = game_util::create_context(
+    let (context, gl) = game_util::desktop::create_context(
         WindowBuilder::new()
             .with_title("Cold Clear")
             .with_inner_size(LogicalSize::new(1280.0, 720.0)),
@@ -137,8 +138,8 @@ fn main() {
     });
 
     unsafe {
-        gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        gl.enable(glow::BLEND);
+        gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
     }
 
     let Options { p1, p2 } = read_options().unwrap_or_else(|e| {
@@ -164,7 +165,7 @@ fn main() {
         log,
         psize: context.window().inner_size(),
         context,
-        res: res::Resources::load(),
+        res: res::Resources::load(&gl),
         state: match replay_file {
             Some(f) => Box::new(ReplayGame::new(f)),
             None => Box::new(RealtimeGame::new(
@@ -176,7 +177,8 @@ fn main() {
         p1: gamepads.next().map(|(id, _)| id),
         p2: gamepads.next().map(|(id, _)| id),
         gilrs,
-        keys: HashSet::new()
+        keys: HashSet::new(),
+        gl
     };
 
     game_util::gameloop(events, game, 60.0, true);
