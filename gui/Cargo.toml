@@ -5,9 +5,6 @@ authors = ["MinusKelvin <mark.carlson@minuskelvin.net>"]
 edition = "2018"
 default-run = "gui"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
