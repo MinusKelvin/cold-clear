@@ -1,4 +1,4 @@
-use game_util::glutin::VirtualKeyCode;
+use game_util::glutin::event::VirtualKeyCode;
 use battle::{ Battle, GameConfig };
 use libtetris::Board;
 use std::collections::{ HashSet, VecDeque };

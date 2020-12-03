@@ -2,8 +2,11 @@
 
 use game_util::prelude::*;
 use game_util::GameloopCommand;
-use game_util::glutin::*;
-use game_util::glutin::dpi::LogicalSize;
+use game_util::glutin::{ WindowedContext, PossiblyCurrent };
+use game_util::glutin::dpi::{ PhysicalSize, LogicalSize };
+use game_util::glutin::event::{ VirtualKeyCode, WindowEvent, ElementState };
+use game_util::glutin::event_loop::EventLoop;
+use game_util::glutin::window::{ WindowId, WindowBuilder };
 use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
 use std::collections::HashSet;
@@ -21,10 +24,10 @@ mod input;
 use realtime::RealtimeGame;
 use replay::ReplayGame;
 
-struct CCGui<'a> {
+struct CCGui {
     log: LogFile,
-    context: &'a WindowedContext<PossiblyCurrent>,
-    lsize: LogicalSize,
+    context: WindowedContext<PossiblyCurrent>,
+    psize: PhysicalSize<u32>,
     res: res::Resources,
     state: Box<dyn State>,
     gilrs: Gilrs,
@@ -33,7 +36,7 @@ struct CCGui<'a> {
     p2: Option<GamepadId>
 }
 
-impl game_util::Game for CCGui<'_> {
+impl game_util::Game for CCGui {
     fn update(&mut self) -> GameloopCommand {
         let gilrs = &self.gilrs;
         let p1 = self.p1.map(|id| gilrs.gamepad(id));
@@ -63,22 +66,20 @@ impl game_util::Game for CCGui<'_> {
             }
         }
 
-        let dpi = self.context.window().get_hidpi_factor();
         const TARGET_ASPECT: f64 = 40.0 / 23.0;
-        let vp = if self.lsize.width / self.lsize.height < TARGET_ASPECT {
-            LogicalSize::new(self.lsize.width, self.lsize.width / TARGET_ASPECT)
+        let vp = if (self.psize.width as f64 / self.psize.height as f64) < TARGET_ASPECT {
+            PhysicalSize::new(self.psize.width, (self.psize.width as f64 / TARGET_ASPECT) as u32)
         } else {
-            LogicalSize::new(self.lsize.height * TARGET_ASPECT, self.lsize.height)
+            PhysicalSize::new((self.psize.height as f64 * TARGET_ASPECT) as u32, self.psize.height)
         };
-        self.res.text.dpi = (dpi * vp.width / 40.0) as f32;
+        self.res.text.dpi = vp.width as f32 / 40.0;
 
         unsafe {
-            let (rw, rh): (u32, _) = self.lsize.to_physical(dpi).into();
-            let (rw, rh) = (rw as i32, rh as i32);
-            let (w, h): (u32, _) = vp.to_physical(dpi).into();
-            let (w, h) = (w as i32, h as i32);
-
-            gl::Viewport((rw - w) / 2, (rh - h) / 2, w, h);
+            gl::Viewport(
+                ((self.psize.width - vp.width) / 2) as i32,
+                ((self.psize.height - vp.height) / 2) as i32,
+                vp.width as i32, vp.height as i32
+            );
             gl::ClearBufferfv(gl::COLOR, 0, [0.0f32; 4].as_ptr());
         }
 
@@ -100,10 +101,8 @@ impl game_util::Game for CCGui<'_> {
         match event {
             WindowEvent::CloseRequested => return GameloopCommand::Exit,
             WindowEvent::Resized(new_size) => {
-                self.lsize = new_size;
-                self.context.resize(new_size.to_physical(
-                    self.context.window().get_hidpi_factor()
-                ));
+                self.psize = new_size;
+                self.context.resize(new_size);
             }
             WindowEvent::KeyboardInput { input, .. } => if let Some(k) = input.virtual_keycode {
                 if input.state == ElementState::Pressed {
@@ -122,12 +121,12 @@ fn main() {
     let mut log = LogFile::default();
     let replay_file = std::env::args().skip(1).next();
 
-    let mut events = EventsLoop::new();
+    let mut events = EventLoop::new();
 
-    let (context, lsize) = game_util::create_context(
+    let context = game_util::create_context(
         WindowBuilder::new()
             .with_title("Cold Clear")
-            .with_dimensions((1280.0, 720.0).into()),
+            .with_inner_size(LogicalSize::new(1280.0, 720.0)),
         0, true, &mut events
     ).unwrap_or_else(|e| {
         writeln!(
@@ -161,10 +160,10 @@ fn main() {
     });
     let mut gamepads = gilrs.gamepads();
 
-    let mut game = CCGui {
+    let game = CCGui {
         log,
-        context: &context,
-        lsize,
+        psize: context.window().inner_size(),
+        context,
         res: res::Resources::load(),
         state: match replay_file {
             Some(f) => Box::new(ReplayGame::new(f)),
@@ -180,7 +179,7 @@ fn main() {
         keys: HashSet::new()
     };
 
-    game_util::gameloop(&mut events, &mut game, 60.0, true);
+    game_util::gameloop(events, game, 60.0, true);
 }
 
 trait State {

@@ -6,7 +6,7 @@ use std::fs::File;
 use battle::Battle;
 use libtetris::Controller;
 use gilrs::Gamepad;
-use game_util::glutin::VirtualKeyCode;
+use game_util::glutin::event::VirtualKeyCode;
 use crate::battle_ui::BattleUi;
 use crate::res::Resources;
 

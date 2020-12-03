@@ -1,6 +1,6 @@
 use libtetris::*;
 use battle::{ Event, PieceMoveExecutor };
-use game_util::glutin::VirtualKeyCode;
+use game_util::glutin::event::VirtualKeyCode;
 use gilrs::{ Gamepad, Axis, Button };
 use serde::{ Serialize, Deserialize };
 use std::collections::HashSet;

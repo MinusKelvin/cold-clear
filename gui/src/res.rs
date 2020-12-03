@@ -17,7 +17,7 @@ impl Resources {
         let mut text = TextRenderer::new();
         text.screen_size = (40.0, 23.0);
         text.add_style(vec![
-            Font::from_bytes(include_bytes!("font/NotoSerif-Regular.ttf") as &[_]).unwrap()
+            Font::try_from_bytes(include_bytes!("font/NotoSerif-Regular.ttf") as &[_]).unwrap()
         ]);
 
         let (sprites, sprite_sheet) = sprites::Sprites::load();
