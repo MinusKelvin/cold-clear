@@ -1,6 +1,6 @@
 use game_util::prelude::*;
 use battle::{ Battle, BattleUpdate };
-use crate::player_draw::PlayerDrawState;
+use crate::{player_draw::PlayerDrawState, res::SoundId};
 use crate::res::Resources;
 
 pub struct BattleUi {
@@ -29,16 +29,14 @@ impl BattleUi {
             use battle::Event::*;
             match event {
                 PieceMoved | SoftDropped | PieceRotated => {
-                    if res.move_sound_sink.len() <= 1 {
-                        res.move_sound_sink.append(res.move_sound.sound());
-                    }
+                    res.sound_player.send(SoundId::MoveSound).ok();
                 }
                 PiecePlaced { hard_drop_distance, locked, .. } => {
                     if hard_drop_distance.is_some() {
-                        res.hard_drop.play();
+                        res.sound_player.send(SoundId::HardDrop).ok();
                     }
                     if locked.placement_kind.is_clear() {
-                        res.line_clear.play();
+                        res.sound_player.send(SoundId::LineClear).ok();
                     }
                 }
                 _ => {}
