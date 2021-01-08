@@ -145,6 +145,7 @@ fn bot_thread<E>(
     E::Value: Serialize + DeserializeOwned,
     E::Reward: Serialize + DeserializeOwned
 {
+    console_error_panic_hook::set_once();
     spawn_local(async move {
         let (result_send, result_recv) = channel::<TaskResult<E::Value, E::Reward>>();
         let (task_send, task_recv) = channel::<Task>();

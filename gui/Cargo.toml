@@ -5,20 +5,32 @@ authors = ["MinusKelvin <mark.carlson@minuskelvin.net>"]
 edition = "2018"
 default-run = "gui"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "d201fec" }
+game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "7b238ab" }
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 battle = { path = "../battle" }
 arrayvec = "0.4.11"
 rand = "0.7.3"
-gilrs = { version = "0.7.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8.11"
 bincode = "1.2"
 libflate = "0.1"
 
+[dependencies.gilrs]
+rev = "dedaad1006fc812a84b9cba4a172f6520956e515"
+git = "https://gitlab.com/gilrs-project/gilrs"
+features = ["serde-serialize", "wasm-bindgen"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1.6"
+wasm-bindgen-futures = "0.4"
+
 [build-dependencies]
-build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "d201fec" }
+build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "7b238ab" }

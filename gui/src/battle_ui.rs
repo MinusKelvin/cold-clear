@@ -1,6 +1,6 @@
-use game_util::prelude::*;
+use game_util::{prelude::*, text::Alignment};
 use battle::{ Battle, BattleUpdate };
-use crate::{player_draw::PlayerDrawState, res::SoundId};
+use crate::player_draw::PlayerDrawState;
 use crate::res::Resources;
 
 pub struct BattleUi {
@@ -25,18 +25,20 @@ impl BattleUi {
         p1_info_update: Option<cold_clear::Info>,
         p2_info_update: Option<cold_clear::Info>
     ) {
+        let mut move_sound_played_this_frame = false;
         for event in update.player_1.events.iter().chain(update.player_2.events.iter()) {
             use battle::Event::*;
             match event {
-                PieceMoved | SoftDropped | PieceRotated => {
-                    res.sound_player.send(SoundId::MoveSound).ok();
+                PieceMoved | SoftDropped | PieceRotated => if !move_sound_played_this_frame {
+                    res.sound_service.play(&res.move_sound);
+                    move_sound_played_this_frame = true;
                 }
                 PiecePlaced { hard_drop_distance, locked, .. } => {
                     if hard_drop_distance.is_some() {
-                        res.sound_player.send(SoundId::HardDrop).ok();
+                        res.sound_service.play(&res.hard_drop);
                     }
                     if locked.placement_kind.is_clear() {
-                        res.sound_player.send(SoundId::LineClear).ok();
+                        res.sound_service.play(&res.line_clear);
                     }
                 }
                 _ => {}
@@ -52,7 +54,7 @@ impl BattleUi {
         res.text.draw_text(
             &format!("{}:{:02}", self.time / 60 / 60, self.time / 60 % 60),
             20.0, 1.5,
-            game_util::Alignment::Center,
+            Alignment::Center,
             [0xFF; 4], 1.0, 0
         );
 

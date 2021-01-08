@@ -1,5 +1,5 @@
 use game_util::prelude::*;
-use game_util::Alignment;
+use game_util::text::Alignment;
 use std::collections::VecDeque;
 use libtetris::*;
 use battle::{ PlayerUpdate, Event };
@@ -260,6 +260,7 @@ impl PlayerDrawState {
                 }
                 cold_clear::Info::PcLoop(info) => {
                     lines.push(("PC Loop", "".to_owned()));
+                    #[cfg(not(target_arch = "wasm32"))]
                     lines.push(("Depth", format!("{}", info.depth)));
                 }
             }

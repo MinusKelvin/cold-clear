@@ -1,7 +1,12 @@
+use game_util::text::Alignment;
 use game_util::winit::event::VirtualKeyCode;
+use game_util::winit::event_loop::EventLoopProxy;
+use game_util::LocalExecutor;
 use battle::{ Battle, GameConfig };
 use libtetris::Board;
 use std::collections::{ HashSet, VecDeque };
+use std::future::Future;
+use std::pin::Pin;
 use std::io::prelude::*;
 use rand::prelude::*;
 use gilrs::Gamepad;
@@ -10,13 +15,12 @@ use crate::battle_ui::BattleUi;
 use crate::input::InputSource;
 use crate::replay::InfoReplay;
 
-type InputFactory = dyn Fn(Board) -> (Box<dyn InputSource>, String);
+type InputFactory = dyn Fn(Board) -> Pin<Box<dyn Future<Output = (Box<dyn InputSource>, String)>>>;
 
 pub struct RealtimeGame {
     ui: BattleUi,
     battle: Battle,
-    p1_input_factory: Box<InputFactory>,
-    p2_input_factory: Box<InputFactory>,
+    input_factories: Option<(Box<InputFactory>, Box<InputFactory>)>,
     p1_input: Box<dyn InputSource>,
     p2_input: Box<dyn InputSource>,
     p1_wins: u32,
@@ -35,27 +39,27 @@ enum State {
 }
 
 impl RealtimeGame {
-    pub fn new(
+    pub async fn new(
         p1: Box<InputFactory>,
         p2: Box<InputFactory>,
         p1_config: GameConfig,
-        p2_config: GameConfig
+        p2_config: GameConfig,
+        p1_wins: u32,
+        p2_wins: u32
     ) -> Self {
         let mut battle = Battle::new(
             p1_config, p2_config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
-        let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed());
-        let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed());
+        let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed()).await;
+        let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed()).await;
         battle.replay.p1_name = p1_name.clone();
         battle.replay.p2_name = p2_name.clone();
         RealtimeGame {
             ui: BattleUi::new(&battle, p1_name, p2_name),
             battle,
-            p1_input_factory: p1,
-            p2_input_factory: p2,
+            input_factories: Some((p1, p2)),
             p1_input, p2_input,
-            p1_wins: 0,
-            p2_wins: 0,
+            p1_wins, p2_wins,
             p1_info_updates: VecDeque::new(),
             p2_info_updates: VecDeque::new(),
             state: State::Starting(180),
@@ -67,6 +71,8 @@ impl RealtimeGame {
 impl crate::State for RealtimeGame {
     fn update(
         &mut self,
+        el_proxy: &EventLoopProxy<Box<dyn crate::State>>,
+        executor: &LocalExecutor,
         log: &mut crate::LogFile,
         res: &mut Resources,
         keys: &HashSet<VirtualKeyCode>,
@@ -74,11 +80,11 @@ impl crate::State for RealtimeGame {
         p2: Option<Gamepad>
     ) -> Option<Box<dyn crate::State>> {
         let do_update = match self.state {
-            State::GameOver(0) => {
+            State::GameOver(0) => if let Some((p1_if, p2_if)) = self.input_factories.take() {
                 let r: Result<(), Box<dyn std::error::Error>> = (|| {
                     let mut encoder = libflate::deflate::Encoder::new(
-                        std::fs::File::create("replay.dat"
-                    )?);
+                        std::fs::File::create("replay.dat")?
+                    );
                     bincode::serialize_into(
                         &mut encoder,
                         &InfoReplay {
@@ -94,28 +100,18 @@ impl crate::State for RealtimeGame {
                     writeln!(log, "Failure saving replay: {}", e).ok();
                 }
 
-                self.battle = Battle::new(
-                    self.p1_config, self.p2_config,
-                    thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
-                );
-
-                let (p1_input, p1_name) = (self.p1_input_factory)(
-                    self.battle.player_1.board.to_compressed()
-                );
-                let (p2_input, p2_name) = (self.p2_input_factory)(
-                    self.battle.player_2.board.to_compressed()
-                );
-
-                self.ui = BattleUi::new(&self.battle, p1_name.clone(), p2_name.clone());
-                self.p1_input = p1_input;
-                self.p2_input = p2_input;
-                self.battle.replay.p1_name = p1_name;
-                self.battle.replay.p2_name = p2_name;
-
-                self.p1_info_updates.clear();
-                self.p2_info_updates.clear();
-
-                self.state = State::Starting(180);
+                let p1_config = self.p1_config;
+                let p2_config = self.p2_config;
+                let p1_wins = self.p1_wins;
+                let p2_wins = self.p2_wins;
+                let el_proxy = el_proxy.clone();
+                executor.spawn(async move {
+                    el_proxy.send_event(Box::new(Self::new(
+                        p1_if, p2_if, p1_config, p2_config, p1_wins, p2_wins
+                    ).await)).ok();
+                });
+                false
+            } else {
                 false
             }
             State::GameOver(ref mut delay) => {
@@ -184,7 +180,7 @@ impl crate::State for RealtimeGame {
         res.text.draw_text(
             &format!("{} - {}", self.p1_wins, self.p2_wins),
             20.0, 3.0,
-            game_util::Alignment::Center,
+            Alignment::Center,
             [0xFF; 4], 1.5, 0
         );
 
@@ -192,13 +188,13 @@ impl crate::State for RealtimeGame {
             res.text.draw_text(
                 &format!("{}", timer / 60 + 1),
                 9.5, 12.25,
-                game_util::Alignment::Center,
+                Alignment::Center,
                 [0xFF; 4], 3.0, 0
             );
             res.text.draw_text(
                 &format!("{}", timer / 60 + 1),
                 29.5, 12.25,
-                game_util::Alignment::Center,
+                Alignment::Center,
                 [0xFF; 4], 3.0, 0
             );
         }
