@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cold Clear</title>
+    <style>
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="cc.js"></script>
+    <script>
+      const { main } = wasm_bindgen;
+      async function run() {
+        await wasm_bindgen("./cc_bg.wasm");
+        main();
+      }
+      run();
+    </script>
+  </body>
+</html>
