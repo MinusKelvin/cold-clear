@@ -292,7 +292,7 @@ impl PlayerDrawState {
             for (placement, lock) in info.plan() {
                 for &(x, y, d) in &placement.cells_with_connections() {
                     res.sprite_batch.draw(
-                        &res.sprites.plan[d.to_bits() as usize],
+                        &res.sprites.plan[d.as_usize()],
                         point2(offset_x + x as f32 + 4.0, y_map[y as usize] as f32 + 3.25),
                         cell_color_to_color(placement.kind.0.color())
                     );

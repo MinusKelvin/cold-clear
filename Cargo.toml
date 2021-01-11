@@ -12,3 +12,7 @@ members = [
     "opening-book/book-builder",
     "opening-book/pc-gen"
 ]
+
+[patch.crates-io.enumset_derive]
+git = "https://github.com/ocboogie/enumset"
+branch = "span-fix"

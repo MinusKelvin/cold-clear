@@ -13,4 +13,4 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
-enumset = { version = "0.4.0"}
+enumset = "1.0"

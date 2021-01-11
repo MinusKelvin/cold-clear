@@ -252,10 +252,23 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
 }
 
 #[no_mangle]
-extern "C" fn cc_launch_with_board_async(options: &CCOptions, weights: &CCWeights, field: &[[bool; 10]; 40], 
-    bag_remain: u32, hold: *mut CCPiece, b2b: bool, combo: u32) -> *mut CCAsyncBot {
+extern "C" fn cc_launch_with_board_async(
+    options: &CCOptions,
+    weights: &CCWeights,
+    field: &[[bool; 10]; 40],
+    bag_remain: u32,
+    hold: *mut CCPiece,
+    b2b: bool,
+    combo: u32
+) -> *mut CCAsyncBot {
     Box::into_raw(Box::new(cold_clear::Interface::launch(
-        Board::new_with_state(*field, EnumSet::from_bits(bag_remain as u128), convert_hold(hold), b2b, combo),
+        Board::new_with_state(
+            *field,
+            EnumSet::try_from_u32(bag_remain).unwrap_or_default(),
+            convert_hold(hold),
+            b2b,
+            combo
+        ),
         convert_from_c_options(options),
         convert_from_c_weights(weights),
         None // TODO

@@ -7,15 +7,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrayvec = "0.4.11"
+arrayvec = "0.5"
 rand = "0.7.0"
-enumset = "0.4.0"
+enumset = "1.0"
 libtetris = { path = "../libtetris" }
 opening-book = { path = "../opening-book" }
 enum-map = { version = "0.6.0", features = ["serde"] }
 odds = { version = "0.3.1", features = ["std-vec"] }
 serde = { version = "1", features = ["derive"] }
-smallvec = "1.0.0"
+smallvec = "1.0"
 serde-big-array = "0.2.0"
 bumpalo = { version = "3.4.0", features = ["collections"] }
 rental = "0.5.5"
@@ -23,7 +23,7 @@ rental = "0.5.5"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1.2.1"
 crossbeam-channel = "0.4"
-pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "6313ac8" }
+pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "96b0de1" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "5a54126" }

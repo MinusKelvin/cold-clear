@@ -15,7 +15,7 @@ game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "7b238a
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 battle = { path = "../battle" }
-arrayvec = "0.4.11"
+arrayvec = "0.5"
 rand = "0.7.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8.11"

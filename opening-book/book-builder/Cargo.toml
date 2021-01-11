@@ -11,4 +11,4 @@ opening-book = { path = "..", features = ["builder"] }
 libtetris = { path = "../../libtetris" }
 fumen = "0.1.1"
 permutator = "0.4.0"
-enumset = "0.4.0"
+enumset = "1.0"

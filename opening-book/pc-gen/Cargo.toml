@@ -9,8 +9,8 @@ edition = "2018"
 [dependencies]
 opening-book = { path = "..", features = ["builder"] }
 libtetris = { path = "../../libtetris" }
-enumset = "0.4.0"
+enumset = "1.0"
 pcf = { git = "https://github.com/MinusKelvin/pcf" }
-arrayvec = "0.5.1"
+arrayvec = "0.5"
 rayon = "1.4.1"
 crossbeam-channel = "0.5.0"
