@@ -10,7 +10,6 @@ edition = "2018"
 arrayvec = "0.5"
 rand = "0.7.0"
 enumset = "1.0"
-libtetris = { path = "../libtetris" }
 opening-book = { path = "../opening-book" }
 enum-map = { version = "0.6.0", features = ["serde"] }
 odds = { version = "0.3.1", features = ["std-vec"] }
@@ -21,11 +20,13 @@ bumpalo = { version = "3.4.0", features = ["collections"] }
 rental = "0.5.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+libtetris = { path = "../libtetris", features = ["pcf"] }
 rayon = "1.2.1"
 crossbeam-channel = "0.4"
 pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "96b0de1" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+libtetris = { path = "../libtetris" }
 webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "5a54126" }
 futures-util = "0.3"
 getrandom = { version = "0.1", features = ["wasm-bindgen"] }

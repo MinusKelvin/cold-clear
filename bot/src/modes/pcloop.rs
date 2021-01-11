@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{ AtomicBool, Ordering };
 use arrayvec::ArrayVec;
-use libtetris::{ Piece, RotationState, PieceState, TspinStatus, FallingPiece, Board, LockResult };
+use libtetris::{ Piece, FallingPiece, Board, LockResult };
 use crossbeam_channel::{ Sender, unbounded };
 use serde::{ Serialize, Deserialize };
 use crate::Move;
@@ -46,15 +46,7 @@ impl PcLooper {
 
         let mut queue = ArrayVec::new();
         for &piece in self.next_pc_hold.iter().chain(self.next_pc_queue.iter()).take(11) {
-            queue.push(match piece {
-                Piece::I => pcf::Piece::I,
-                Piece::S => pcf::Piece::S,
-                Piece::Z => pcf::Piece::Z,
-                Piece::O => pcf::Piece::O,
-                Piece::T => pcf::Piece::T,
-                Piece::L => pcf::Piece::L,
-                Piece::J => pcf::Piece::J
-            });
+            queue.push(piece.into());
         }
 
         if !self.hold_enabled && queue.len() >= 10 || queue.len() >= 11 {
@@ -225,25 +217,7 @@ impl PcSolver {
             let mut b = pcf::BitBoard(0);
             for &placement in &soln {
                 let piece = placement.srs_piece(b)[0];
-                result.push(FallingPiece {
-                    kind: PieceState(match piece.piece {
-                        pcf::Piece::I => Piece::I,
-                        pcf::Piece::J => Piece::J,
-                        pcf::Piece::L => Piece::L,
-                        pcf::Piece::S => Piece::S,
-                        pcf::Piece::Z => Piece::Z,
-                        pcf::Piece::T => Piece::T,
-                        pcf::Piece::O => Piece::O,
-                    }, match piece.rotation {
-                        pcf::Rotation::North => RotationState::North,
-                        pcf::Rotation::South => RotationState::South,
-                        pcf::Rotation::West => RotationState::West,
-                        pcf::Rotation::East => RotationState::East,
-                    }),
-                    x: piece.x,
-                    y: piece.y,
-                    tspin: TspinStatus::None
-                });
+                result.push(piece.into());
                 b = b.combine(placement.board());
             }
             result
