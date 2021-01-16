@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "7b238ab" }
+game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "1b5d127" }
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 battle = { path = "../battle" }
