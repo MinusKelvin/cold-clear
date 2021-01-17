@@ -57,7 +57,7 @@ impl crate::State for ReplayGame {
         _keys: &HashSet<VirtualKeyCode>,
         _p1: Option<Gamepad>,
         _p2: Option<Gamepad>
-    ) -> Option<Box<dyn crate::State>> {
+    ) {
         if self.start_delay == 0 {
             if let Some((p1_controller, p2_controller)) = self.updates.pop_front() {
                 let update = self.battle.update(p1_controller, p2_controller);
@@ -98,7 +98,6 @@ impl crate::State for ReplayGame {
         } else {
             self.start_delay -= 1;
         }
-        None
     }
 
     fn render(&mut self, res: &mut Resources) {

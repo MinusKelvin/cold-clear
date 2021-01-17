@@ -91,9 +91,7 @@ impl game_util::Game for CCGui {
     }
 
     fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
-        if let Some(new_state) = self.state.event(&mut self.res, &event) {
-            self.state = new_state;
-        }
+        self.state.event(&mut self.res, &event);
         match event {
             WindowEvent::CloseRequested => return GameloopCommand::Exit,
             WindowEvent::Resized(new_size) => {
@@ -136,12 +134,10 @@ pub fn main() {
             }
             let psize = window.inner_size();
 
-            let Options { p1, p2 } = read_options().unwrap_or_else(|e| {
+            let options = read_options().unwrap_or_else(|e| {
                 writeln!(log, "An error occured while loading options.yaml: {}", e).ok();
                 Options::default()
             });
-            let p1_game_config = p1.game;
-            let p2_game_config = p2.game;
 
             let gilrs = Gilrs::new().unwrap_or_else(|e| match e {
                 gilrs::Error::NotImplemented(g) => {
@@ -165,11 +161,7 @@ pub fn main() {
                     executor,
                     state: match replay_file {
                         Some(f) => Box::new(ReplayGame::new(f)),
-                        None => Box::new(RealtimeGame::new(
-                            Box::new(move |board| Box::pin(p1.clone().to_player(board))),
-                            Box::new(move |board| Box::pin(p2.clone().to_player(board))),
-                            p1_game_config, p2_game_config, 0, 0
-                        ).await)
+                        None => Box::new(RealtimeGame::new(options, 0, 0).await)
                     },
                     p1: p1_gamepad, p2: p2_gamepad, gilrs,
                     keys: HashSet::new(),
@@ -190,11 +182,9 @@ trait State {
         keys: &HashSet<VirtualKeyCode>,
         p1: Option<Gamepad>,
         p2: Option<Gamepad>
-    ) -> Option<Box<dyn State>>;
+    );
     fn render(&mut self, res: &mut res::Resources);
-    fn event(
-        &mut self, _res: &mut res::Resources, _event: &WindowEvent
-    ) -> Option<Box<dyn State>> { None }
+    fn event(&mut self, _res: &mut res::Resources, _event: &WindowEvent) {}
 }
 
 fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
@@ -240,12 +230,12 @@ struct PlayerConfig<E: Default> {
 
 impl<E> PlayerConfig<E>
 where
-    E: Evaluator + Default + Clone + Serialize + DeserializeOwned +std::fmt::Debug + 'static,
+    E: Evaluator + Default + Clone + Serialize + DeserializeOwned + std::fmt::Debug + 'static,
     E::Reward: Serialize + DeserializeOwned,
     E::Value: Serialize + DeserializeOwned,
 {
     pub async fn to_player(
-        self, board: libtetris::Board
+        &self, board: libtetris::Board
     ) -> (Box<dyn input::InputSource>, String) {
         use crate::input::BotInput;
         if self.is_bot {

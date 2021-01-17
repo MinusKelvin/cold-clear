@@ -2,25 +2,21 @@ use game_util::text::Alignment;
 use game_util::winit::event::VirtualKeyCode;
 use game_util::winit::event_loop::EventLoopProxy;
 use game_util::LocalExecutor;
-use battle::{ Battle, GameConfig };
-use libtetris::Board;
+use battle::Battle;
 use std::collections::{ HashSet, VecDeque };
-use std::future::Future;
-use std::pin::Pin;
 use std::io::prelude::*;
 use rand::prelude::*;
 use gilrs::Gamepad;
+use crate::Options;
 use crate::res::Resources;
 use crate::battle_ui::BattleUi;
 use crate::input::InputSource;
 use crate::replay::InfoReplay;
 
-type InputFactory = dyn Fn(Board) -> Pin<Box<dyn Future<Output = (Box<dyn InputSource>, String)>>>;
-
 pub struct RealtimeGame {
     ui: BattleUi,
     battle: Battle,
-    input_factories: Option<(Box<InputFactory>, Box<InputFactory>)>,
+    options: Option<Options>,
     p1_input: Box<dyn InputSource>,
     p2_input: Box<dyn InputSource>,
     p1_wins: u32,
@@ -28,8 +24,6 @@ pub struct RealtimeGame {
     p1_info_updates: VecDeque<Option<cold_clear::Info>>,
     p2_info_updates: VecDeque<Option<cold_clear::Info>>,
     state: State,
-    p1_config: GameConfig,
-    p2_config: GameConfig,
 }
 
 enum State {
@@ -39,31 +33,32 @@ enum State {
 }
 
 impl RealtimeGame {
-    pub async fn new(
-        p1: Box<InputFactory>,
-        p2: Box<InputFactory>,
-        p1_config: GameConfig,
-        p2_config: GameConfig,
+    pub(super) async fn new(
+        options: Options,
         p1_wins: u32,
         p2_wins: u32
     ) -> Self {
         let mut battle = Battle::new(
-            p1_config, p2_config, thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+            options.p1.game, options.p2.game,
+            thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
         );
-        let (p1_input, p1_name) = p1(battle.player_1.board.to_compressed()).await;
-        let (p2_input, p2_name) = p2(battle.player_2.board.to_compressed()).await;
+        let (p1_input, p1_name) = options.p1.to_player(
+            battle.player_1.board.to_compressed()
+        ).await;
+        let (p2_input, p2_name) = options.p2.to_player(
+            battle.player_2.board.to_compressed()
+        ).await;
         battle.replay.p1_name = p1_name.clone();
         battle.replay.p2_name = p2_name.clone();
         RealtimeGame {
             ui: BattleUi::new(&battle, p1_name, p2_name),
             battle,
-            input_factories: Some((p1, p2)),
+            options: Some(options),
             p1_input, p2_input,
             p1_wins, p2_wins,
             p1_info_updates: VecDeque::new(),
             p2_info_updates: VecDeque::new(),
             state: State::Starting(180),
-            p1_config, p2_config
         }
     }
 }
@@ -78,9 +73,9 @@ impl crate::State for RealtimeGame {
         keys: &HashSet<VirtualKeyCode>,
         p1: Option<Gamepad>,
         p2: Option<Gamepad>
-    ) -> Option<Box<dyn crate::State>> {
+    ) {
         let do_update = match self.state {
-            State::GameOver(0) => if let Some((p1_if, p2_if)) = self.input_factories.take() {
+            State::GameOver(0) => if let Some(options) = self.options.take() {
                 let r: Result<(), Box<dyn std::error::Error>> = (|| {
                     let mut encoder = libflate::deflate::Encoder::new(
                         std::fs::File::create("replay.dat")?
@@ -100,15 +95,12 @@ impl crate::State for RealtimeGame {
                     writeln!(log, "Failure saving replay: {}", e).ok();
                 }
 
-                let p1_config = self.p1_config;
-                let p2_config = self.p2_config;
                 let p1_wins = self.p1_wins;
                 let p2_wins = self.p2_wins;
                 let el_proxy = el_proxy.clone();
                 executor.spawn(async move {
-                    el_proxy.send_event(Box::new(Self::new(
-                        p1_if, p2_if, p1_config, p2_config, p1_wins, p2_wins
-                    ).await)).ok();
+                    let next_state = RealtimeGame::new(options, p1_wins, p2_wins).await;
+                    el_proxy.send_event(Box::new(next_state)).ok();
                 });
                 false
             } else {
@@ -172,8 +164,6 @@ impl crate::State for RealtimeGame {
 
             self.ui.update(res, update, p1_info_update, p2_info_update);
         }
-
-        None
     }
 
     fn render(&mut self, res: &mut Resources) {
