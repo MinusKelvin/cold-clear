@@ -5,7 +5,7 @@ use game_util::{ GameloopCommand, LocalExecutor };
 use game_util::winit::dpi::{ PhysicalSize, LogicalSize };
 use game_util::winit::event::{ VirtualKeyCode, WindowEvent, ElementState };
 use game_util::winit::event_loop::EventLoopProxy;
-use game_util::winit::window::{ WindowId, WindowBuilder };
+use game_util::winit::window::{ Window, WindowBuilder };
 use gilrs::{ Gilrs, Gamepad, GamepadId };
 use battle::GameConfig;
 use serde::de::DeserializeOwned;
@@ -41,7 +41,7 @@ struct CCGui {
 impl game_util::Game for CCGui {
     type UserEvent = Box<dyn State>;
 
-    fn update(&mut self) -> GameloopCommand {
+    fn update(&mut self, _: &Window) -> GameloopCommand {
         let gilrs = &self.gilrs;
         let p1 = self.p1.map(|id| gilrs.gamepad(id));
         let p2 = self.p2.map(|id| gilrs.gamepad(id));
@@ -51,7 +51,7 @@ impl game_util::Game for CCGui {
         GameloopCommand::Continue
     }
 
-    fn render(&mut self, _: f64, _smooth_delta: f64) {
+    fn render(&mut self, _: &Window, _: f64, _smooth_delta: f64) {
         while let Some(event) = self.gilrs.next_event() {
             match event.event {
                 gilrs::EventType::Connected => if self.p1.is_none() {
@@ -90,7 +90,7 @@ impl game_util::Game for CCGui {
         self.res.text.render();
     }
 
-    fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
+    fn event(&mut self, _: &Window, event: WindowEvent) -> GameloopCommand {
         self.state.event(&mut self.res, &event);
         match event {
             WindowEvent::CloseRequested => return GameloopCommand::Exit,
@@ -109,7 +109,7 @@ impl game_util::Game for CCGui {
         GameloopCommand::Continue
     }
 
-    fn user_event(&mut self, new_state: Box<dyn State>) -> GameloopCommand {
+    fn user_event(&mut self, _: &Window, new_state: Box<dyn State>) -> GameloopCommand {
         self.state = new_state;
         GameloopCommand::Continue
     }
@@ -134,10 +134,17 @@ pub fn main() {
             }
             let psize = window.inner_size();
 
-            let options = read_options().unwrap_or_else(|e| {
-                writeln!(log, "An error occured while loading options.yaml: {}", e).ok();
-                Options::default()
-            });
+            let options = match game_util::load("options", true) {
+                Ok(Some(v)) => v,
+                Ok(None) => {
+                    game_util::store("options", &Options::default(), true).ok();
+                    Options::default()
+                }
+                Err(e) => {
+                    writeln!(log, "An error occurred while loading options.yaml: {}", e).ok();
+                    Options::default()
+                }
+            };
 
             let gilrs = Gilrs::new().unwrap_or_else(|e| match e {
                 gilrs::Error::NotImplemented(g) => {
@@ -185,21 +192,6 @@ trait State {
     );
     fn render(&mut self, res: &mut res::Resources);
     fn event(&mut self, _res: &mut res::Resources, _event: &WindowEvent) {}
-}
-
-fn read_options() -> Result<Options, Box<dyn std::error::Error>> {
-    match std::fs::read_to_string("options.yaml") {
-        Ok(options) => Ok(serde_yaml::from_str(&options)?),
-        Err(e) => if e.kind() == std::io::ErrorKind::NotFound {
-            let ser = serde_yaml::to_string(&Options::default())?;
-            let mut s = include_str!("options-header").to_owned();
-            s.push_str(&ser);
-            std::fs::write("options.yaml", &s)?;
-            Ok(Options::default())
-        } else {
-            Err(e.into())
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
