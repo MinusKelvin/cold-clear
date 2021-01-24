@@ -142,6 +142,57 @@ impl FallingPiece {
         }
         true
     }
+
+    pub fn canonical(&self) -> FallingPiece {
+        match self.kind.0 {
+            Piece::T | Piece::J | Piece::L => *self,
+            Piece::O => match self.kind.1 {
+                RotationState::North => *self,
+                RotationState::East => FallingPiece {
+                    kind: PieceState(Piece::O, RotationState::North),
+                    y: self.y - 1,
+                    ..*self
+                },
+                RotationState::West => FallingPiece {
+                    kind: PieceState(Piece::O, RotationState::North),
+                    x: self.x - 1,
+                    ..*self
+                },
+                RotationState::South => FallingPiece {
+                    kind: PieceState(Piece::O, RotationState::North),
+                    y: self.y - 1,
+                    x: self.x - 1,
+                    ..*self
+                }
+            },
+            Piece::S | Piece::Z => match self.kind.1 {
+                RotationState::North | RotationState::West => *self,
+                RotationState::East => FallingPiece {
+                    kind: PieceState(self.kind.0, RotationState::West),
+                    x: self.x + 1,
+                    ..*self
+                },
+                RotationState::South => FallingPiece {
+                    kind: PieceState(self.kind.0, RotationState::North),
+                    y: self.y - 1,
+                    ..*self
+                },
+            },
+            Piece::I => match self.kind.1 {
+                RotationState::North | RotationState::West => *self,
+                RotationState::East => FallingPiece {
+                    kind: PieceState(Piece::I, RotationState::West),
+                    y: self.y - 1,
+                    ..*self
+                },
+                RotationState::South => FallingPiece {
+                    kind: PieceState(Piece::I, RotationState::North),
+                    x: self.x - 1,
+                    ..*self
+                }
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]

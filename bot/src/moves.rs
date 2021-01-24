@@ -1,6 +1,7 @@
 use libtetris::{ Board, FallingPiece, Piece, RotationState, TspinStatus, PieceMovement };
 use arrayvec::ArrayVec;
-use std::collections::{ HashMap, HashSet };
+use std::cmp::Ordering;
+use std::collections::{ BinaryHeap, HashMap, HashSet };
 use serde::{ Serialize, Deserialize };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -30,14 +31,28 @@ pub enum MovementMode {
     HardDropOnly
 }
 
+impl Ord for Placement {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.inputs.time.cmp(&other.inputs.time)
+            .then(self.inputs.movements.len().cmp(&other.inputs.movements.len()))
+            .reverse()
+    }
+}
+
+impl PartialOrd for Placement {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub fn find_moves(
     board: &Board,
     mut spawned: FallingPiece,
     mode: MovementMode
 ) -> Vec<Placement> {
-    let mut locks = HashMap::with_capacity(1024);
-    let mut checked = HashSet::with_capacity(1024);
-    let mut check_queue = vec![];
+    let mut locks = HashMap::with_capacity(128);
+    let mut checked = HashSet::with_capacity(128);
+    let mut check_queue = Vec::with_capacity(64);
     let fast_mode;
 
     if board.column_heights().iter().all(|&v| v < 16) {
@@ -85,16 +100,9 @@ pub fn find_moves(
         });
     }
 
-    fn next(q: &mut Vec<Placement>) -> Option<Placement> {
-        q.sort_by(|a, b|
-            a.inputs.time.cmp(&b.inputs.time).then(
-                a.inputs.movements.len().cmp(&b.inputs.movements.len())
-            ).reverse()
-        );
-        q.pop()
-    }
+    let mut check_queue = BinaryHeap::from(check_queue);
 
-    while let Some(placement) = next(&mut check_queue) {
+    while let Some(placement) = check_queue.pop() {
         let moves = placement.inputs;
         let position = placement.location;
         if !moves.movements.is_full() {
@@ -161,19 +169,17 @@ pub fn find_moves(
 
 fn lock_check(
     piece: FallingPiece,
-    locks: &mut HashMap<([(i32, i32); 4], TspinStatus), Placement>,
+    locks: &mut HashMap<FallingPiece, Placement>,
     moves: InputList
 ) {
-    let mut cells = piece.cells();
-    if cells.iter().all(|&(_, y)| y >= 20) {
+    if piece.cells().iter().all(|&(_, y)| y >= 20) {
         return
     }
-    cells.sort();
 
     // Since the first path to a location is always the shortest path to that location,
     // we know that if there is already an entry here this isn't a faster path, so only
     // insert placement if there isn't one there already.
-    locks.entry((cells, piece.tspin)).or_insert(Placement {
+    locks.entry(piece.canonical()).or_insert(Placement {
         inputs: moves,
         location: piece,
     });
@@ -184,7 +190,7 @@ fn attempt(
     moves: &InputList,
     mut piece: FallingPiece,
     checked: &mut HashSet<FallingPiece>,
-    check_queue: &mut Vec<Placement>,
+    check_queue: &mut BinaryHeap<Placement>,
     mode: MovementMode,
     fast_mode: bool,
     input: PieceMovement,
