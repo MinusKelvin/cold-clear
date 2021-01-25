@@ -2,11 +2,10 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{ AtomicBool, Ordering };
 use arrayvec::ArrayVec;
-use libtetris::{ Piece, FallingPiece, Board, LockResult };
+use libtetris::{ Piece, FallingPiece, Board, LockResult, MovementMode };
 use crossbeam_channel::{ Sender, unbounded };
 use serde::{ Serialize, Deserialize };
 use crate::Move;
-use crate::moves::MovementMode;
 
 pub struct PcLooper {
     current_pc: VecDeque<(Move, LockResult)>,
@@ -72,7 +71,7 @@ impl PcLooper {
             let mut next_pc_hold = self.next_pc_hold;
             let mut next_pc_queue = self.next_pc_queue.clone();
             for &placement in &soln {
-                let placements = crate::moves::find_moves(
+                let placements = libtetris::find_moves(
                     &b,
                     libtetris::SpawnRule::Row19Or20.spawn(placement.kind.0, &b).unwrap(),
                     self.mode

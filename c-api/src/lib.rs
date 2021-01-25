@@ -1,7 +1,8 @@
 use std::mem::MaybeUninit;
 use enumset::EnumSet;
-use libtetris::{ Piece, TspinStatus, PieceMovement, SpawnRule, FallingPiece, LockResult, Board };
-use cold_clear::moves::MovementMode;
+use libtetris::{
+    Piece, TspinStatus, PieceMovement, SpawnRule, FallingPiece, LockResult, Board, MovementMode
+};
 use cold_clear::PcPriority;
 
 type CCAsyncBot = cold_clear::Interface;
@@ -349,7 +350,7 @@ fn convert_plan(
     }
 }
 
-fn convert(m: cold_clear::Move, info: cold_clear::Info) -> CCMove {
+fn convert(m: libtetris::Move, info: cold_clear::Info) -> CCMove {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
     for (i, &(x, y)) in m.expected_location.cells().iter().enumerate() {

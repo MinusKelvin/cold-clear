@@ -3,7 +3,6 @@ use std::sync::Arc;
 use libtetris::*;
 use opening_book::Book;
 use crate::evaluation::Evaluator;
-use crate::moves::Move;
 use crate::modes::ModeSwitchedBot;
 use crate::{ Options, Info, BotMsg, BotPollState };
 

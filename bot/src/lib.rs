@@ -5,7 +5,6 @@ pub use opening_book::Book;
 extern crate rental;
 
 pub mod evaluation;
-pub mod moves;
 mod modes;
 mod dag;
 
@@ -20,14 +19,13 @@ mod web;
 pub use web::Interface;
 
 use libtetris::*;
-pub use crate::moves::Move;
 pub use crate::modes::normal::{ BotState, ThinkResult, Thinker };
 pub use crate::modes::pcloop::PcPriority;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Options {
-    pub mode: crate::moves::MovementMode,
+    pub mode: MovementMode,
     pub spawn_rule: SpawnRule,
     pub use_hold: bool,
     pub speculate: bool,
@@ -76,7 +74,7 @@ pub enum BotPollState {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            mode: crate::moves::MovementMode::ZeroG,
+            mode: MovementMode::ZeroG,
             spawn_rule: SpawnRule::Row19Or20,
             use_hold: true,
             speculate: true,

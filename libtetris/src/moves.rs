@@ -1,4 +1,4 @@
-use libtetris::{ Board, FallingPiece, Piece, RotationState, TspinStatus, PieceMovement };
+use crate::{ Board, FallingPiece, Piece, PieceState, RotationState, TspinStatus, PieceMovement };
 use arrayvec::ArrayVec;
 use std::cmp::Ordering;
 use std::collections::{ BinaryHeap, HashMap, HashSet };
@@ -334,7 +334,7 @@ fn start(
     p: Piece, r: RotationState, x: i32, i: &[PieceMovement], time: u32
 ) -> (FallingPiece, InputList) {
     (FallingPiece {
-        kind: libtetris::PieceState(p, r),
+        kind: PieceState(p, r),
         x,
         y: 19,
         tspin: TspinStatus::None

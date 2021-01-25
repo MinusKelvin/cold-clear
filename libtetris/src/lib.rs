@@ -1,6 +1,7 @@
 mod board;
 mod piece;
 mod lock_data;
+mod moves;
 
 #[cfg(feature = "fumen")]
 mod fumen_conv;
@@ -11,6 +12,7 @@ mod pcf_conv;
 pub use board::*;
 pub use piece::*;
 pub use lock_data::*;
+pub use moves::*;
 
 #[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct Controller {

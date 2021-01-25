@@ -5,7 +5,6 @@ use opening_book::Book;
 // use crate::tree::{ ChildData, TreeState, NodeId };
 use crate::dag::{ DagState, NodeId, ChildData };
 use crate::Options;
-pub use crate::moves::Move;
 use crate::evaluation::Evaluator;
 
 pub struct BotState<E: Evaluator> {
@@ -157,7 +156,7 @@ impl<E: Evaluator> BotState<E> {
             })
         };
 
-        let inputs = crate::moves::find_moves(
+        let inputs = find_moves(
             self.tree.board(),
             self.options.spawn_rule.spawn(child.mv.kind.0, self.tree.board()).unwrap(),
             self.options.mode
@@ -260,7 +259,7 @@ impl Thinker {
         spawned: FallingPiece,
         hold: bool
     ) {
-        for mv in crate::moves::find_moves(&board, spawned, self.options.mode) {
+        for mv in find_moves(&board, spawned, self.options.mode) {
             let can_be_hd = board.above_stack(&mv.location) &&
             board.column_heights().iter().all(|&y| y < 18);
             let mut result = board.clone();
