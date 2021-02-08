@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 arrayvec = "0.5"
 rand = "0.7.0"
-enumset = "1.0"
+enumset = "1.0.4"
 opening-book = { path = "../opening-book" }
 enum-map = { version = "0.6.0", features = ["serde"] }
 odds = { version = "0.3.1", features = ["std-vec"] }
