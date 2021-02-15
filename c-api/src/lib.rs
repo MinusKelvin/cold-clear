@@ -253,23 +253,29 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
 }
 
 #[no_mangle]
-extern "C" fn cc_launch_with_board_async(
+unsafe extern "C" fn cc_launch_with_board_async(
     options: &CCOptions,
     weights: &CCWeights,
     field: &[[bool; 10]; 40],
     bag_remain: u32,
     hold: *mut CCPiece,
     b2b: bool,
-    combo: u32
+    combo: u32,
+    pieces: *const CCPiece,
+    count: u32
 ) -> *mut CCAsyncBot {
+    let mut board = Board::new_with_state(
+        *field,
+        EnumSet::try_from_u32(bag_remain).unwrap_or_default(),
+        convert_hold(hold),
+        b2b,
+        combo
+    );
+    for i in 0..count as usize {
+        board.add_next_piece((*pieces.add(i)).into());
+    }
     Box::into_raw(Box::new(cold_clear::Interface::launch(
-        Board::new_with_state(
-            *field,
-            EnumSet::try_from_u32(bag_remain).unwrap_or_default(),
-            convert_hold(hold),
-            b2b,
-            combo
-        ),
+        board,
         convert_from_c_options(options),
         convert_from_c_weights(weights),
         None // TODO
@@ -277,9 +283,15 @@ extern "C" fn cc_launch_with_board_async(
 }
 
 #[no_mangle]
-extern "C" fn cc_launch_async(options: &CCOptions, weights: &CCWeights) -> *mut CCAsyncBot {
+unsafe extern "C" fn cc_launch_async(
+    options: &CCOptions, weights: &CCWeights, pieces: *const CCPiece, count: u32
+) -> *mut CCAsyncBot {
+    let mut board = Board::new();
+    for i in 0..count as usize {
+        board.add_next_piece((*pieces.add(i)).into());
+    }
     Box::into_raw(Box::new(cold_clear::Interface::launch(
-        Board::new(),
+        board,
         convert_from_c_options(options),
         convert_from_c_weights(weights),
         None // TODO

@@ -124,14 +124,16 @@ typedef struct CCWeights {
     bool stack_pc_damage;
 } CCWeights;
 
-/* Launches a bot thread with a blank board, empty queue, and all seven pieces in the bag, using the
- * specified options and weights.
+/* Launches a bot thread with a blank board, all seven pieces in the bag, and the specified queue
+ * using the specified options and weights.
  *
  * You pass the returned pointer with `cc_destroy_async` when you are done with the bot instance.
  * 
+ * If `count` is not 0, `queue` must not be `NULL`.
+ * 
  * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_async`.
  */
-CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights);
+CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights, CCPiece *queue, uint32_t count);
 
 /* Launches a bot thread with a predefined field, empty queue, remaining pieces in the bag, hold piece,
  * back-to-back status, and combo count. This allows you to start CC from the middle of a game.
@@ -144,9 +146,11 @@ CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights);
  * with index 0 being the bottom-left cell.
  * 
  * The hold parameter is a pointer to the current hold piece, or `NULL` if there's no hold piece now.
+ * 
+ * If `count` is not 0, `queue` must not be `NULL`.
  */
 CCAsyncBot *cc_launch_with_board_async(CCOptions *options, CCWeights *weights, bool *field,
-    uint32_t bag_remain, CCPiece *hold, bool b2b, uint32_t combo);
+    uint32_t bag_remain, CCPiece *hold, bool b2b, uint32_t combo, CCPiece *queue, uint32_t count);
 
 /* Terminates the bot thread and frees the memory associated with the bot.
  */
