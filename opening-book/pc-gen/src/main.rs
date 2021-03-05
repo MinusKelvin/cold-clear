@@ -10,19 +10,21 @@ fn main() {
         .chain(pcf::PIECES.iter())
         .chain(pcf::PIECES.iter())
         .copied().collect();
-    let (send, recv) = crossbeam_channel::unbounded::<ArrayVec<[_; 10]>>();
+    let all_combinations = std::sync::Mutex::new(HashMap::<_, Vec<_>>::new());
     let t = std::time::Instant::now();
     pcf::find_combinations_mt(
         first_pc_bag, pcf::BitBoard(0), &AtomicBool::new(false), 4,
-        move |combo| send.send(combo.iter().copied().collect()).unwrap()
+        |combo| {
+            let value = combo.iter().copied().collect::<ArrayVec<[_; 10]>>().into_inner().unwrap();
+            let key: pcf::PieceSet = combo.iter().map(|p| p.kind.piece()).collect();
+            all_combinations.lock().unwrap().entry(key).or_default().push(value);
+        }
     );
-    let mut all_combinations = HashMap::<_, Vec<_>>::new();
-    for combo in recv.into_iter() {
-        let pieces: pcf::PieceSet = combo.iter().map(|p| p.kind.piece()).collect();
-        all_combinations.entry(pieces).or_default().push(combo.into_inner().unwrap());
-    }
+    let all_combinations = all_combinations.into_inner().unwrap();
     println!("Took {:?} to generate combinations", t.elapsed());
-
+    let entries_size = all_combinations.capacity() * (std::mem::size_of::<Vec<u8>>() + std::mem::size_of::<pcf::PieceSet>());
+    let data_size = all_combinations.values().map(|v| v.capacity()).sum::<usize>() * std::mem::size_of::<[pcf::Placement; 10]>();
+    println!("{} bytes", entries_size + data_size);
 
     let mut queued_bags = HashSet::new();
     let mut bags = vec![(BagWithHold::default(), 0)];

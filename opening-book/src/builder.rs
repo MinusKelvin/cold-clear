@@ -1,6 +1,7 @@
 use crate::*;
 use std::collections::{ HashMap, HashSet, VecDeque };
 use smallvec::SmallVec;
+use rayon::prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BookBuilder {
@@ -11,7 +12,7 @@ pub struct BookBuilder {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
-    values: HashMap<Sequence, (MoveValue, SmallVec<[CompactPiece; 8]>)>,
+    values: Vec<(Sequence, MoveValue, SmallVec<[CompactPiece; 8]>)>,
     moves: Vec<Move>,
     backrefs: Vec<Position>
 }
@@ -19,7 +20,7 @@ struct PositionData {
 impl Default for PositionData {
     fn default() -> Self {
         PositionData {
-            values: HashMap::new(),
+            values: vec![],
             moves: vec![],
             backrefs: vec![]
         }
@@ -71,7 +72,12 @@ impl BookBuilder {
         let queue = queue.iter().copied().take(NEXT_PIECES)
             .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
             .into_inner().ok()?;
-        values.get(&Sequence { next, queue }).map(|(_, mv)| &**mv)
+        let moves = &lookup(values, Sequence { next, queue }).2;
+        if moves.is_empty() {
+            None
+        } else {
+            Some(moves)
+        }
     }
 
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
@@ -104,54 +110,59 @@ impl BookBuilder {
             queue.iter().copied().take(NEXT_PIECES).collect(), bag
         );
         possibilities.into_iter()
-            .map(|(queue, _)| values.get(&Sequence { next, queue })
-                .map(|&(v, _)| v)
-                .unwrap_or_default())
+            .map(|(queue, _)| lookup(values, Sequence { next, queue }).1)
             .sum()
     }
 
     fn update_value(&mut self, pos: Position) {
-        let mut anything_changed = false;
+        let mut sequences = vec![];
         for (next, bag) in pos.next_possibilities() {
             for (queue, qbag) in possible_sequences(vec![], bag) {
-                let this = self.data.get(&pos).unwrap();
-                let mut best = MoveValue::default();
-                let mut best_moves = SmallVec::new();
-                for &mv in &this.moves {
-                    let current_mv = mv.location();
-                    if !next.contains(current_mv.kind.0) {
-                        continue;
-                    }
-                    let (pos, long_moves) = pos.advance(mv.location.into());
-                    let mut value = if let Some(value) = mv.value.into() {
-                        MoveValue {
-                            long_moves: 0.0,
-                            value
-                        }
-                    } else if next.len() == 1 {
-                        self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
-                    } else {
-                        self.value_of_raw(
-                            pos, next - current_mv.kind.0 | queue[0], &queue[1..], qbag
-                        )
-                    };
-                    value.long_moves += long_moves;
-                    if value > best {
-                        best = value;
-                        best_moves.clear();
-                        best_moves.push(mv.location);
-                    } else if value == best && best != MoveValue::default() {
-                        best_moves.push(mv.location);
-                    }
-                }
-                if !best_moves.is_empty() {
-                    let this = self.data.get_mut(&pos).unwrap();
-                    let old = this.values.insert(Sequence { next, queue }, (best, best_moves));
-                    anything_changed |= old.map(|v| v.0) != Some(best);
-                }
+                sequences.push((Sequence { next, queue }, qbag));
             }
         }
-        if anything_changed {
+        sequences.sort();
+
+        let mut values = vec![];
+        let this = self.data.get(&pos).unwrap();
+        sequences.into_par_iter().map(|(Sequence { next, queue }, qbag)| {
+            let mut best = MoveValue::default();
+            let mut best_moves = SmallVec::new();
+            for &mv in &this.moves {
+                let current_mv = mv.location();
+                if !next.contains(current_mv.kind.0) {
+                    continue;
+                }
+                let (pos, long_moves) = pos.advance(mv.location.into());
+                let mut value = if let Some(value) = mv.value.into() {
+                    MoveValue {
+                        long_moves: 0.0,
+                        value
+                    }
+                } else if next.len() == 1 {
+                    self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
+                } else {
+                    self.value_of_raw(
+                        pos, next - current_mv.kind.0 | queue[0], &queue[1..], qbag
+                    )
+                };
+                value.long_moves += long_moves;
+                if value > best {
+                    best = value;
+                    best_moves.clear();
+                    best_moves.push(mv.location);
+                } else if value == best && best != MoveValue::default() {
+                    best_moves.push(mv.location);
+                }
+            }
+            (Sequence { next, queue }, best, best_moves)
+        }).collect_into_vec(&mut values);
+        values.dedup_by(|(_, a1, a2), (_, b1, b2)| a1 == b1 && a2 == b2);
+        values.shrink_to_fit();
+
+        let this = self.data.get_mut(&pos).unwrap();
+        if this.values != values {
+            this.values = values;
             for &parent in &self.data.get(&pos).unwrap().backrefs {
                 if self.dirty_positions.insert(parent) {
                     self.dirty_queue.push_back(parent);
@@ -259,6 +270,14 @@ impl BookBuilder {
         compressed_row.shrink_to_fit();
         compressed_row
     }
+}
+
+fn lookup<A, B>(values: &[(Sequence, A, B)], sequence: Sequence) -> &(Sequence, A, B) {
+    let i = match values.binary_search_by_key(&sequence, |v| v.0) {
+        Ok(i) => i,
+        Err(i) => i-1,
+    };
+    &values[i]
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
