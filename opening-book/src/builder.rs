@@ -1,5 +1,6 @@
 use crate::*;
 use std::collections::{ HashMap, HashSet, VecDeque };
+use smallvec::SmallVec;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BookBuilder {
@@ -10,7 +11,7 @@ pub struct BookBuilder {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
-    values: HashMap<Sequence, (MoveValue, CompactPiece)>,
+    values: HashMap<Sequence, (MoveValue, SmallVec<[CompactPiece; 8]>)>,
     moves: Vec<Move>,
     backrefs: Vec<Position>
 }
@@ -50,27 +51,27 @@ impl BookBuilder {
         }
     }
 
-    pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
-        let position = state.into();
-        let mut next = EnumSet::empty();
-        let mut q = state.next_queue();
-        next.insert(q.next().unwrap());
-        if let Some(p) = state.hold_piece {
-            next.insert(p);
-        } else {
-            next.insert(q.next().unwrap());
-        }
-        self.suggest_move_raw(position, next, &q.collect::<Vec<_>>())
-    }
+    // pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
+    //     let position = state.into();
+    //     let mut next = EnumSet::empty();
+    //     let mut q = state.next_queue();
+    //     next.insert(q.next().unwrap());
+    //     if let Some(p) = state.hold_piece {
+    //         next.insert(p);
+    //     } else {
+    //         next.insert(q.next().unwrap());
+    //     }
+    //     self.suggest_move_raw(position, next, &q.collect::<Vec<_>>())
+    // }
 
-    pub fn suggest_move_raw(
+    fn suggest_move_raw(
         &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece]
-    ) -> Option<FallingPiece> {
+    ) -> Option<&[CompactPiece]> {
         let values = &self.data.get(&pos)?.values;
         let queue = queue.iter().copied().take(NEXT_PIECES)
             .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
             .into_inner().ok()?;
-        values.get(&Sequence { next, queue }).map(|&(_, mv)| mv.into())
+        values.get(&Sequence { next, queue }).map(|(_, mv)| &**mv)
     }
 
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
@@ -115,7 +116,7 @@ impl BookBuilder {
             for (queue, qbag) in possible_sequences(vec![], bag) {
                 let this = self.data.get(&pos).unwrap();
                 let mut best = MoveValue::default();
-                let mut best_move = None;
+                let mut best_moves = SmallVec::new();
                 for &mv in &this.moves {
                     let current_mv = mv.location();
                     if !next.contains(current_mv.kind.0) {
@@ -137,21 +138,15 @@ impl BookBuilder {
                     value.long_moves += long_moves;
                     if value > best {
                         best = value;
-                        best_move = Some(mv.location);
+                        best_moves.clear();
+                        best_moves.push(mv.location);
                     } else if value == best && best != MoveValue::default() {
-                        let best_mv: FallingPiece = best_move.unwrap().into();
-                        let ord = current_mv.x.cmp(&best_mv.x)
-                            .then(current_mv.y.cmp(&best_mv.y))
-                            .then((current_mv.kind.0 as usize).cmp(&(best_mv.kind.0 as usize)))
-                            .then((current_mv.kind.1 as usize).cmp(&(best_mv.kind.1 as usize)));
-                        if ord == std::cmp::Ordering::Greater {
-                            best_move = Some(mv.location);
-                        }
+                        best_moves.push(mv.location);
                     }
                 }
-                if let Some(best_move) = best_move {
+                if !best_moves.is_empty() {
                     let this = self.data.get_mut(&pos).unwrap();
-                    let old = this.values.insert(Sequence { next, queue }, (best, best_move));
+                    let old = this.values.insert(Sequence { next, queue }, (best, best_moves));
                     anything_changed |= old.map(|v| v.0) != Some(best);
                 }
             }
@@ -238,16 +233,31 @@ impl BookBuilder {
         let mut sequences = vec![];
         for (next, bag) in pos.next_possibilities() {
             for (queue, _) in possible_sequences(vec![], bag) {
-                let seq = Sequence { next, queue };
-                let mv = self.suggest_move_raw(*pos, next, &queue);
-                sequences.push((seq, mv.map(Into::into)));
+                sequences.push(Sequence { next, queue });
             }
         }
+        let mut sequences = sequences.into_iter();
+        let mut current_run_start = sequences.next().unwrap();
+        let mut current_tie = self.suggest_move_raw(
+            *pos, current_run_start.next, &current_run_start.queue
+        ).unwrap_or(&[]).to_vec();
+        let mut compressed_row = vec![];
+        for seq in sequences {
+            let mvs = self.suggest_move_raw(*pos, seq.next, &seq.queue).unwrap_or(&[]);
+            if mvs.iter().any(|mv| current_tie.contains(mv)) {
+                current_tie.retain(|mv| mvs.contains(mv));
+            } else {
+                compressed_row.push((seq, current_tie.into_iter().next()));
+                current_run_start = seq;
+                current_tie = mvs.to_vec();
+            }
+        }
+        compressed_row.push((current_run_start, current_tie.into_iter().next()));
         self.data.remove(pos);
-        sequences.sort_by_key(|&(s, _)| s);
-        sequences.dedup_by_key(|&mut (_, m)| m);
-        sequences.shrink_to_fit();
-        sequences
+        compressed_row.sort_by_key(|&(s, _)| s);
+        compressed_row.dedup_by_key(|&mut (_, m)| m);
+        compressed_row.shrink_to_fit();
+        compressed_row
     }
 }
 
