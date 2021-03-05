@@ -72,7 +72,7 @@ impl BookBuilder {
         let queue = queue.iter().copied().take(NEXT_PIECES)
             .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
             .into_inner().ok()?;
-        let moves = &lookup(values, Sequence { next, queue }).2;
+        let moves = &lookup(values, Sequence { next, queue })?.2;
         if moves.is_empty() {
             None
         } else {
@@ -110,7 +110,8 @@ impl BookBuilder {
             queue.iter().copied().take(NEXT_PIECES).collect(), bag
         );
         possibilities.into_iter()
-            .map(|(queue, _)| lookup(values, Sequence { next, queue }).1)
+            .map(|(queue, _)| lookup(values, Sequence { next, queue })
+                .map_or(Default::default(), |v| v.1))
             .sum()
     }
 
@@ -272,12 +273,16 @@ impl BookBuilder {
     }
 }
 
-fn lookup<A, B>(values: &[(Sequence, A, B)], sequence: Sequence) -> &(Sequence, A, B) {
-    let i = match values.binary_search_by_key(&sequence, |v| v.0) {
-        Ok(i) => i,
-        Err(i) => i-1,
-    };
-    &values[i]
+fn lookup<A, B>(values: &[(Sequence, A, B)], sequence: Sequence) -> Option<&(Sequence, A, B)> {
+    if values.is_empty() {
+        None
+    } else {
+        let i = match values.binary_search_by_key(&sequence, |v| v.0) {
+            Ok(i) => i,
+            Err(i) => i-1,
+        };
+        Some(&values[i])
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
