@@ -173,6 +173,7 @@ impl BookBuilder {
     }
 
     pub fn recalculate_graph(&mut self) {
+        self.data.retain(|_, v| !v.moves.is_empty());
         while let Some(to_update) = self.dirty_queue.pop_front() {
             self.dirty_positions.remove(&to_update);
             self.update_value(to_update);
@@ -232,7 +233,10 @@ impl BookBuilder {
                 let moves = self.build_position(&pos);
                 for &(_, m) in &moves {
                     if let Some(p) = m {
-                        to_compile.push(pos.advance(p.into()).0);
+                        let next = pos.advance(p.into()).0;
+                        if self.data.contains_key(&next) {
+                            to_compile.push(next);
+                        }
                     }
                 }
                 moves
@@ -242,26 +246,17 @@ impl BookBuilder {
     }
 
     fn build_position(&mut self, pos: &Position) -> Vec<(Sequence, Option<CompactPiece>)> {
-        let mut sequences = vec![];
-        for (next, bag) in pos.next_possibilities() {
-            for (queue, _) in possible_sequences(vec![], bag) {
-                sequences.push(Sequence { next, queue });
-            }
-        }
-        let mut sequences = sequences.into_iter();
-        let mut current_run_start = sequences.next().unwrap();
-        let mut current_tie = self.suggest_move_raw(
-            *pos, current_run_start.next, &current_run_start.queue
-        ).unwrap_or(&[]).to_vec();
+        let mut values = self.data.remove(pos).unwrap().values.into_iter();
+        let (mut current_run_start, _, mut current_tie) = values.next().unwrap();
         let mut compressed_row = vec![];
-        for seq in sequences {
-            let mvs = self.suggest_move_raw(*pos, seq.next, &seq.queue).unwrap_or(&[]);
+        for (seq, value, mvs) in values {
+            assert!(value == MoveValue::default() || !mvs.is_empty());
             if mvs.iter().any(|mv| current_tie.contains(mv)) {
                 current_tie.retain(|mv| mvs.contains(mv));
             } else {
                 compressed_row.push((seq, current_tie.into_iter().next()));
                 current_run_start = seq;
-                current_tie = mvs.to_vec();
+                current_tie = mvs;
             }
         }
         compressed_row.push((current_run_start, current_tie.into_iter().next()));
