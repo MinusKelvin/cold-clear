@@ -54,6 +54,15 @@ fn main() {
                     &seq.iter().copied().collect()
                 ).map(|v| &**v).unwrap_or(&[]);
                 s.spawn(move |_| {
+                    if !seq[..5].iter().any(
+                        |p| matches!(p, pcf::Piece::S | pcf::Piece::Z | pcf::Piece::T)
+                    ) {
+                        pcf::solve_pc(
+                            &seq[..5], pcf::BitBoard(0), false, false, &AtomicBool::new(false),
+                            pcf::placeability::simple_srs_spins,
+                            |soln| send.send(process_soln(soln, initial_bag)).unwrap()
+                        );
+                    }
                     for combo in combos {
                         pcf::solve_placement_combination(
                             &seq, pcf::BitBoard(0), combo, false, false, &AtomicBool::new(false),
@@ -94,9 +103,8 @@ fn main() {
         println!("{:?}", book.value_of_position(initial_position));
 
         let t = std::time::Instant::now();
-        let f = std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap();
         book.compile(&[initial_position]).save(
-            std::io::BufWriter::new(f)
+            std::io::BufWriter::new(std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap())
         ).unwrap();
         println!("Took {:?} to save PC book {}", t.elapsed(), i);
     }
