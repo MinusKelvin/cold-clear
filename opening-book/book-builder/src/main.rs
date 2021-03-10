@@ -1,12 +1,13 @@
 use libtetris::*;
 use std::io::prelude::*;
+use std::collections::HashMap;
 use opening_book::BookBuilder;
 
 fn main() {
     let mut book = BookBuilder::new();
 
     for l in std::io::BufReader::new(std::io::stdin()).lines() {
-        let fumen = match fumen::Fumen::decode(&l.unwrap()) {
+        let fumen = match fumen::Fumen::decode(l.unwrap().split_whitespace().next().unwrap_or("")) {
             Ok(f) => f,
             Err(_) => continue
         };
@@ -19,7 +20,13 @@ fn main() {
         }
         let mut comment_parts = fumen.pages[0].comment.as_deref().unwrap_or("").split('/');
         let bagspec = comment_parts.next().unwrap();
-        let value = comment_parts.next().map(str::parse).map(Result::unwrap);
+        let value = match comment_parts.next() {
+            None => Value::Unvalued,
+            Some(s) => match s.strip_prefix("PC") {
+                None => Value::Value(s.parse().unwrap()),
+                Some(s) => Value::Pc(s.parse().unwrap()),
+            }
+        };
 
         let mut b = Board::new();
         b.set_field(field);
@@ -47,9 +54,21 @@ fn main() {
         }
 
         if fumen.pages.len() == 1 {
-            let p = convert(fumen.pages[0].piece.unwrap());
-            book.add_move(mirror_board(&b), mirror_placement(p), value);
-            book.add_move(b, p, value);
+            match value {
+                Value::Unvalued => {
+                    let p = convert(fumen.pages[0].piece.unwrap());
+                    book.add_move(mirror_board(&b), mirror_placement(p), None);
+                    book.add_move(b, p, None);
+                }
+                Value::Value(v) => {
+                    let p = convert(fumen.pages[0].piece.unwrap());
+                    book.add_move(mirror_board(&b), mirror_placement(p), Some(v));
+                    book.add_move(b, p, Some(v));
+                }
+                Value::Pc(c) => {
+                    add_pcs(&mut book, &b, c);
+                }
+            }
         } else {
             let mut placements: Vec<_> = fumen.pages.iter().map(|p| {
                 let mut b = Board::<u16>::new();
@@ -102,6 +121,12 @@ fn main() {
     compiled.save(
         std::fs::File::create("book.ccbook").unwrap()
     ).unwrap();
+}
+
+enum Value {
+    Unvalued,
+    Pc(u32),
+    Value(f32)
 }
 
 fn convert(p: fumen::Piece) -> FallingPiece {
@@ -188,6 +213,7 @@ fn dump(book: &opening_book::BookBuilder) {
         s
     }
     std::fs::create_dir_all("book").unwrap();
+    std::fs::write("book/.gitignore", "*").unwrap();
     for pos in book.positions() {
         let mut f = std::fs::File::create(format!("book/{}.html", name(pos))).unwrap();
         write!(f, r"
@@ -274,5 +300,97 @@ fn dump(book: &opening_book::BookBuilder) {
             }
         }
         write!(f, "</body></html>").unwrap();
+    }
+}
+
+fn add_pcs(book: &mut BookBuilder, b: &Board, pieces: u32) {
+    let bitboard = pcf::BitBoard(
+        *b.get_row(0) as u64 |
+        (*b.get_row(1) as u64) << 10 |
+        (*b.get_row(2) as u64) << 20 |
+        (*b.get_row(3) as u64) << 30 |
+        (*b.get_row(4) as u64) << 40 |
+        (*b.get_row(5) as u64) << 50
+    );
+    let mut count = 0;
+    let mut pieceset = pcf::PieceSet::default();
+    for p in b.bag {
+        pieceset = pieceset.with(p.into());
+        count += 1;
+    }
+    while count < pieces {
+        for &p in &pcf::PIECES {
+            pieceset = pieceset.with(p);
+            count += 1;
+        }
+    }
+
+    let combinations = std::sync::Mutex::new(HashMap::new());
+    let h = (bitboard.0.count_ones() + 4 * pieces) / 10;
+    pcf::find_combinations_mt(
+        pieceset, bitboard, &std::sync::atomic::AtomicBool::new(false), h as usize,
+        |combo| {
+            let set: pcf::PieceSet = combo.iter().map(|p| p.kind.piece()).collect();
+            combinations.lock().unwrap()
+                .entry(set).or_insert(vec![])
+                .push(combo.to_vec());
+        }
+    );
+    let combinations = &combinations.into_inner().unwrap();
+
+    let book = &std::sync::Mutex::new(book);
+    rayon::scope(|s| {
+        all_sequences(b.bag, pieces as usize, |q| s.spawn(move |_| {
+            let set: pcf::PieceSet = q.iter().copied().collect();
+            for combo in combinations.get(&set).map(|v| &**v).unwrap_or(&[]) {
+                pcf::solve_placement_combination(
+                    &q, bitboard, combo, false, false, &std::sync::atomic::AtomicBool::new(false),
+                    pcf::placeability::simple_srs_spins,
+                    |soln| {
+                        let mut b = b.clone();
+                        let mut bitb = bitboard;
+                        let mut book = book.lock().unwrap();
+                        for (i, p) in soln.iter().enumerate() {
+                            let mv = p.srs_piece(bitb)[0].into();
+                            let score = if i == soln.len() - 1 { Some(1.0) } else { None };
+                            book.add_move(&b, mv, score);
+                            book.add_move(mirror_board(&b), mirror_placement(mv), score);
+                            b.add_next_piece(mv.kind.0);
+                            b.advance_queue();
+                            b.lock_piece(mv);
+                            bitb = bitb.combine(p.board());
+                        }
+                    }
+                );
+            }
+        }));
+    });
+}
+
+fn all_sequences(
+    bag: enumset::EnumSet<Piece>,
+    count: usize,
+    process: impl FnMut(Vec<pcf::Piece>),
+) {
+    all_sequences_impl(&mut vec![], bag, count, &mut {process});
+}
+
+fn all_sequences_impl(
+    q: &mut Vec<pcf::Piece>,
+    mut bag: enumset::EnumSet<Piece>,
+    count: usize,
+    process: &mut impl FnMut(Vec<pcf::Piece>)
+) {
+    if q.len() == count {
+        process(q.clone());
+    } else {
+        if bag.is_empty() {
+            bag = enumset::EnumSet::all();
+        }
+        for p in bag {
+            q.push(p.into());
+            all_sequences_impl(q, bag - p, count, process);
+            q.pop();
+        }
     }
 }

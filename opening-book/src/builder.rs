@@ -52,34 +52,6 @@ impl BookBuilder {
         }
     }
 
-    // pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
-    //     let position = state.into();
-    //     let mut next = EnumSet::empty();
-    //     let mut q = state.next_queue();
-    //     next.insert(q.next().unwrap());
-    //     if let Some(p) = state.hold_piece {
-    //         next.insert(p);
-    //     } else {
-    //         next.insert(q.next().unwrap());
-    //     }
-    //     self.suggest_move_raw(position, next, &q.collect::<Vec<_>>())
-    // }
-
-    fn suggest_move_raw(
-        &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece]
-    ) -> Option<&[CompactPiece]> {
-        let values = &self.data.get(&pos)?.values;
-        let queue = queue.iter().copied().take(NEXT_PIECES)
-            .collect::<arrayvec::ArrayVec<[_; NEXT_PIECES]>>()
-            .into_inner().ok()?;
-        let moves = &lookup(values, Sequence { next, queue })?.2;
-        if moves.is_empty() {
-            None
-        } else {
-            Some(moves)
-        }
-    }
-
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
         pos.next_possibilities().into_iter()
             .map(|(next, bag)| self.value_of_raw(pos, next, &[], bag))
@@ -226,6 +198,7 @@ impl BookBuilder {
     }
 
     pub fn compile(mut self, roots: &[Position]) -> Book {
+        self.data.retain(|_, v| !v.values.is_empty());
         let mut book = HashMap::new();
         let mut to_compile = roots.to_vec();
         while let Some(pos) = to_compile.pop() {
@@ -254,7 +227,7 @@ impl BookBuilder {
             if mvs.iter().any(|mv| current_tie.contains(mv)) {
                 current_tie.retain(|mv| mvs.contains(mv));
             } else {
-                compressed_row.push((seq, current_tie.into_iter().next()));
+                compressed_row.push((current_run_start, current_tie.into_iter().next()));
                 current_run_start = seq;
                 current_tie = mvs;
             }

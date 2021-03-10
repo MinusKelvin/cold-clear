@@ -103,7 +103,10 @@ fn main() {
         println!("{:?}", book.value_of_position(initial_position));
 
         let t = std::time::Instant::now();
-        book.compile(&[initial_position]).save(
+        let compiled = book.compile(&[initial_position]);
+        println!("Took {:?} to compile the book", t.elapsed());
+        let t = std::time::Instant::now();
+        compiled.save(
             std::io::BufWriter::new(std::fs::File::create(&format!("pc-{}.ccbook", i)).unwrap())
         ).unwrap();
         println!("Took {:?} to save PC book {}", t.elapsed(), i);
