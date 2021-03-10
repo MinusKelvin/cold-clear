@@ -17,27 +17,20 @@ pub struct Book(HashMap<Position, Vec<(Sequence, Option<CompactPiece>)>>);
 impl Book {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load(from: impl BufRead) -> Result<Self, bincode::Error> {
-        bincode::deserialize_from(xz2::bufread::XzDecoder::new(from))
+        bincode::deserialize_from(zstd::Decoder::new(from)?)
     }
 
     #[cfg(target_arch = "wasm32")]
     pub fn load(from: impl BufRead) -> Result<Self, bincode::Error> {
-        let mut buf = vec![];
-        lzma_rs::xz_decompress(&mut {from}, &mut buf).map_err(|e| match e {
-            lzma_rs::error::Error::IOError(e) => e.into(),
-            lzma_rs::error::Error::LZMAError(e) => Box::new(
-                bincode::ErrorKind::Custom(format!("LZMA error: {}", e))
-            ),
-            lzma_rs::error::Error::XZError(e) => Box::new(
-                bincode::ErrorKind::Custom(format!("XZ error: {}", e))
-            )
-        })?;
-        bincode::deserialize_from(&*buf)
+        bincode::deserialize_from(
+            ruzstd::StreamingDecoder::new(&mut {from})
+                .map_err(|err| bincode::ErrorKind::Custom(err))?
+        )
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self, to: impl Write) -> Result<(), bincode::Error> {
-        let mut to = xz2::write::XzEncoder::new(to, 9);
+        let mut to = zstd::Encoder::new(to, 21)?;
         bincode::serialize_into(&mut to, self)?;
         to.finish()?;
         Ok(())
