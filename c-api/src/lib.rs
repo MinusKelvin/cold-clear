@@ -1,4 +1,7 @@
+use std::ffi::CStr;
 use std::mem::MaybeUninit;
+use std::os::raw::c_char;
+use std::sync::Arc;
 use enumset::EnumSet;
 use libtetris::{
     Piece, TspinStatus, PieceMovement, SpawnRule, FallingPiece, LockResult, Board, MovementMode
@@ -6,6 +9,8 @@ use libtetris::{
 use cold_clear::PcPriority;
 
 type CCAsyncBot = cold_clear::Interface;
+
+type CCBook = cold_clear::Book;
 
 macro_rules! cenum {
     (@match $v:ident $name:ident $($item:ident => $to:expr),*) => {
@@ -256,6 +261,7 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
 unsafe extern "C" fn cc_launch_with_board_async(
     options: &CCOptions,
     weights: &CCWeights,
+    book: *const CCBook,
     field: &[[bool; 10]; 40],
     bag_remain: u32,
     hold: *mut CCPiece,
@@ -274,27 +280,45 @@ unsafe extern "C" fn cc_launch_with_board_async(
     for i in 0..count as usize {
         board.add_next_piece((*pieces.add(i)).into());
     }
+    let book = if book.is_null() {
+        None
+    } else {
+        let book = Arc::from_raw(book);
+        Arc::into_raw(book.clone());
+        Some(book)
+    };
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         board,
         convert_from_c_options(options),
         convert_from_c_weights(weights),
-        None // TODO
+        book
     )))
 }
 
 #[no_mangle]
 unsafe extern "C" fn cc_launch_async(
-    options: &CCOptions, weights: &CCWeights, pieces: *const CCPiece, count: u32
+    options: &CCOptions,
+    weights: &CCWeights,
+    book: *const CCBook,
+    pieces: *const CCPiece,
+    count: u32
 ) -> *mut CCAsyncBot {
     let mut board = Board::new();
     for i in 0..count as usize {
         board.add_next_piece((*pieces.add(i)).into());
     }
+    let book = if book.is_null() {
+        None
+    } else {
+        let book = Arc::from_raw(book);
+        Arc::into_raw(book.clone());
+        Some(book)
+    };
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         board,
         convert_from_c_options(options),
         convert_from_c_weights(weights),
-        None // TODO
+        book
     )))
 }
 
@@ -497,4 +521,22 @@ unsafe extern "C" fn cc_default_weights(weights: *mut CCWeights) {
 #[no_mangle]
 unsafe extern "C" fn cc_fast_weights(weights: *mut CCWeights) {
     weights.write(convert_weights(cold_clear::evaluation::Standard::fast_config()));
+}
+
+#[no_mangle]
+unsafe extern "C" fn cc_load_book_from_file(path: *const c_char) -> *const CCBook {
+    let result = (|| {
+        let path = CStr::from_ptr(path).to_str().ok()?;
+        let file = std::io::BufReader::new(std::fs::File::open(path).ok()?);
+        Some(Arc::new(cold_clear::Book::load(file).ok()?))
+    })();
+    match result {
+        Some(book) => Arc::into_raw(book),
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn cc_destroy_book(book: *const CCBook) {
+    Arc::from_raw(book);
 }

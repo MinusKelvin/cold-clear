@@ -4,6 +4,8 @@
 
 typedef struct CCAsyncBot CCAsyncBot;
 
+typedef struct CCBook CCBook;
+
 typedef enum CCPiece {
     CC_I, CC_O, CC_T, CC_L, CC_J, CC_S, CC_Z
 } CCPiece;
@@ -127,16 +129,21 @@ typedef struct CCWeights {
 /* Launches a bot thread with a blank board, all seven pieces in the bag, and the specified queue
  * using the specified options and weights.
  *
- * You pass the returned pointer with `cc_destroy_async` when you are done with the bot instance.
+ * You must pass the returned pointer with `cc_destroy_async` when you are done with the bot
+ * instance.
  * 
  * If `count` is not 0, `queue` must not be `NULL`.
+ * `book` may be `NULL` to indicate that no book should be used.
+ * The book may be destroyed at any time after this function returns.
  * 
  * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_async`.
  */
-CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights, CCPiece *queue, uint32_t count);
+CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights, CCBook *book, CCPiece *queue,
+    uint32_t count);
 
-/* Launches a bot thread with a predefined field, empty queue, remaining pieces in the bag, hold piece,
- * back-to-back status, and combo count. This allows you to start CC from the middle of a game.
+/* Launches a bot thread with a predefined field, empty queue, remaining pieces in the bag, hold
+ * piece, back-to-back status, and combo count. This allows you to start CC from the middle of a
+ * game.
  * 
  * The bag_remain parameter is a bit field indicating which pieces are still in the bag. Each bit
  * correspond to CCPiece enum. This must match the next few pieces provided to CC via
@@ -145,12 +152,18 @@ CCAsyncBot *cc_launch_async(CCOptions *options, CCWeights *weights, CCPiece *que
  * The field parameter is a pointer to the start of an array of 400 booleans in row major order,
  * with index 0 being the bottom-left cell.
  * 
- * The hold parameter is a pointer to the current hold piece, or `NULL` if there's no hold piece now.
+ * The hold parameter is a pointer to the current hold piece, or `NULL` if there's no hold piece
+ * now.
  * 
  * If `count` is not 0, `queue` must not be `NULL`.
+ * `book` may be `NULL` to indicate that no book should be used.
+ * The book may be destroyed at any time after this function returns.
+ * 
+ * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_async`.
  */
-CCAsyncBot *cc_launch_with_board_async(CCOptions *options, CCWeights *weights, bool *field,
-    uint32_t bag_remain, CCPiece *hold, bool b2b, uint32_t combo, CCPiece *queue, uint32_t count);
+CCAsyncBot *cc_launch_with_board_async(CCOptions *options, CCWeights *weights, CCBook *book,
+    bool *field, uint32_t bag_remain, CCPiece *hold, bool b2b, uint32_t combo, CCPiece *queue,
+    uint32_t count);
 
 /* Terminates the bot thread and frees the memory associated with the bot.
  */
@@ -247,3 +260,14 @@ void cc_default_weights(CCWeights *weights);
 
 /* Returns the fast game config weights in the weights parameter */
 void cc_fast_weights(CCWeights *weights);
+
+/*
+ * Loads the specified opening book from the specified file path.
+ * If an error occurs, `NULL` is returned instead.
+ * 
+ * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_book`.
+ */
+CCBook *cc_load_book_from_file(const char *path);
+
+/* Unloads a previously loaded book. */
+void cc_destroy_book(CCBook *book);
