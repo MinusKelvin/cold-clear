@@ -12,5 +12,5 @@ libtetris = { path = "../../libtetris", features = ["pcf"] }
 fumen = "0.1.1"
 permutator = "0.4.0"
 enumset = "1.0"
-pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "96b0de1" }
+pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "64cd955" }
 rayon = "1.5.0"

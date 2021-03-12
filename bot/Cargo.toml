@@ -23,7 +23,7 @@ rental = "0.5.5"
 libtetris = { path = "../libtetris", features = ["pcf"] }
 rayon = "1.2.1"
 crossbeam-channel = "0.4"
-pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "96b0de1" }
+pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "64cd955" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 libtetris = { path = "../libtetris" }

@@ -14,4 +14,4 @@ serde = { version = "1", features = ["derive"] }
 rand = "0.7.0"
 
 fumen = { version = "0.1", optional = true }
-pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "96b0de1", optional = true }
+pcf = { git = "https://github.com/MinusKelvin/pcf", rev = "64cd955", optional = true }

@@ -159,18 +159,7 @@ fn process_soln(
     ).into();
     let mut b = pcf::BitBoard(0);
     for p in soln {
-        let mv = *p.srs_piece(b).first().unwrap();
-        let mv = FallingPiece {
-            kind: libtetris::PieceState(libtetris_piece(mv.piece), match mv.rotation {
-                pcf::Rotation::West => libtetris::RotationState::West,
-                pcf::Rotation::East => libtetris::RotationState::East,
-                pcf::Rotation::North => libtetris::RotationState::North,
-                pcf::Rotation::South => libtetris::RotationState::South,
-            }),
-            x: mv.x,
-            y: mv.y,
-            tspin: libtetris::TspinStatus::None
-        };
+        let mv = libtetris::FallingPiece::from(*p.srs_piece(b).first().unwrap());
         poses.push((pos, mv));
         b = b.combine(p.board());
         pos = pos.advance(mv).0;
@@ -195,34 +184,10 @@ fn all_sequences_impl(
         into.push((q.clone().into_inner().unwrap(), bag));
     } else {
         for p in bag {
-            q.push(pcf_piece(p));
+            q.push(p.into());
             all_sequences_impl(into, q, bag - p);
             q.pop();
         }
-    }
-}
-
-fn libtetris_piece(p: pcf::Piece) -> libtetris::Piece {
-    match p {
-        pcf::Piece::I => libtetris::Piece::I,
-        pcf::Piece::T => libtetris::Piece::T,
-        pcf::Piece::O => libtetris::Piece::O,
-        pcf::Piece::L => libtetris::Piece::L,
-        pcf::Piece::J => libtetris::Piece::J,
-        pcf::Piece::S => libtetris::Piece::S,
-        pcf::Piece::Z => libtetris::Piece::Z,
-    }
-}
-
-fn pcf_piece(p: libtetris::Piece) -> pcf::Piece {
-    match p {
-        libtetris::Piece::I => pcf::Piece::I,
-        libtetris::Piece::T => pcf::Piece::T,
-        libtetris::Piece::O => pcf::Piece::O,
-        libtetris::Piece::L => pcf::Piece::L,
-        libtetris::Piece::J => pcf::Piece::J,
-        libtetris::Piece::S => pcf::Piece::S,
-        libtetris::Piece::Z => pcf::Piece::Z,
     }
 }
 
