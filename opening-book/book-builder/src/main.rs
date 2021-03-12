@@ -110,9 +110,11 @@ fn main() {
 
     dbg!(book.value_of_position(Board::new().into()));
 
-    let t = std::time::Instant::now();
-    dump(&book);
-    println!("Took {:?} to dump info to ./book/", t.elapsed());
+    if std::env::args().any(|s| s == "--dump") {
+        let t = std::time::Instant::now();
+        dump(&book);
+        println!("Took {:?} to dump info to ./book/", t.elapsed());
+    }
 
     let t = std::time::Instant::now();
     let compiled = book.compile(&[Board::new().into()]);
