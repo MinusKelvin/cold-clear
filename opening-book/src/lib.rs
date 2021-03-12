@@ -29,8 +29,9 @@ impl Book {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn save(&self, to: impl Write) -> Result<(), bincode::Error> {
-        let mut to = zstd::Encoder::new(to, 21)?;
+    pub fn save<W: Write>(&self, to: W) -> Result<(), bincode::Error> {
+        let mut to = zstd::Encoder::new(to, 19)?;
+        to.multithread(num_cpus::get() as u32)?;
         bincode::serialize_into(&mut to, self)?;
         to.finish()?;
         Ok(())
