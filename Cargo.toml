@@ -10,5 +10,6 @@ members = [
     "compare",
     "optimizer",
     "opening-book/book-builder",
-    "opening-book/pc-gen"
+    "opening-book/pc-gen",
+    "tbi"
 ]
