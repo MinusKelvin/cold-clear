@@ -636,6 +636,17 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
     }
 
     pub fn advance_move(&mut self, mv: FallingPiece) {
+        if self.try_advance_move(mv).is_none() {
+            self.board.lock_piece(mv);
+
+            self.gens_passed += self.generations.len() as u32 + 1;
+            self.root = 0;
+            self.generations.clear();
+            self.init_generations();
+        }
+    }
+
+    fn try_advance_move(&mut self, mv: FallingPiece) -> Option<()> {
         let new_root = self.generations[0].rent(|gen|
             if let Children::Known(_, children) = &gen.children {
                 children[self.root as usize].as_ref().and_then(
@@ -644,12 +655,14 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
             } else {
                 None
             }
-        ).expect("An invalid move was chosen");
+        )?;
 
         self.root = new_root;
         advance(&mut self.board, mv);
         self.generations.pop_front();
         self.gens_passed += 1;
+
+        Some(())
     }
 
     pub fn nodes(&self) -> u32 {

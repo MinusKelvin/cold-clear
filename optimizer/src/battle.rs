@@ -54,14 +54,14 @@ impl<E: Evaluator> BotInput<E> {
                 Event::PieceSpawned { new_in_queue } => {
                     self.bot.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
-                        let exec = &mut self.executing;
-                        self.bot.next_move(&self.eval, None, incoming, |mv, inf| {
+                        if let Some((mv, inf)) = self.bot.suggest_move(&self.eval, None, incoming) {
                             info = Some(inf);
-                            *exec = Some((
+                            self.executing = Some((
                                 mv.expected_location,
                                 PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), 0)
                             ));
-                        });
+                            self.bot.advance_move(mv.expected_location)
+                        };
                     }
                 }
                 Event::GarbageAdded(_) => {

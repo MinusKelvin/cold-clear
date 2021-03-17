@@ -43,10 +43,10 @@ impl Interface {
     /// It is recommended that you call this function the frame before the piece spawns so that the
     /// bot has time to finish its current thinking cycle and supply the move.
     /// 
-    /// Once a move is chosen, the bot will update its internal state to the result of the piece
-    /// being placed correctly and the move will become available by calling `poll_next_move`.
-    pub fn request_next_move(&self, incoming: u32) {
-        self.send.send(BotMsg::NextMove(incoming)).ok();
+    /// Once a move is chosen, the move will become available by calling `poll_next_move` or
+    /// `block_next_move`. To update the bot state according to this move, call `play_next_move`.
+    pub fn suggest_next_move(&self, incoming: u32) {
+        self.send.send(BotMsg::SuggestMove(incoming)).ok();
     }
 
     /// Checks to see if the bot has provided the previously requested move yet.
@@ -69,6 +69,11 @@ impl Interface {
     /// `None` is returned if the bot is dead.
     pub fn block_next_move(&self) -> Option<(Move, Info)> {
         self.recv.recv().ok()
+    }
+
+    /// Updates the internal bot state according to the move played.
+    pub fn play_next_move(&self, mv: FallingPiece) {
+        self.send.send(BotMsg::PlayMove(mv)).ok();
     }
 
     /// Adds a new piece to the end of the queue.
@@ -122,8 +127,9 @@ fn run(
                 board.combo = combo;
                 board.b2b_bonus = b2b;
             }
-            Ok(BotMsg::NextMove(_)) => {}
+            Ok(BotMsg::SuggestMove(_)) => {}
             Ok(BotMsg::ForceAnalysisLine(_)) => {}
+            Ok(BotMsg::PlayMove(_)) => {}
         }
     }
 
@@ -139,7 +145,7 @@ fn run(
     loop {
         let new_tasks = bot.think(
             &eval,
-            |mv, info| { send.send((mv, info)).ok(); }
+            |result| { send.send(result).ok(); }
         );
         for task in new_tasks {
             let result_send = result_send.clone();

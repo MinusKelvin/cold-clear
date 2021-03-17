@@ -44,7 +44,8 @@ enum BotMsg {
         combo: u32
     },
     NewPiece(Piece),
-    NextMove(u32),
+    SuggestMove(u32),
+    PlayMove(FallingPiece),
     ForceAnalysisLine(Vec<FallingPiece>)
 }
 

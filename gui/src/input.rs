@@ -43,7 +43,7 @@ impl InputSource for BotInput {
                 Event::PieceSpawned { new_in_queue } => {
                     self.interface.add_next_piece(*new_in_queue);
                     if self.executing.is_none() {
-                        self.interface.request_next_move(incoming);
+                        self.interface.suggest_next_move(incoming);
                     }
                 }
                 Event::GarbageAdded(_) => {
@@ -54,6 +54,7 @@ impl InputSource for BotInput {
         }
         let mut info = None;
         if let Ok((mv, i)) = self.interface.poll_next_move() {
+            self.interface.play_next_move(mv.expected_location);
             info = Some(i);
             self.executing = Some((
                 mv.expected_location,

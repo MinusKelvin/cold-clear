@@ -118,23 +118,34 @@ impl PcLooper {
         }
     }
 
-    pub fn next_move(&mut self) -> Result<(Move, Info), bool> {
-        match self.current_pc.pop_front() {
-            Some((mv, lock)) => {
+    pub fn suggest_move(&mut self) -> Result<(Move, Info), bool> {
+        match self.current_pc.front() {
+            Some((mv, _)) => {
                 let mut info = Info {
                     depth: self.current_pc.len() as u32 + 1,
                     plan: vec![]
                 };
-                info.plan.push((mv.expected_location, lock));
                 for (mv, lock) in &self.current_pc {
                     info.plan.push((mv.expected_location, lock.clone()));
                 }
-                Ok((mv, info))
+                Ok((mv.clone(), info))
             }
             None => {
                 self.abort.store(true, Ordering::Relaxed);
                 Err(!self.solving)
             }
+        }
+    }
+
+    pub fn play_move(&mut self, mv: FallingPiece) -> bool {
+        if let Some((mov, _)) = self.current_pc.pop_front() {
+            if mov.expected_location.same_location(&mv) {
+                self.solving
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 

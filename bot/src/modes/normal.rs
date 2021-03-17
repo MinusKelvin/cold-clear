@@ -104,20 +104,19 @@ impl<E: Evaluator> BotState<E> {
             !self.tree.get_next_candidates().is_empty()
     }
 
-    pub fn next_move(
+    pub fn suggest_move(
         &mut self,
         eval: &E,
         book: Option<&Book>,
         incoming: u32,
-        f: impl FnOnce(Move, crate::Info)
-    ) -> bool {
+    ) -> Option<(Move, crate::Info)> {
         if !self.min_thinking_reached() {
-            return false
+            return None
         }
 
         let candidates = self.tree.get_next_candidates();
         if candidates.is_empty() {
-            return false
+            return None
         }
         let mut book_move = None;
         if let Some(book) = book {
@@ -167,11 +166,11 @@ impl<E: Evaluator> BotState<E> {
             expected_location: child.mv
         };
 
-        f(mv, info);
+        return Some((mv, info));
+    }
 
-        self.tree.advance_move(child.mv);
-
-        true
+    pub fn advance_move(&mut self, mv: FallingPiece) {
+        self.tree.advance_move(mv);
     }
 
     pub fn force_analysis_line(&mut self, path: Vec<FallingPiece>) {

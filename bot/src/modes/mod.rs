@@ -106,7 +106,44 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
                     Mode::PcLoop(bot) => bot.add_next_piece(piece)
                 }
             }
-            BotMsg::NextMove(incoming) => self.do_move = Some(incoming),
+            BotMsg::SuggestMove(incoming) => self.do_move = Some(incoming),
+            BotMsg::PlayMove(mv) => {
+                let next = self.board.advance_queue().unwrap();
+                if mv.kind.0 != mv.kind.0 {
+                    if self.board.hold(next).is_none() {
+                        self.board.advance_queue();
+                    }
+                }
+                self.board.lock_piece(mv);
+                match &mut self.mode {
+                    Mode::Normal(bot) => {
+                        #[cfg(not(target_arch = "wasm32"))] {
+                            if self.options.pcloop.is_some() && can_pc_loop(
+                                &self.board, self.options.use_hold
+                            ) {
+                                self.mode = Mode::PcLoop(pcloop::PcLooper::new(
+                                    self.board.clone(),
+                                    self.options.use_hold,
+                                    self.options.mode,
+                                    self.options.pcloop.unwrap()
+                                ));
+                                return;
+                            }
+                        }
+                        bot.advance_move(mv);
+                    }
+                    Mode::PcLoop(bot) => {
+                        if !bot.play_move(mv) {
+                            let mut bot = normal::BotState::new(self.board.clone(), self.options);
+                            let mut thinks = vec![];
+                            if let Ok(thinker) = bot.think() {
+                                thinks.push(Task::NormalThink(thinker));
+                            }
+                            self.mode = Mode::Normal(bot);
+                        }
+                    }
+                }
+            }
             BotMsg::ForceAnalysisLine(path) => match &mut self.mode {
                 Mode::Normal(bot) => bot.force_analysis_line(path),
                 _ => {}
@@ -114,37 +151,13 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
         }
     }
 
-    pub fn think(&mut self, eval: &E, send_move: impl FnOnce(Move, Info)) -> Vec<Task> {
-        let board = &mut self.board;
-        let send_move = |mv: Move, info| {
-            let next = board.advance_queue().unwrap();
-            if mv.hold {
-                if board.hold(next).is_none() {
-                    board.advance_queue();
-                }
-            }
-            board.lock_piece(mv.expected_location).perfect_clear;
-            send_move(mv, info)
-        };
+    pub fn think(&mut self, eval: &E, send_move: impl FnOnce((Move, Info))) -> Vec<Task> {
         match &mut self.mode {
             Mode::Normal(bot) => {
                 if let Some(incoming) = self.do_move {
-                    if bot.next_move(eval, self.book, incoming, send_move) {
+                    if let Some(result) = bot.suggest_move(eval, self.book, incoming) {
+                        send_move(result);
                         self.do_move = None;
-                        #[cfg(not(target_arch = "wasm32"))] {
-                            if self.options.pcloop.is_some() && can_pc_loop(
-                                board, self.options.use_hold
-                            ) {
-                                self.mode = Mode::PcLoop(pcloop::PcLooper::new(
-                                    board.clone(),
-                                    self.options.use_hold,
-                                    self.options.mode,
-                                    self.options.pcloop.unwrap()
-                                ));
-                                fn nothing(_: Move, _: Info) {}
-                                return self.think(eval, nothing);
-                            }
-                        }
                     }
                 }
 
@@ -165,9 +178,9 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
             }
             Mode::PcLoop(bot) => {
                 if let Some(_) = self.do_move {
-                    match bot.next_move() {
+                    match bot.suggest_move() {
                         Ok((mv, info)) => {
-                            send_move(mv, Info::PcLoop(info));
+                            send_move((mv, Info::PcLoop(info)));
                             self.do_move = None;
                         }
                         Err(false) => {}

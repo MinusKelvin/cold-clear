@@ -341,7 +341,7 @@ extern "C" fn cc_add_next_piece_async(bot: &mut CCAsyncBot, piece: CCPiece) {
 
 #[no_mangle]
 extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
-    bot.request_next_move(incoming);
+    bot.suggest_next_move(incoming);
 }
 
 fn convert_plan_placement(
@@ -430,6 +430,7 @@ extern "C" fn cc_poll_next_move(
 ) -> CCBotPollStatus {
     match bot.poll_next_move() {
         Ok((m, info)) => {
+            bot.play_next_move(m.expected_location);
             convert_plan(&info, plan, plan_length);
             unsafe { mv.write(convert(m, info)) };
             CCBotPollStatus::CC_MOVE_PROVIDED
@@ -448,6 +449,7 @@ extern "C" fn cc_block_next_move(
 ) -> CCBotPollStatus {
     match bot.block_next_move() {
         Some((m, info)) => {
+            bot.play_next_move(m.expected_location);
             convert_plan(&info, plan, plan_length);
             unsafe { mv.write(convert(m, info)) };
             CCBotPollStatus::CC_MOVE_PROVIDED
