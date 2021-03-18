@@ -1,0 +1,41 @@
+name: Build Client
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup i686-pc-windows-msvc
+      run: rustup target add i686-pc-windows-msvc
+    - name: Build
+      run: |
+        cargo build --release --bin cc-client
+        cargo build --release --target=i686-pc-windows-msvc --bin cc-client
+    - name: Artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: win64
+        path: target/release/cc-client.exe
+    - name: Artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: win32
+        path: target/i686-pc-windows-msvc/release/cc-client.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --release --bin cc-client
+    - name: Artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: linux
+        path: target/release/cc-client
