@@ -1,9 +1,9 @@
 [package]
-name = "gui"
+name = "cc-client"
 version = "0.1.0"
 authors = ["MinusKelvin <mark.carlson@minuskelvin.net>"]
 edition = "2018"
-default-run = "gui"
+default-run = "cc-client"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

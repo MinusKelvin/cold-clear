@@ -4,7 +4,7 @@ members = [
     "bot",
     "libtetris",
     "battle",
-    "gui",
+    "cc-client",
     "opening-book",
     "c-api",
     "compare",

@@ -3,5 +3,5 @@ fn main() {
         std::env::set_current_dir(path).ok();
     }
 
-    gui::main();
+    cc_client::main();
 }
