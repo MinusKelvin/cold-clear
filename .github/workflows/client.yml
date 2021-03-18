@@ -33,7 +33,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install libraries
-      run: sudo apt install libasound2-dev
+      run: sudo apt install libasound2-dev libudev-dev
     - name: Build
       run: cargo build --release --bin cc-client
     - name: Artifact
