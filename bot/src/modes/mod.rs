@@ -134,11 +134,7 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
                     }
                     Mode::PcLoop(bot) => {
                         if !bot.play_move(mv) {
-                            let mut bot = normal::BotState::new(self.board.clone(), self.options);
-                            let mut thinks = vec![];
-                            if let Ok(thinker) = bot.think() {
-                                thinks.push(Task::NormalThink(thinker));
-                            }
+                            let bot = normal::BotState::new(self.board.clone(), self.options);
                             self.mode = Mode::Normal(bot);
                         }
                     }

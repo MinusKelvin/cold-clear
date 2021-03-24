@@ -140,7 +140,7 @@ impl PcLooper {
     pub fn play_move(&mut self, mv: FallingPiece) -> bool {
         if let Some((mov, _)) = self.current_pc.pop_front() {
             if mov.expected_location.same_location(&mv) {
-                self.solving
+                !self.current_pc.is_empty() || self.solving
             } else {
                 false
             }
