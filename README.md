@@ -24,7 +24,7 @@ described in [`c-api/coldclear.h`](c-api/coldclear.h).
 
 ### Running the desktop client from source
 
-Clone the repository and run `cargo run --release`.
+Clone the repository and run `cargo run --release` fromt he project directory.
 
 ## License
 
