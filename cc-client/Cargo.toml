@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "6171877" }
+game-util = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "4a39948" }
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
 battle = { path = "../battle" }
@@ -32,4 +32,4 @@ console_error_panic_hook = "0.1.6"
 wasm-bindgen-futures = "0.4"
 
 [build-dependencies]
-build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "6171877" }
+build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "4a39948" }
