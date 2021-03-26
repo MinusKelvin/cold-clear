@@ -283,9 +283,8 @@ unsafe extern "C" fn cc_launch_with_board_async(
     let book = if book.is_null() {
         None
     } else {
-        let book = Arc::from_raw(book);
-        Arc::into_raw(book.clone());
-        Some(book)
+        Arc::increment_strong_count(book);
+        Some(Arc::from_raw(book))
     };
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         board,
@@ -310,9 +309,8 @@ unsafe extern "C" fn cc_launch_async(
     let book = if book.is_null() {
         None
     } else {
-        let book = Arc::from_raw(book);
-        Arc::into_raw(book.clone());
-        Some(book)
+        Arc::increment_strong_count(book);
+        Some(Arc::from_raw(book))
     };
     Box::into_raw(Box::new(cold_clear::Interface::launch(
         board,
