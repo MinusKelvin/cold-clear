@@ -109,7 +109,7 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
             BotMsg::SuggestMove(incoming) => self.do_move = Some(incoming),
             BotMsg::PlayMove(mv) => {
                 let next = self.board.advance_queue().unwrap();
-                if mv.kind.0 != mv.kind.0 {
+                if mv.kind.0 != next {
                     if self.board.hold(next).is_none() {
                         self.board.advance_queue();
                     }
