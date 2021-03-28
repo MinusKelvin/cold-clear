@@ -12,7 +12,7 @@ mod builder;
 pub use builder::BookBuilder;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Book(HashMap<Position, Vec<(Sequence, Option<CompactPiece>)>>);
+pub struct Book(HashMap<Position, Box<[(Sequence, Option<CompactPiece>)]>>);
 
 impl Book {
     #[cfg(not(target_arch = "wasm32"))]

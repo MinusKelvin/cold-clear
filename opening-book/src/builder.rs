@@ -212,7 +212,7 @@ impl BookBuilder {
                         }
                     }
                 }
-                moves
+                moves.into_boxed_slice()
             });
         }
         Book(book)
