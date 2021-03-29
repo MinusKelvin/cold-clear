@@ -6,7 +6,7 @@ use opening_book::BookBuilder;
 fn main() {
     let mut book = BookBuilder::new();
 
-    for l in std::io::BufReader::new(std::io::stdin()).lines() {
+    for (line, l) in std::io::BufReader::new(std::io::stdin()).lines().enumerate() {
         let fumen = match fumen::Fumen::decode(l.unwrap().split_whitespace().next().unwrap_or("")) {
             Ok(f) => f,
             Err(_) => continue
@@ -79,7 +79,9 @@ fn main() {
                     }
                 }
                 b.set_field(f);
-                let p = convert(p.piece.unwrap());
+                let p = convert(p.piece.unwrap_or_else(
+                    || panic!("no piece in fumen on line {}", line + 1)
+                ));
                 (p, !b.above_stack(&p))
             }).collect();
             use permutator::Permutation;
