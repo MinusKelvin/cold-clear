@@ -819,11 +819,7 @@ impl<E: 'static, R: 'static> rented::Generation<E, R> {
 }
 
 fn remove_last<T>(slice: &mut &mut [T]) {
-    if slice.is_empty() {
-        panic!("Slice is empty");
-    } else {
-        *slice = unsafe {
-            std::slice::from_raw_parts_mut(slice.as_mut_ptr(), slice.len()-1)
-        };
-    }
+    let data = std::mem::replace(slice, &mut []);
+    let (_, rest) = data.split_last_mut().expect("Slice is empty");
+    *slice = rest;
 }
