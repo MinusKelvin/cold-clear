@@ -1,12 +1,12 @@
-use serde::{ Serialize, Deserialize };
 pub use opening_book::Book;
+use serde::{Deserialize, Serialize};
 
 #[macro_use]
 extern crate rental;
 
+mod dag;
 pub mod evaluation;
 mod modes;
-mod dag;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod desktop;
@@ -15,11 +15,11 @@ pub use desktop::Interface;
 
 #[cfg(target_arch = "wasm32")]
 mod web;
+use libtetris::*;
 #[cfg(target_arch = "wasm32")]
 pub use web::Interface;
 
-use libtetris::*;
-pub use crate::modes::normal::{ BotState, ThinkResult, Thinker };
+pub use crate::modes::normal::{BotState, ThinkResult, Thinker};
 pub use crate::modes::pcloop::PcPriority;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ pub struct Options {
     pub pcloop: Option<modes::pcloop::PcPriority>,
     pub min_nodes: u32,
     pub max_nodes: u32,
-    pub threads: u32
+    pub threads: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -41,19 +41,19 @@ enum BotMsg {
         #[serde(with = "BigArray")]
         field: [[bool; 10]; 40],
         b2b: bool,
-        combo: u32
+        combo: u32,
     },
     NewPiece(Piece),
     SuggestMove(u32),
     PlayMove(FallingPiece),
-    ForceAnalysisLine(Vec<FallingPiece>)
+    ForceAnalysisLine(Vec<FallingPiece>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum Info {
     Normal(modes::normal::Info),
     Book,
-    PcLoop(modes::pcloop::Info)
+    PcLoop(modes::pcloop::Info),
 }
 
 impl Info {
@@ -61,7 +61,7 @@ impl Info {
         match self {
             Info::Normal(info) => &info.plan,
             Info::PcLoop(info) => &info.plan,
-            Info::Book => &[]
+            Info::Book => &[],
         }
     }
 }
@@ -69,7 +69,7 @@ impl Info {
 #[derive(Serialize, Deserialize)]
 pub enum BotPollState {
     Waiting,
-    Dead
+    Dead,
 }
 
 impl Default for Options {
@@ -82,7 +82,7 @@ impl Default for Options {
             pcloop: None,
             min_nodes: 0,
             max_nodes: 4_000_000_000,
-            threads: 1
+            threads: 1,
         }
     }
 }

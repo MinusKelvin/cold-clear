@@ -1,7 +1,7 @@
 use cold_clear::evaluation::Standard;
 use rand::prelude::*;
 
-pub trait Mutateable : Default {
+pub trait Mutateable: Default {
     fn generate(sub_name: String) -> Self;
 
     fn crossover(parent1: &Self, parent2: &Self, sub_name: String) -> Self;
@@ -30,7 +30,7 @@ impl Mutateable for Standard {
                 thread_rng().gen_range(-999, 1000),
                 thread_rng().gen_range(-999, 1000),
                 thread_rng().gen_range(-999, 1000),
-                thread_rng().gen_range(-999, 1000)
+                thread_rng().gen_range(-999, 1000),
             ],
             well_depth: thread_rng().gen_range(-999, 1000),
             max_well_depth: thread_rng().gen_range(-999, 1000),
@@ -44,7 +44,7 @@ impl Mutateable for Standard {
                 thread_rng().gen_range(-999, 1000),
                 thread_rng().gen_range(-999, 1000),
                 thread_rng().gen_range(-999, 1000),
-                thread_rng().gen_range(-999, 1000)
+                thread_rng().gen_range(-999, 1000),
             ],
 
             move_time: thread_rng().gen_range(-999, 1000),
@@ -65,7 +65,7 @@ impl Mutateable for Standard {
             use_bag: true,
             timed_jeopardy: true,
             stack_pc_damage: false,
-            sub_name: Some(sub_name)
+            sub_name: Some(sub_name),
         }
     }
 
@@ -124,7 +124,7 @@ impl Mutateable for Standard {
             use_bag: true,
             timed_jeopardy: true,
             stack_pc_damage: false,
-            sub_name: Some(sub_name)
+            sub_name: Some(sub_name),
         }
     }
 
@@ -135,10 +135,10 @@ impl Mutateable for Standard {
 
 fn crossover_gene(v1: i32, v2: i32) -> i32 {
     let v = match thread_rng().gen_range(0, 100) {
-        0..=41 => v1, // 42%
-        42..=83 => v2, // 42%
+        0..=41 => v1,             // 42%
+        42..=83 => v2,            // 42%
         84..=98 => (v1 + v2) / 2, // 15%
-        _ => thread_rng().gen_range(-999, 1000)
+        _ => thread_rng().gen_range(-999, 1000),
     } + thread_rng().gen_range(-10, 11);
     if v < -999 {
         -999

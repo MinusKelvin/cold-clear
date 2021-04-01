@@ -1,9 +1,10 @@
+use arrayvec::ArrayVec;
 use libtetris::*;
 use opening_book::Book;
+use serde::{Deserialize, Serialize};
+
 use crate::evaluation::Evaluator;
-use crate::{ Options, Info, Move, BotMsg };
-use serde::{ Serialize, Deserialize };
-use arrayvec::ArrayVec;
+use crate::{BotMsg, Info, Move, Options};
 
 pub mod normal;
 #[cfg(not(target_arch = "wasm32"))]
@@ -11,19 +12,19 @@ pub mod pcloop;
 
 enum Mode<E: Evaluator> {
     Normal(normal::BotState<E>),
-    PcLoop(pcloop::PcLooper)
+    PcLoop(pcloop::PcLooper),
 }
 
 #[cfg_attr(target_arch = "wasm32", derive(Serialize, Deserialize))]
 pub(crate) enum Task {
     NormalThink(normal::Thinker),
-    PcLoopSolve(pcloop::PcSolver)
+    PcLoopSolve(pcloop::PcSolver),
 }
 
 #[derive(Serialize, Deserialize)]
 pub(crate) enum TaskResult<V, R> {
     NormalThink(normal::ThinkResult<V, R>),
-    PcLoopSolve(Option<ArrayVec<[FallingPiece; 10]>>)
+    PcLoopSolve(Option<ArrayVec<[FallingPiece; 10]>>),
 }
 
 pub(crate) struct ModeSwitchedBot<'a, E: Evaluator> {
@@ -31,7 +32,7 @@ pub(crate) struct ModeSwitchedBot<'a, E: Evaluator> {
     options: Options,
     board: Board,
     do_move: Option<u32>,
-    book: Option<&'a Book>
+    book: Option<&'a Book>,
 }
 
 impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
@@ -39,19 +40,25 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
         #[cfg(target_arch = "wasm32")]
         let mode = Mode::Normal(normal::BotState::new(board.clone(), options));
         #[cfg(not(target_arch = "wasm32"))]
-        let mode = if options.pcloop.is_some() &&
-                board.get_row(0).is_empty() &&
-                can_pc_loop(&board, options.use_hold) {
+        let mode = if options.pcloop.is_some()
+            && board.get_row(0).is_empty()
+            && can_pc_loop(&board, options.use_hold)
+        {
             Mode::PcLoop(pcloop::PcLooper::new(
-                board.clone(), options.use_hold, options.mode, options.pcloop.unwrap()
+                board.clone(),
+                options.use_hold,
+                options.mode,
+                options.pcloop.unwrap(),
             ))
         } else {
             Mode::Normal(normal::BotState::new(board.clone(), options))
         };
         ModeSwitchedBot {
-            mode, options, board,
+            mode,
+            options,
+            board,
             do_move: None,
-            book
+            book,
         }
     }
 
@@ -60,11 +67,11 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
             Mode::Normal(bot) => match result {
                 TaskResult::NormalThink(result) => bot.finish_thinking(result),
                 _ => {}
-            }
+            },
             Mode::PcLoop(bot) => match result {
                 TaskResult::PcLoopSolve(result) => bot.solution(result),
                 _ => {}
-            }
+            },
         }
     }
 
@@ -76,34 +83,37 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
                 self.board.combo = combo;
                 match &mut self.mode {
                     Mode::Normal(bot) => bot.reset(field, b2b, combo),
-                    Mode::PcLoop(_) => self.mode = Mode::Normal(
-                        normal::BotState::new(self.board.clone(), self.options)
-                    )
+                    Mode::PcLoop(_) => {
+                        self.mode =
+                            Mode::Normal(normal::BotState::new(self.board.clone(), self.options))
+                    }
                 }
             }
             BotMsg::NewPiece(piece) => {
                 self.board.add_next_piece(piece);
                 match &mut self.mode {
                     Mode::Normal(bot) => {
-                        #[cfg(not(target_arch = "wasm32"))] {
-                            if self.options.pcloop.is_some() && can_pc_loop(
-                                &self.board, self.options.use_hold
-                            ) {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            if self.options.pcloop.is_some()
+                                && can_pc_loop(&self.board, self.options.use_hold)
+                            {
                                 self.mode = Mode::PcLoop(pcloop::PcLooper::new(
                                     self.board.clone(),
                                     self.options.use_hold,
                                     self.options.mode,
-                                    self.options.pcloop.unwrap()
+                                    self.options.pcloop.unwrap(),
                                 ));
                             } else {
                                 bot.add_next_piece(piece);
                             }
                         }
-                        #[cfg(target_arch = "wasm32")] {
+                        #[cfg(target_arch = "wasm32")]
+                        {
                             bot.add_next_piece(piece);
                         }
-                    },
-                    Mode::PcLoop(bot) => bot.add_next_piece(piece)
+                    }
+                    Mode::PcLoop(bot) => bot.add_next_piece(piece),
                 }
             }
             BotMsg::SuggestMove(incoming) => self.do_move = Some(incoming),
@@ -117,15 +127,16 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
                 self.board.lock_piece(mv);
                 match &mut self.mode {
                     Mode::Normal(bot) => {
-                        #[cfg(not(target_arch = "wasm32"))] {
-                            if self.options.pcloop.is_some() && can_pc_loop(
-                                &self.board, self.options.use_hold
-                            ) {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            if self.options.pcloop.is_some()
+                                && can_pc_loop(&self.board, self.options.use_hold)
+                            {
                                 self.mode = Mode::PcLoop(pcloop::PcLooper::new(
                                     self.board.clone(),
                                     self.options.use_hold,
                                     self.options.mode,
-                                    self.options.pcloop.unwrap()
+                                    self.options.pcloop.unwrap(),
                                 ));
                                 return;
                             }
@@ -143,7 +154,7 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
             BotMsg::ForceAnalysisLine(path) => match &mut self.mode {
                 Mode::Normal(bot) => bot.force_analysis_line(path),
                 _ => {}
-            }
+            },
         }
     }
 
@@ -160,7 +171,7 @@ impl<'a, E: Evaluator> ModeSwitchedBot<'a, E> {
                 let mut thinks = vec![];
                 for _ in 0..10 {
                     if bot.outstanding_thinks >= self.options.threads {
-                        return thinks
+                        return thinks;
                     }
                     match bot.think() {
                         Ok(thinker) => {
@@ -210,7 +221,7 @@ impl Task {
     pub fn execute<E: Evaluator>(self, eval: &E) -> TaskResult<E::Value, E::Reward> {
         match self {
             Task::NormalThink(thinker) => TaskResult::NormalThink(thinker.think(eval)),
-            Task::PcLoopSolve(solver) => TaskResult::PcLoopSolve(solver.solve())
+            Task::PcLoopSolve(solver) => TaskResult::PcLoopSolve(solver.solve()),
         }
     }
 }
@@ -231,10 +242,11 @@ fn can_pc_loop(board: &Board, hold_enabled: bool) -> bool {
 #[cfg(target_arch = "wasm32")]
 /// dummy wasm32 types because pcf can't really work on web until wasm threads come out
 pub mod pcloop {
-    use serde::{ Serialize, Deserialize };
-    use crate::Move;
-    use libtetris::{ Piece, FallingPiece, LockResult };
     use arrayvec::ArrayVec;
+    use libtetris::{FallingPiece, LockResult, Piece};
+    use serde::{Deserialize, Serialize};
+
+    use crate::Move;
 
     #[derive(Serialize, Deserialize)]
     pub struct PcSolver;
@@ -242,19 +254,29 @@ pub mod pcloop {
     pub struct PcLooper;
 
     impl PcLooper {
-        pub fn add_next_piece(&mut self, _: Piece) { unreachable!() }
-        pub fn think(&mut self) -> Option<PcSolver> { unreachable!() }
-        pub fn next_move(&mut self) -> Result<(Move, Info), bool> { unreachable!() }
-        pub fn solution(&mut self, _: Option<ArrayVec<[FallingPiece; 10]>>) { unreachable!() }
+        pub fn add_next_piece(&mut self, _: Piece) {
+            unreachable!()
+        }
+        pub fn think(&mut self) -> Option<PcSolver> {
+            unreachable!()
+        }
+        pub fn next_move(&mut self) -> Result<(Move, Info), bool> {
+            unreachable!()
+        }
+        pub fn solution(&mut self, _: Option<ArrayVec<[FallingPiece; 10]>>) {
+            unreachable!()
+        }
     }
 
     impl PcSolver {
-        pub fn solve(&self) -> Option<ArrayVec<[FallingPiece; 10]>> { unreachable!() }
+        pub fn solve(&self) -> Option<ArrayVec<[FallingPiece; 10]>> {
+            unreachable!()
+        }
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
     pub struct Info {
-        pub plan: Vec<(FallingPiece, LockResult)>
+        pub plan: Vec<(FallingPiece, LockResult)>,
     }
 
     #[derive(Copy, Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]

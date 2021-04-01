@@ -1,20 +1,22 @@
-use crate::*;
-use std::collections::{ HashMap, HashSet, VecDeque };
-use smallvec::SmallVec;
+use std::collections::{HashMap, HashSet, VecDeque};
+
 use rayon::prelude::*;
+use smallvec::SmallVec;
+
+use crate::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BookBuilder {
     data: HashMap<Position, PositionData>,
     dirty_positions: HashSet<Position>,
-    dirty_queue: VecDeque<Position>
+    dirty_queue: VecDeque<Position>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PositionData {
     values: Vec<(Sequence, MoveValue, SmallVec<[CompactPiece; 8]>)>,
     moves: Vec<Move>,
-    backrefs: Vec<Position>
+    backrefs: Vec<Position>,
 }
 
 impl Default for PositionData {
@@ -22,7 +24,7 @@ impl Default for PositionData {
         PositionData {
             values: vec![],
             moves: vec![],
-            backrefs: vec![]
+            backrefs: vec![],
         }
     }
 }
@@ -30,7 +32,7 @@ impl Default for PositionData {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Move {
     location: CompactPiece,
-    value: OptionNanF32
+    value: OptionNanF32,
 }
 
 impl Move {
@@ -48,12 +50,13 @@ impl BookBuilder {
         BookBuilder {
             data: HashMap::new(),
             dirty_positions: HashSet::new(),
-            dirty_queue: VecDeque::new()
+            dirty_queue: VecDeque::new(),
         }
     }
 
     pub fn value_of_position(&self, pos: Position) -> MoveValue {
-        pos.next_possibilities().into_iter()
+        pos.next_possibilities()
+            .into_iter()
             .map(|(next, bag)| self.value_of_raw(pos, next, &[], bag))
             .sum()
     }
@@ -72,18 +75,23 @@ impl BookBuilder {
     }
 
     pub fn value_of_raw(
-        &self, pos: Position, next: EnumSet<Piece>, queue: &[Piece], bag: EnumSet<Piece>
+        &self,
+        pos: Position,
+        next: EnumSet<Piece>,
+        queue: &[Piece],
+        bag: EnumSet<Piece>,
     ) -> MoveValue {
         let values = match self.data.get(&pos) {
             Some(data) => &data.values,
-            None => return Default::default()
+            None => return Default::default(),
         };
-        let possibilities = possible_sequences(
-            queue.iter().copied().take(NEXT_PIECES).collect(), bag
-        );
-        possibilities.into_iter()
-            .map(|(queue, _)| lookup(values, Sequence { next, queue })
-                .map_or(Default::default(), |v| v.1))
+        let possibilities =
+            possible_sequences(queue.iter().copied().take(NEXT_PIECES).collect(), bag);
+        possibilities
+            .into_iter()
+            .map(|(queue, _)| {
+                lookup(values, Sequence { next, queue }).map_or(Default::default(), |v| v.1)
+            })
             .sum()
     }
 
@@ -98,38 +106,44 @@ impl BookBuilder {
 
         let mut values = vec![];
         let this = self.data.get(&pos).unwrap();
-        sequences.into_par_iter().map(|(Sequence { next, queue }, qbag)| {
-            let mut best = MoveValue::default();
-            let mut best_moves = SmallVec::new();
-            for &mv in &this.moves {
-                let current_mv = mv.location();
-                if !next.contains(current_mv.kind.0) {
-                    continue;
-                }
-                let (pos, long_moves) = pos.advance(mv.location.into());
-                let mut value = if let Some(value) = mv.value.into() {
-                    MoveValue {
-                        long_moves: 0.0,
-                        value
+        sequences
+            .into_par_iter()
+            .map(|(Sequence { next, queue }, qbag)| {
+                let mut best = MoveValue::default();
+                let mut best_moves = SmallVec::new();
+                for &mv in &this.moves {
+                    let current_mv = mv.location();
+                    if !next.contains(current_mv.kind.0) {
+                        continue;
                     }
-                } else if next.len() == 1 {
-                    self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
-                } else {
-                    self.value_of_raw(
-                        pos, next - current_mv.kind.0 | queue[0], &queue[1..], qbag
-                    )
-                };
-                value.long_moves += long_moves;
-                if value > best {
-                    best = value;
-                    best_moves.clear();
-                    best_moves.push(mv.location);
-                } else if value == best && best != MoveValue::default() {
-                    best_moves.push(mv.location);
+                    let (pos, long_moves) = pos.advance(mv.location.into());
+                    let mut value = if let Some(value) = mv.value.into() {
+                        MoveValue {
+                            long_moves: 0.0,
+                            value,
+                        }
+                    } else if next.len() == 1 {
+                        self.value_of_raw(pos, next | queue[0], &queue[1..], qbag)
+                    } else {
+                        self.value_of_raw(
+                            pos,
+                            next - current_mv.kind.0 | queue[0],
+                            &queue[1..],
+                            qbag,
+                        )
+                    };
+                    value.long_moves += long_moves;
+                    if value > best {
+                        best = value;
+                        best_moves.clear();
+                        best_moves.push(mv.location);
+                    } else if value == best && best != MoveValue::default() {
+                        best_moves.push(mv.location);
+                    }
                 }
-            }
-            (Sequence { next, queue }, best, best_moves)
-        }).collect_into_vec(&mut values);
+                (Sequence { next, queue }, best, best_moves)
+            })
+            .collect_into_vec(&mut values);
         values.dedup_by(|(_, a1, a2), (_, b1, b2)| a1 == b1 && a2 == b2);
         values.shrink_to_fit();
 
@@ -153,32 +167,41 @@ impl BookBuilder {
     }
 
     pub fn add_move(
-        &mut self, position: impl Into<Position>, mv: FallingPiece, value: Option<f32>
+        &mut self,
+        position: impl Into<Position>,
+        mv: FallingPiece,
+        value: Option<f32>,
     ) {
         let position = position.into();
         let moves = &mut self.data.entry(position).or_default().moves;
         let mut add_backref = false;
         let mut remove_backref = false;
         match moves.iter_mut().find(|m| m.location().same_location(&mv)) {
-            Some(mv) => if mv.value() < value {
-                remove_backref = mv.value().is_none() && value.is_some();
-                mv.value = value.into();
+            Some(mv) => {
+                if mv.value() < value {
+                    remove_backref = mv.value().is_none() && value.is_some();
+                    mv.value = value.into();
+                }
             }
             None => {
                 add_backref = value.is_none();
                 moves.push(Move {
                     location: mv.into(),
-                    value: value.into()
+                    value: value.into(),
                 });
             }
         }
         if add_backref {
-            self.data.entry(position.advance(mv).0).or_default().backrefs.push(position);
+            self.data
+                .entry(position.advance(mv).0)
+                .or_default()
+                .backrefs
+                .push(position);
         }
         if remove_backref {
-            self.data.entry(position.advance(mv).0).and_modify(
-                |v| v.backrefs.retain(|&p| p != position)
-            );
+            self.data
+                .entry(position.advance(mv).0)
+                .and_modify(|v| v.backrefs.retain(|&p| p != position));
         }
         if value.is_some() {
             if self.dirty_positions.insert(position) {
@@ -188,12 +211,10 @@ impl BookBuilder {
     }
 
     pub fn moves(&self, pos: Position) -> &[Move] {
-        self.data.get(&pos)
-            .map(|data| &*data.moves)
-            .unwrap_or(&[])
+        self.data.get(&pos).map(|data| &*data.moves).unwrap_or(&[])
     }
 
-    pub fn positions<'a>(&'a self) -> impl Iterator<Item=Position> + 'a {
+    pub fn positions<'a>(&'a self) -> impl Iterator<Item = Position> + 'a {
         self.data.keys().copied()
     }
 
@@ -247,7 +268,7 @@ fn lookup<A, B>(values: &[(Sequence, A, B)], sequence: Sequence) -> Option<&(Seq
     } else {
         let i = match values.binary_search_by_key(&sequence, |v| v.0) {
             Ok(i) => i,
-            Err(i) => i-1,
+            Err(i) => i - 1,
         };
         Some(&values[i])
     }
@@ -256,7 +277,7 @@ fn lookup<A, B>(values: &[(Sequence, A, B)], sequence: Sequence) -> Option<&(Seq
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MoveValue {
     pub value: f32,
-    pub long_moves: f32
+    pub long_moves: f32,
 }
 
 impl MoveValue {
@@ -273,7 +294,7 @@ impl std::cmp::PartialOrd for MoveValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.value.partial_cmp(&other.value) {
             Some(std::cmp::Ordering::Equal) => other.long_moves.partial_cmp(&self.long_moves),
-            order => order
+            order => order,
         }
     }
 }
@@ -308,7 +329,7 @@ impl From<Option<f32>> for OptionNanF32 {
     fn from(v: Option<f32>) -> Self {
         match v {
             Some(v) => Self(v),
-            None => Self(std::f32::NAN)
+            None => Self(std::f32::NAN),
         }
     }
 }

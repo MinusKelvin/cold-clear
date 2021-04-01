@@ -1,6 +1,7 @@
-use serde::{ Serialize, Deserialize };
 use libtetris::*;
 use rand::prelude::*;
+use serde::{Deserialize, Serialize};
+
 use crate::GameConfig;
 
 pub struct Game {
@@ -14,12 +15,14 @@ pub struct Game {
     right_das: u32,
     going_right: bool,
     pub garbage_queue: u32,
-    pub attacking: u32
+    pub attacking: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Event {
-    PieceSpawned { new_in_queue: Piece },
+    PieceSpawned {
+        new_in_queue: Piece,
+    },
     SpawnDelayStart,
     FrameBeforePieceSpawns,
     PieceMoved,
@@ -33,18 +36,18 @@ pub enum Event {
     PiecePlaced {
         piece: FallingPiece,
         locked: LockResult,
-        hard_drop_distance: Option<i32>
+        hard_drop_distance: Option<i32>,
     },
     GarbageSent(u32),
     GarbageAdded(Vec<usize>),
-    GameOver
+    GameOver,
 }
 
 enum GameState {
     SpawnDelay(u32),
     LineClearDelay(u32),
     Falling(FallingState),
-    GameOver
+    GameOver,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -54,7 +57,7 @@ struct FallingState {
     rotation_move_count: u32,
     gravity: i32,
     lock_delay: u32,
-    soft_drop_delay: u32
+    soft_drop_delay: u32,
 }
 
 impl Game {
@@ -64,7 +67,8 @@ impl Game {
             board.add_next_piece(board.generate_next_piece(piece_rng));
         }
         Game {
-            board, config,
+            board,
+            config,
             prev: Default::default(),
             used: Default::default(),
             did_hold: false,
@@ -73,18 +77,33 @@ impl Game {
             going_right: false,
             state: GameState::SpawnDelay(config.spawn_delay),
             garbage_queue: 0,
-            attacking: 0
+            attacking: 0,
         }
     }
 
     pub fn update(
-        &mut self, current: Controller, piece_rng: &mut impl Rng, garbage_rng: &mut impl Rng
+        &mut self,
+        current: Controller,
+        piece_rng: &mut impl Rng,
+        garbage_rng: &mut impl Rng,
     ) -> Vec<Event> {
         update_input(&mut self.used.left, self.prev.left, current.left);
         update_input(&mut self.used.right, self.prev.right, current.right);
-        update_input(&mut self.used.rotate_right, self.prev.rotate_right, current.rotate_right);
-        update_input(&mut self.used.rotate_left, self.prev.rotate_left, current.rotate_left);
-        update_input(&mut self.used.soft_drop, self.prev.soft_drop, current.soft_drop);
+        update_input(
+            &mut self.used.rotate_right,
+            self.prev.rotate_right,
+            current.rotate_right,
+        );
+        update_input(
+            &mut self.used.rotate_left,
+            self.prev.rotate_left,
+            current.rotate_left,
+        );
+        update_input(
+            &mut self.used.soft_drop,
+            self.prev.soft_drop,
+            current.soft_drop,
+        );
         update_input(&mut self.used.hold, self.prev.hold, current.hold);
         self.used.hard_drop = !self.prev.hard_drop && current.hard_drop;
         self.used.soft_drop = current.soft_drop;
@@ -151,15 +170,17 @@ impl Game {
                 if let Some(spawned) = SpawnRule::Row19Or20.spawn(next_piece, &self.board) {
                     self.state = GameState::Falling(FallingState {
                         piece: spawned,
-                        lowest_y: spawned.cells().iter().map(|&(_,y)| y).min().unwrap(),
+                        lowest_y: spawned.cells().iter().map(|&(_, y)| y).min().unwrap(),
                         rotation_move_count: 0,
                         gravity: self.config.gravity,
                         lock_delay: 30,
-                        soft_drop_delay: 0
+                        soft_drop_delay: 0,
                     });
                     let mut ghost = spawned;
                     ghost.sonic_drop(&self.board);
-                    events.push(Event::PieceSpawned { new_in_queue: new_piece });
+                    events.push(Event::PieceSpawned {
+                        new_in_queue: new_piece,
+                    });
                     events.push(Event::PieceFalling(spawned, ghost));
                 } else {
                     self.state = GameState::GameOver;
@@ -204,11 +225,11 @@ impl Game {
                         if let Some(spawned) = SpawnRule::Row19Or20.spawn(piece, &self.board) {
                             *falling = FallingState {
                                 piece: spawned,
-                                lowest_y: spawned.cells().iter().map(|&(_,y)| y).min().unwrap(),
+                                lowest_y: spawned.cells().iter().map(|&(_, y)| y).min().unwrap(),
                                 rotation_move_count: 0,
                                 gravity: self.config.gravity,
                                 lock_delay: 30,
-                                soft_drop_delay: 0
+                                soft_drop_delay: 0,
                             };
                             let mut ghost = spawned;
                             ghost.sonic_drop(&self.board);
@@ -266,7 +287,7 @@ impl Game {
                 }
 
                 // 15 move lock rule reset
-                let low_y = falling.piece.cells().iter().map(|&(_,y)| y).min().unwrap();
+                let low_y = falling.piece.cells().iter().map(|&(_, y)| y).min().unwrap();
                 if low_y < falling.lowest_y {
                     falling.rotation_move_count = 0;
                     falling.lowest_y = low_y;
@@ -276,7 +297,7 @@ impl Game {
                 if falling.rotation_move_count >= self.config.move_lock_rule {
                     let mut p = falling.piece;
                     p.sonic_drop(&self.board);
-                    let low_y = p.cells().iter().map(|&(_,y)| y).min().unwrap();
+                    let low_y = p.cells().iter().map(|&(_, y)| y).min().unwrap();
                     // I don't think the 15 move lock rule applies if the piece can fall to a lower
                     // y position than it has ever reached before.
                     if low_y >= falling.lowest_y {
@@ -331,7 +352,7 @@ impl Game {
                                 events.push(Event::SoftDropped);
                                 if self.board.on_stack(&falling.piece) {
                                     events.push(Event::StackTouched);
-                                    break
+                                    break;
                                 }
                             }
                             if falling.soft_drop_delay != 0 {
@@ -357,7 +378,7 @@ impl Game {
         falling: FallingState,
         events: &mut Vec<Event>,
         garbage_rng: &mut impl Rng,
-        dist: Option<i32>
+        dist: Option<i32>,
     ) {
         self.did_hold = false;
         let locked = self.board.lock_piece(falling.piece);
@@ -365,7 +386,7 @@ impl Game {
         events.push(Event::PiecePlaced {
             piece: falling.piece,
             locked: locked.clone(),
-            hard_drop_distance: dist
+            hard_drop_distance: dist,
         });
 
         if locked.locked_out {
@@ -393,7 +414,7 @@ impl Game {
             let mut col = rng.gen_range(0, 10);
             let mut garbage_columns = vec![];
             for _ in 0..self.garbage_queue.min(self.config.max_garbage_add) {
-                if rng.gen_bool(1.0/3.0) {
+                if rng.gen_bool(1.0 / 3.0) {
                     col = rng.gen_range(0, 10);
                 }
                 garbage_columns.push(col);

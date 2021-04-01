@@ -33,7 +33,7 @@ pub enum Message {
     },
 
     #[serde(other)]
-    Unknown
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq)]

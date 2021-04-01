@@ -1,11 +1,11 @@
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
 
 mod battle;
-pub use battle::{ Battle, BattleUpdate, PlayerUpdate, Replay };
+pub use battle::{Battle, BattleUpdate, PlayerUpdate, Replay};
 mod controller;
 pub use controller::PieceMoveExecutor;
 mod game;
-pub use game::{ Event, Game };
+pub use game::{Event, Game};
 
 /// Units are in ticks
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ pub struct GameConfig {
     pub next_queue_size: u32,
     pub max_garbage_add: u32,
     pub move_lock_rule: u32,
-    pub garbage_blocking: bool
+    pub garbage_blocking: bool,
 }
 
 impl Default for GameConfig {
@@ -40,7 +40,7 @@ impl Default for GameConfig {
             next_queue_size: 5,
             max_garbage_add: 10,
             move_lock_rule: 15,
-            garbage_blocking: false
+            garbage_blocking: false,
         }
     }
 }
@@ -58,7 +58,7 @@ impl GameConfig {
             next_queue_size: 5,
             max_garbage_add: 20,
             move_lock_rule: 15,
-            garbage_blocking: true
+            garbage_blocking: true,
         }
     }
 }

@@ -1,13 +1,14 @@
-use arrayvec::ArrayVec;
-use enumset::EnumSet;
 use std::collections::VecDeque;
 use std::iter::DoubleEndedIterator;
-use serde::{ Serialize, Deserialize };
+
+use arrayvec::ArrayVec;
+use enumset::EnumSet;
+use serde::{Deserialize, Serialize};
 
 use crate::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Board<R=u16> {
+pub struct Board<R = u16> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
     pub combo: u32,
@@ -43,7 +44,13 @@ impl<R: Row> Board<R> {
     }
 
     /// Creates a board with existing field, remain pieces in the bag, hold piece, back-to-back status and combo count.
-    pub fn new_with_state(field: [[bool; 10]; 40], bag_remain: EnumSet<Piece>, hold: Option<Piece>, b2b: bool, combo: u32) -> Self {
+    pub fn new_with_state(
+        field: [[bool; 10]; 40],
+        bag_remain: EnumSet<Piece>,
+        hold: Option<Piece>,
+        b2b: bool,
+        combo: u32,
+    ) -> Self {
         let mut board = Board {
             cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
@@ -62,7 +69,7 @@ impl<R: Row> Board<R> {
     }
 
     /// Randomly selects a piece from the bag.
-    /// 
+    ///
     /// This function does not remove the generated piece from the bag.
     /// Use add_next_piece() to add it to the queue.
     pub fn generate_next_piece(&self, rng: &mut impl rand::Rng) -> Piece {
@@ -72,7 +79,7 @@ impl<R: Row> Board<R> {
     }
 
     /// Retrieves the next piece in the queue.
-    /// 
+    ///
     /// If the queue is empty, returns the set of possible next pieces.
     pub fn get_next_piece(&self) -> Result<Piece, EnumSet<Piece>> {
         self.next_pieces.front().copied().ok_or(self.bag)
@@ -84,7 +91,7 @@ impl<R: Row> Board<R> {
     }
 
     /// Adds the piece to the next queue and removes it from the bag.
-    /// 
+    ///
     /// If the bag becomes empty, the bag is refilled.
     pub fn add_next_piece(&mut self, piece: Piece) {
         self.bag.remove(piece);
@@ -111,8 +118,9 @@ impl<R: Row> Board<R> {
         }
         for x in 0..10 {
             self.column_heights[x] -= cleared.len() as i32;
-            while self.column_heights[x] > 0 &&
-                    !self.cells[self.column_heights[x] as usize-1].get(x) {
+            while self.column_heights[x] > 0
+                && !self.cells[self.column_heights[x] as usize - 1].get(x)
+            {
                 self.column_heights[x] -= 1;
             }
         }
@@ -134,33 +142,30 @@ impl<R: Row> Board<R> {
     }
 
     pub fn obstructed(&self, piece: &FallingPiece) -> bool {
-        piece.cells()
-            .iter()
-            .any(|&(x, y)| self.occupied(x, y))
+        piece.cells().iter().any(|&(x, y)| self.occupied(x, y))
     }
 
     pub fn above_stack(&self, piece: &FallingPiece) -> bool {
-        piece.cells()
+        piece
+            .cells()
             .iter()
             .all(|&(x, y)| y >= self.column_heights[x as usize])
     }
 
     pub fn on_stack(&self, piece: &FallingPiece) -> bool {
-        piece.cells()
-            .iter()
-            .any(|&(x, y)| self.occupied(x, y - 1))
+        piece.cells().iter().any(|&(x, y)| self.occupied(x, y - 1))
     }
 
     /// Does all logic associated with locking a piece.
-    /// 
+    ///
     /// Clears lines, detects clear kind, calculates garbage, maintains combo and back-to-back
     /// state, detects perfect clears, detects lockout.
     pub fn lock_piece(&mut self, piece: FallingPiece) -> LockResult {
         let mut locked_out = true;
         for &(x, y) in &piece.cells() {
             self.cells[y as usize].set(x as usize, piece.kind.0.color());
-            if self.column_heights[x as usize] < y+1 {
-                self.column_heights[x as usize] = y+1;
+            if self.column_heights[x as usize] < y + 1 {
+                self.column_heights[x as usize] = y + 1;
             }
             if y < 20 {
                 locked_out = false;
@@ -201,17 +206,24 @@ impl<R: Row> Board<R> {
         }
 
         let l = LockResult {
-            placement_kind, garbage_sent, perfect_clear, locked_out,
-            combo: if self.combo == 0 { None } else { Some(self.combo-1) },
+            placement_kind,
+            garbage_sent,
+            perfect_clear,
+            locked_out,
+            combo: if self.combo == 0 {
+                None
+            } else {
+                Some(self.combo - 1)
+            },
             b2b: did_b2b,
-            cleared_lines: cleared
+            cleared_lines: cleared,
         };
 
         l
     }
 
     /// Holds the passed piece, returning the previous hold piece.
-    /// 
+    ///
     /// If there is a piece in hold, it is returned.
     pub fn hold(&mut self, piece: Piece) -> Option<Piece> {
         let hold = self.hold_piece;
@@ -219,7 +231,7 @@ impl<R: Row> Board<R> {
         hold
     }
 
-    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item=Piece> + 'a {
+    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item = Piece> + 'a {
         self.next_pieces.iter().copied()
     }
 
@@ -251,19 +263,23 @@ impl<R: Row> Board<R> {
 
     pub fn to_compressed(&self) -> Board {
         Board {
-            cells: self.cells.iter().map(|r| {
-                let mut row = 0;
-                for x in 0..10 {
-                    row.set(x, r.cell_color(x));
-                }
-                row
-            }).collect(),
+            cells: self
+                .cells
+                .iter()
+                .map(|r| {
+                    let mut row = 0;
+                    for x in 0..10 {
+                        row.set(x, r.cell_color(x));
+                    }
+                    row
+                })
+                .collect(),
             b2b_bonus: self.b2b_bonus,
             combo: self.combo,
             column_heights: self.column_heights,
             next_pieces: self.next_pieces.clone(),
             hold_piece: self.hold_piece,
-            bag: self.bag
+            bag: self.bag,
         }
     }
 

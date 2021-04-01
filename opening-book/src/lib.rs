@@ -1,10 +1,12 @@
-use libtetris::{ FallingPiece, Piece, RotationState, Board };
-use enumset::EnumSet;
-use serde::{ Serialize, Deserialize };
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{SeekFrom, prelude::*};
+use std::io::prelude::*;
+use std::io::SeekFrom;
 use std::path::Path;
+
+use enumset::EnumSet;
+use libtetris::{Board, FallingPiece, Piece, RotationState};
+use serde::{Deserialize, Serialize};
 
 const NEXT_PIECES: usize = 4;
 
@@ -35,8 +37,8 @@ impl MemoryBook {
     #[cfg(target_arch = "wasm32")]
     pub fn load(from: impl BufRead) -> Result<Self, bincode::Error> {
         bincode::deserialize_from(
-            ruzstd::StreamingDecoder::new(&mut {from})
-                .map_err(|err| bincode::ErrorKind::Custom(err))?
+            ruzstd::StreamingDecoder::new(&mut { from })
+                .map_err(|err| bincode::ErrorKind::Custom(err))?,
         )
     }
 
@@ -72,9 +74,9 @@ impl MemoryBook {
 
 impl Row {
     fn lookup(&self, seq: &Sequence) -> Option<FallingPiece> {
-        match self.0.binary_search_by_key(seq, |&(s,_)| s) {
+        match self.0.binary_search_by_key(seq, |&(s, _)| s) {
             Result::Ok(i) => self.0[i].1.map(Into::into),
-            Result::Err(i) => self.0[i-1].1.map(Into::into)
+            Result::Err(i) => self.0[i - 1].1.map(Into::into),
         }
     }
 }
@@ -95,7 +97,7 @@ impl Book {
         match u32::from_le_bytes(magic) {
             // this is just the zstd header since saved memory books are just zstd'd bincode
             0xFD2FB528 => MemoryBook::load(std::io::BufReader::new(file)).map(Into::into),
-            _ => Err(serde::de::Error::custom("Invalid file"))
+            _ => Err(serde::de::Error::custom("Invalid file")),
         }
     }
 
@@ -117,7 +119,7 @@ pub struct Position {
     /// invariant: either this set has >=2 elements in it, or the sole element is also the extra.
     bag: EnumSet<Piece>,
     /// invariant: if this is `Some`, the piece is also in the bag.
-    extra: Option<Piece>
+    extra: Option<Piece>,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -133,7 +135,7 @@ impl Position {
         let mut field = [[false; 10]; 40];
         for y in 0..10 {
             for x in 0..10 {
-                field[y][x] = self.rows[y] & 1<<x != 0;
+                field[y][x] = self.rows[y] & 1 << x != 0;
             }
         }
         let mut board = Board::new_with_state(field, self.bag, self.extra, false, 0);
@@ -162,16 +164,17 @@ impl Position {
     pub fn next_possibilities(&self) -> Vec<(EnumSet<Piece>, EnumSet<Piece>)> {
         let mut next_possibilities = vec![];
         match self.extra {
-            Some(p) => for other in self.bag {
-                next_possibilities.push((p | other, refill_if_empty(self.bag - other)));
+            Some(p) => {
+                for other in self.bag {
+                    next_possibilities.push((p | other, refill_if_empty(self.bag - other)));
+                }
             }
             None => {
                 let bag: Vec<_> = self.bag.iter().collect();
                 for i in 0..bag.len() {
-                    for j in i+1..bag.len() {
-                        next_possibilities.push(
-                            (bag[i] | bag[j], refill_if_empty(self.bag - bag[i] - bag[j]))
-                        );
+                    for j in i + 1..bag.len() {
+                        next_possibilities
+                            .push((bag[i] | bag[j], refill_if_empty(self.bag - bag[i] - bag[j])));
                     }
                 }
             }
@@ -197,7 +200,7 @@ impl From<&Board> for Position {
         let mut this = Position {
             rows: [0; 10],
             bag: v.next_bag(),
-            extra: None
+            extra: None,
         };
         if let Some(hold) = v.hold_piece {
             if this.bag.contains(hold) {
@@ -232,21 +235,24 @@ fn refill_if_empty<T: enumset::EnumSetType>(bag: EnumSet<T>) -> EnumSet<T> {
 }
 
 pub fn possible_sequences(
-    mut q: Vec<Piece>, bag: EnumSet<Piece>
+    mut q: Vec<Piece>,
+    bag: EnumSet<Piece>,
 ) -> Vec<([Piece; NEXT_PIECES], EnumSet<Piece>)> {
     fn solve(
         q: &mut Vec<Piece>,
         bag: EnumSet<Piece>,
-        out: &mut Vec<([Piece; NEXT_PIECES], EnumSet<Piece>)>
+        out: &mut Vec<([Piece; NEXT_PIECES], EnumSet<Piece>)>,
     ) {
         use std::convert::TryFrom;
         match <&[_; NEXT_PIECES]>::try_from(&**q) {
             Ok(&q) => out.push((q, bag)),
-            Err(_) => for p in bag {
-                let new_bag = refill_if_empty(bag - p);
-                q.push(p);
-                solve(q, new_bag, out);
-                q.pop();
+            Err(_) => {
+                for p in bag {
+                    let new_bag = refill_if_empty(bag - p);
+                    q.push(p);
+                    solve(q, new_bag, out);
+                    q.pop();
+                }
             }
         }
     }
@@ -319,11 +325,11 @@ impl From<FallingPiece> for CompactPiece {
             RotationState::North => 0,
             RotationState::South => 1,
             RotationState::East => 2,
-            RotationState::West => 3
+            RotationState::West => 3,
         };
-        CompactPiece(std::num::NonZeroU16::new(
-            p | r << 3 | (v.x as u16) << 5 | (v.y as u16) << 9
-        ).unwrap())
+        CompactPiece(
+            std::num::NonZeroU16::new(p | r << 3 | (v.x as u16) << 5 | (v.y as u16) << 9).unwrap(),
+        )
     }
 }
 
@@ -346,12 +352,12 @@ impl From<CompactPiece> for FallingPiece {
                     1 => RotationState::South,
                     2 => RotationState::East,
                     3 => RotationState::West,
-                    _ => unreachable!()
-                }
+                    _ => unreachable!(),
+                },
             ),
             x: (v.0.get() >> 5 & 0b1111) as i32,
             y: (v.0.get() >> 9 & 0b111111) as i32,
-            tspin: libtetris::TspinStatus::None
+            tspin: libtetris::TspinStatus::None,
         }
     }
 }

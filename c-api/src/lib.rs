@@ -2,11 +2,12 @@ use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
 use std::sync::Arc;
+
+use cold_clear::PcPriority;
 use enumset::EnumSet;
 use libtetris::{
-    Piece, TspinStatus, PieceMovement, SpawnRule, FallingPiece, LockResult, Board, MovementMode
+    Board, FallingPiece, LockResult, MovementMode, Piece, PieceMovement, SpawnRule, TspinStatus,
 };
-use cold_clear::PcPriority;
 
 type CCAsyncBot = cold_clear::Interface;
 
@@ -113,7 +114,7 @@ cenum! {
 enum CCBotPollStatus {
     CC_MOVE_PROVIDED,
     CC_WAITING,
-    CC_BOT_DEAD
+    CC_BOT_DEAD,
 }
 
 #[repr(C)]
@@ -196,10 +197,9 @@ fn convert_hold(hold: *mut CCPiece) -> Option<Piece> {
     if hold.is_null() {
         None
     } else {
-        Some(unsafe{*hold}.into())
+        Some(unsafe { *hold }.into())
     }
 }
-
 
 fn convert_from_c_options(options: &CCOptions) -> cold_clear::Options {
     cold_clear::Options {
@@ -210,7 +210,7 @@ fn convert_from_c_options(options: &CCOptions) -> cold_clear::Options {
         pcloop: options.pcloop.into(),
         mode: options.mode.into(),
         spawn_rule: options.spawn_rule.into(),
-        threads: options.threads
+        threads: options.threads,
     }
 }
 
@@ -253,7 +253,7 @@ fn convert_from_c_weights(weights: &CCWeights) -> cold_clear::evaluation::Standa
         use_bag: weights.use_bag,
         timed_jeopardy: weights.timed_jeopardy,
         stack_pc_damage: weights.stack_pc_damage,
-        sub_name: None
+        sub_name: None,
     }
 }
 
@@ -268,14 +268,14 @@ unsafe extern "C" fn cc_launch_with_board_async(
     b2b: bool,
     combo: u32,
     pieces: *const CCPiece,
-    count: u32
+    count: u32,
 ) -> *mut CCAsyncBot {
     let mut board = Board::new_with_state(
         *field,
         EnumSet::try_from_u32(bag_remain).unwrap_or_default(),
         convert_hold(hold),
         b2b,
-        combo
+        combo,
     );
     for i in 0..count as usize {
         board.add_next_piece((*pieces.add(i)).into());
@@ -290,7 +290,7 @@ unsafe extern "C" fn cc_launch_with_board_async(
         board,
         convert_from_c_options(options),
         convert_from_c_weights(weights),
-        book
+        book,
     )))
 }
 
@@ -300,7 +300,7 @@ unsafe extern "C" fn cc_launch_async(
     weights: &CCWeights,
     book: *const CCBook,
     pieces: *const CCPiece,
-    count: u32
+    count: u32,
 ) -> *mut CCAsyncBot {
     let mut board = Board::new();
     for i in 0..count as usize {
@@ -316,18 +316,23 @@ unsafe extern "C" fn cc_launch_async(
         board,
         convert_from_c_options(options),
         convert_from_c_weights(weights),
-        book
+        book,
     )))
 }
 
 #[no_mangle]
 extern "C" fn cc_destroy_async(bot: *mut CCAsyncBot) {
-    unsafe { Box::from_raw(bot); }
+    unsafe {
+        Box::from_raw(bot);
+    }
 }
 
 #[no_mangle]
 extern "C" fn cc_reset_async(
-    bot: &mut CCAsyncBot, field: &[[bool; 10]; 40], b2b: bool, combo: u32
+    bot: &mut CCAsyncBot,
+    field: &[[bool; 10]; 40],
+    b2b: bool,
+    combo: u32,
 ) {
     bot.reset(*field, b2b, combo);
 }
@@ -343,7 +348,7 @@ extern "C" fn cc_request_next_move(bot: &mut CCAsyncBot, incoming: u32) {
 }
 
 fn convert_plan_placement(
-    (falling_piece, lock_result): &(FallingPiece, LockResult)
+    (falling_piece, lock_result): &(FallingPiece, LockResult),
 ) -> CCPlanPlacement {
     let mut expected_x = [0; 4];
     let mut expected_y = [0; 4];
@@ -369,13 +374,11 @@ fn convert_plan_placement(
 fn convert_plan(
     info: &cold_clear::Info,
     plan: *mut MaybeUninit<CCPlanPlacement>,
-    plan_length: *mut u32
+    plan_length: *mut u32,
 ) {
     if !plan.is_null() && !plan_length.is_null() {
         let plan_length = unsafe { &mut *plan_length };
-        let plan = unsafe {
-            std::slice::from_raw_parts_mut(plan, *plan_length as usize)
-        };
+        let plan = unsafe { std::slice::from_raw_parts_mut(plan, *plan_length as usize) };
         let n = info.plan().len().min(plan.len());
         for i in 0..n {
             plan[i] = MaybeUninit::new(convert_plan_placement(&info.plan()[i]));
@@ -415,7 +418,7 @@ fn convert(m: libtetris::Move, info: cold_clear::Info) -> CCMove {
             cold_clear::Info::Normal(info) => info.original_rank as u32,
             cold_clear::Info::PcLoop(_) => 0,
             cold_clear::Info::Book => 0,
-        }
+        },
     }
 }
 
@@ -424,7 +427,7 @@ extern "C" fn cc_poll_next_move(
     bot: &mut CCAsyncBot,
     mv: *mut CCMove,
     plan: *mut MaybeUninit<CCPlanPlacement>,
-    plan_length: *mut u32
+    plan_length: *mut u32,
 ) -> CCBotPollStatus {
     match bot.poll_next_move() {
         Ok((m, info)) => {
@@ -443,7 +446,7 @@ extern "C" fn cc_block_next_move(
     bot: &mut CCAsyncBot,
     mv: *mut CCMove,
     plan: *mut MaybeUninit<CCPlanPlacement>,
-    plan_length: *mut u32
+    plan_length: *mut u32,
 ) -> CCBotPollStatus {
     match bot.block_next_move() {
         Some((m, info)) => {
@@ -467,7 +470,7 @@ unsafe extern "C" fn cc_default_options(options: *mut CCOptions) {
         pcloop: o.pcloop.into(),
         mode: o.mode.into(),
         spawn_rule: o.spawn_rule.into(),
-        threads: o.threads
+        threads: o.threads,
     });
 }
 
@@ -509,7 +512,7 @@ fn convert_weights(w: cold_clear::evaluation::Standard) -> CCWeights {
 
         use_bag: w.use_bag,
         timed_jeopardy: w.timed_jeopardy,
-        stack_pc_damage: w.stack_pc_damage
+        stack_pc_damage: w.stack_pc_damage,
     }
 }
 
@@ -520,7 +523,9 @@ unsafe extern "C" fn cc_default_weights(weights: *mut CCWeights) {
 
 #[no_mangle]
 unsafe extern "C" fn cc_fast_weights(weights: *mut CCWeights) {
-    weights.write(convert_weights(cold_clear::evaluation::Standard::fast_config()));
+    weights.write(convert_weights(
+        cold_clear::evaluation::Standard::fast_config(),
+    ));
 }
 
 #[no_mangle]

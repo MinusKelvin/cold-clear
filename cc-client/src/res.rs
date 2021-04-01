@@ -17,19 +17,22 @@ pub struct Resources {
 
 impl Resources {
     pub async fn load(gl: &Gl, executor: &LocalExecutor) -> Self {
-        let (noto, (sprites, sprite_sheet), line_clear, move_sound, hard_drop) = game_util::futures::try_join!(
-            async {
-                Font::try_from_vec(
-                    game_util::load_binary("res/NotoSerif-Regular.ttf")
-                        .await
-                        .unwrap(),
-                ).ok_or("Failed to load Noto Serif font".to_owned())
-            },
-            sprites::Sprites::load(gl, "res/generated"),
-            Sound::load("res/line-clear.ogg"),
-            Sound::load("res/move.ogg"),
-            Sound::load("res/hard-drop.ogg")
-        ).unwrap();
+        let (noto, (sprites, sprite_sheet), line_clear, move_sound, hard_drop) =
+            game_util::futures::try_join!(
+                async {
+                    Font::try_from_vec(
+                        game_util::load_binary("res/NotoSerif-Regular.ttf")
+                            .await
+                            .unwrap(),
+                    )
+                    .ok_or("Failed to load Noto Serif font".to_owned())
+                },
+                sprites::Sprites::load(gl, "res/generated"),
+                Sound::load("res/line-clear.ogg"),
+                Sound::load("res/move.ogg"),
+                Sound::load("res/hard-drop.ogg")
+            )
+            .unwrap();
 
         let mut text = TextRenderer::new(gl).unwrap();
         text.screen_size = (40.0, 23.0);

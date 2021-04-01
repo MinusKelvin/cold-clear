@@ -130,7 +130,7 @@ impl From<tbi::Move> for libtetris::FallingPiece {
                 tbi::Spin::None => libtetris::TspinStatus::None,
                 tbi::Spin::Mini => libtetris::TspinStatus::Mini,
                 tbi::Spin::Full => libtetris::TspinStatus::Full,
-            }
+            },
         }
     }
 }
@@ -153,7 +153,7 @@ impl From<libtetris::FallingPiece> for tbi::Move {
                 libtetris::TspinStatus::None => tbi::Spin::None,
                 libtetris::TspinStatus::Mini => tbi::Spin::Mini,
                 libtetris::TspinStatus::Full => tbi::Spin::Full,
-            }
+            },
         }
     }
 }

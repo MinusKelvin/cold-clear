@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
 
 use crate::piece::TspinStatus;
 
@@ -11,7 +11,7 @@ pub struct LockResult {
     pub perfect_clear: bool,
     pub combo: Option<u32>,
     pub garbage_sent: u32,
-    pub cleared_lines: ArrayVec<[i32; 4]>
+    pub cleared_lines: ArrayVec<[i32; 4]>,
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -27,7 +27,7 @@ pub enum PlacementKind {
     Tspin,
     Tspin1,
     Tspin2,
-    Tspin3
+    Tspin3,
 }
 
 impl PlacementKind {
@@ -39,7 +39,7 @@ impl PlacementKind {
             Clear2 | MiniTspin2 => 1,
             Clear3 | Tspin1 => 2,
             Clear4 | Tspin2 => 4,
-            Tspin3 => 6
+            Tspin3 => 6,
         }
     }
 
@@ -47,10 +47,8 @@ impl PlacementKind {
     pub fn is_hard(self) -> bool {
         use PlacementKind::*;
         match self {
-            Clear4 |
-            MiniTspin | MiniTspin1 | MiniTspin2 |
-            Tspin | Tspin1 | Tspin2 | Tspin3 => true,
-            _ => false
+            Clear4 | MiniTspin | MiniTspin1 | MiniTspin2 | Tspin | Tspin1 | Tspin2 | Tspin3 => true,
+            _ => false,
         }
     }
 
@@ -58,7 +56,7 @@ impl PlacementKind {
     pub fn is_clear(self) -> bool {
         match self {
             PlacementKind::None | PlacementKind::MiniTspin | PlacementKind::Tspin => false,
-            _ => true
+            _ => true,
         }
     }
 
@@ -66,52 +64,52 @@ impl PlacementKind {
         match (cleared, tspin) {
             (0, TspinStatus::None) => PlacementKind::None,
             (0, TspinStatus::Mini) => PlacementKind::MiniTspin,
-            (0, _)                 => PlacementKind::Tspin,
+            (0, _) => PlacementKind::Tspin,
             (1, TspinStatus::None) => PlacementKind::Clear1,
             (1, TspinStatus::Mini) => PlacementKind::MiniTspin1,
-            (1, _)                 => PlacementKind::Tspin1,
+            (1, _) => PlacementKind::Tspin1,
             (2, TspinStatus::None) => PlacementKind::Clear2,
             (2, TspinStatus::Mini) => PlacementKind::MiniTspin2,
-            (2, _)                 => PlacementKind::Tspin2,
+            (2, _) => PlacementKind::Tspin2,
             (3, TspinStatus::None) => PlacementKind::Clear3,
             (3, TspinStatus::Mini) => unreachable!(),
-            (3, _)                 => PlacementKind::Tspin3,
+            (3, _) => PlacementKind::Tspin3,
             (4, TspinStatus::None) => PlacementKind::Clear4,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
-            PlacementKind::None       => "",
-            PlacementKind::Clear1     => "Single",
-            PlacementKind::Clear2     => "Double",
-            PlacementKind::Clear3     => "Triple",
-            PlacementKind::Clear4     => "Tetris",
-            PlacementKind::MiniTspin  => "Mini T-Spin",
+            PlacementKind::None => "",
+            PlacementKind::Clear1 => "Single",
+            PlacementKind::Clear2 => "Double",
+            PlacementKind::Clear3 => "Triple",
+            PlacementKind::Clear4 => "Tetris",
+            PlacementKind::MiniTspin => "Mini T-Spin",
             PlacementKind::MiniTspin1 => "Mini T-Spin Single",
             PlacementKind::MiniTspin2 => "Mini T-Spin Double",
-            PlacementKind::Tspin      => "T-Spin",
-            PlacementKind::Tspin1     => "T-Spin Single",
-            PlacementKind::Tspin2     => "T-Spin Double",
-            PlacementKind::Tspin3     => "T-Spin Triple",
+            PlacementKind::Tspin => "T-Spin",
+            PlacementKind::Tspin1 => "T-Spin Single",
+            PlacementKind::Tspin2 => "T-Spin Double",
+            PlacementKind::Tspin3 => "T-Spin Triple",
         }
     }
 
     pub fn short_name(self) -> &'static str {
         match self {
-            PlacementKind::None       => "...",
-            PlacementKind::Clear1     => "S",
-            PlacementKind::Clear2     => "D",
-            PlacementKind::Clear3     => "T",
-            PlacementKind::Clear4     => "Tet",
-            PlacementKind::MiniTspin  => "ts",
+            PlacementKind::None => "...",
+            PlacementKind::Clear1 => "S",
+            PlacementKind::Clear2 => "D",
+            PlacementKind::Clear3 => "T",
+            PlacementKind::Clear4 => "Tet",
+            PlacementKind::MiniTspin => "ts",
             PlacementKind::MiniTspin1 => "tss",
             PlacementKind::MiniTspin2 => "tsd",
-            PlacementKind::Tspin      => "TS",
-            PlacementKind::Tspin1     => "TSS",
-            PlacementKind::Tspin2     => "TSD",
-            PlacementKind::Tspin3     => "TST",
+            PlacementKind::Tspin => "TS",
+            PlacementKind::Tspin1 => "TSS",
+            PlacementKind::Tspin2 => "TSD",
+            PlacementKind::Tspin3 => "TST",
         }
     }
 }
@@ -123,12 +121,12 @@ impl Default for PlacementKind {
 }
 
 pub const COMBO_GARBAGE: [u32; 12] = [
-    0, 0,       // 0, 1 combo
-    1, 1,       // 2, 3 combo
-    2, 2,       // 4, 5 combo
-    3, 3,       // 6, 7 combo
-    4, 4, 4,    // 8, 9, 10 combo
-    5           // 11+ combo
+    0, 0, // 0, 1 combo
+    1, 1, // 2, 3 combo
+    2, 2, // 4, 5 combo
+    3, 3, // 6, 7 combo
+    4, 4, 4, // 8, 9, 10 combo
+    5, // 11+ combo
 ];
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Hash, Serialize, Deserialize)]
@@ -149,7 +147,7 @@ pub struct Statistics {
     pub mini_tspin_singles: u64,
     pub mini_tspin_doubles: u64,
     pub perfect_clears: u64,
-    pub max_combo: u64
+    pub max_combo: u64,
 }
 
 impl Statistics {
@@ -168,7 +166,7 @@ impl Statistics {
         }
 
         match l.placement_kind {
-            PlacementKind::None => {},
+            PlacementKind::None => {}
             PlacementKind::Clear1 => self.singles += 1,
             PlacementKind::Clear2 => self.doubles += 1,
             PlacementKind::Clear3 => self.triples += 1,
@@ -179,7 +177,7 @@ impl Statistics {
             PlacementKind::Tspin3 => self.tspin_triples += 1,
             PlacementKind::MiniTspin => self.mini_tspin_zeros += 1,
             PlacementKind::MiniTspin1 => self.mini_tspin_singles += 1,
-            PlacementKind::MiniTspin2 => self.mini_tspin_doubles += 1
+            PlacementKind::MiniTspin2 => self.mini_tspin_doubles += 1,
         }
     }
 }

@@ -1,26 +1,28 @@
-use crate::{ Board, FallingPiece, Piece, PieceState, RotationState, TspinStatus, PieceMovement };
-use arrayvec::ArrayVec;
 use std::cmp::Ordering;
-use std::collections::{ BinaryHeap, HashMap, HashSet };
-use serde::{ Serialize, Deserialize };
+use std::collections::{BinaryHeap, HashMap, HashSet};
+
+use arrayvec::ArrayVec;
+use serde::{Deserialize, Serialize};
+
+use crate::{Board, FallingPiece, Piece, PieceMovement, PieceState, RotationState, TspinStatus};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct InputList {
     pub movements: ArrayVec<[PieceMovement; 32]>,
-    pub time: u32
+    pub time: u32,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Placement {
     pub inputs: InputList,
-    pub location: FallingPiece
+    pub location: FallingPiece,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Move {
     pub inputs: ArrayVec<[PieceMovement; 32]>,
     pub expected_location: FallingPiece,
-    pub hold: bool
+    pub hold: bool,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -28,13 +30,20 @@ pub enum MovementMode {
     ZeroG,
     ZeroGComplete,
     TwentyG,
-    HardDropOnly
+    HardDropOnly,
 }
 
 impl Ord for Placement {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.inputs.time.cmp(&other.inputs.time)
-            .then(self.inputs.movements.len().cmp(&other.inputs.movements.len()))
+        self.inputs
+            .time
+            .cmp(&other.inputs.time)
+            .then(
+                self.inputs
+                    .movements
+                    .len()
+                    .cmp(&other.inputs.movements.len()),
+            )
             .reverse()
     }
 }
@@ -45,11 +54,7 @@ impl PartialOrd for Placement {
     }
 }
 
-pub fn find_moves(
-    board: &Board,
-    mut spawned: FallingPiece,
-    mode: MovementMode
-) -> Vec<Placement> {
+pub fn find_moves(board: &Board, mut spawned: FallingPiece, mode: MovementMode) -> Vec<Placement> {
     let mut locks = HashMap::with_capacity(128);
     let mut checked = HashSet::with_capacity(128);
     let mut check_queue = Vec::with_capacity(64);
@@ -59,12 +64,13 @@ pub fn find_moves(
         // We know that we can reach any column and rotation state without bumping into the terrain
         // at 0G here, so we can just grab those starting positions.
         let starts = match mode {
-            MovementMode::TwentyG => vec![
-                (spawned, InputList {
+            MovementMode::TwentyG => vec![(
+                spawned,
+                InputList {
                     movements: ArrayVec::new(),
-                    time: 0
-                })
-            ],
+                    time: 0,
+                },
+            )],
             _ => zero_g_starts(spawned.kind.0),
         };
         // Fast mode prevents checking a lot of stack movement that is unlikely (but still could)
@@ -83,7 +89,10 @@ pub fn find_moves(
                 if mode != MovementMode::TwentyG {
                     inputs.time += 2 * (orig_y - place.y) as u32;
                 }
-                check_queue.push(Placement { inputs, location: place });
+                check_queue.push(Placement {
+                    inputs,
+                    location: place,
+                });
             }
         }
     } else {
@@ -96,7 +105,7 @@ pub fn find_moves(
         checked.insert(spawned);
         check_queue.push(Placement {
             inputs: InputList { movements, time: 0 },
-            location: spawned
+            location: spawned,
         });
     }
 
@@ -107,55 +116,90 @@ pub fn find_moves(
         let position = placement.location;
         if !moves.movements.is_full() {
             attempt(
-                board, &moves, position,
-                &mut checked, &mut check_queue,
-                mode, fast_mode,
-                PieceMovement::Left, false
+                board,
+                &moves,
+                position,
+                &mut checked,
+                &mut check_queue,
+                mode,
+                fast_mode,
+                PieceMovement::Left,
+                false,
             );
             attempt(
-                board, &moves, position,
-                &mut checked, &mut check_queue,
-                mode, fast_mode,
-                PieceMovement::Right, false
+                board,
+                &moves,
+                position,
+                &mut checked,
+                &mut check_queue,
+                mode,
+                fast_mode,
+                PieceMovement::Right,
+                false,
             );
 
             if position.kind.0 != Piece::O {
                 attempt(
-                    board, &moves, position,
-                    &mut checked, &mut check_queue,
-                    mode, fast_mode,
-                    PieceMovement::Cw, false
+                    board,
+                    &moves,
+                    position,
+                    &mut checked,
+                    &mut check_queue,
+                    mode,
+                    fast_mode,
+                    PieceMovement::Cw,
+                    false,
                 );
 
                 attempt(
-                    board, &moves, position,
-                    &mut checked, &mut check_queue,
-                    mode, fast_mode,
-                    PieceMovement::Ccw, false
+                    board,
+                    &moves,
+                    position,
+                    &mut checked,
+                    &mut check_queue,
+                    mode,
+                    fast_mode,
+                    PieceMovement::Ccw,
+                    false,
                 );
             }
 
             if mode == MovementMode::ZeroG {
                 attempt(
-                    board, &moves, position,
-                    &mut checked, &mut check_queue,
-                    mode, fast_mode,
-                    PieceMovement::Left, true
+                    board,
+                    &moves,
+                    position,
+                    &mut checked,
+                    &mut check_queue,
+                    mode,
+                    fast_mode,
+                    PieceMovement::Left,
+                    true,
                 );
 
                 attempt(
-                    board, &moves, position,
-                    &mut checked, &mut check_queue,
-                    mode, fast_mode,
-                    PieceMovement::Right, true
+                    board,
+                    &moves,
+                    position,
+                    &mut checked,
+                    &mut check_queue,
+                    mode,
+                    fast_mode,
+                    PieceMovement::Right,
+                    true,
                 );
             }
 
             attempt(
-                board, &moves, position,
-                &mut checked, &mut check_queue,
-                mode, fast_mode,
-                PieceMovement::SonicDrop, false
+                board,
+                &moves,
+                position,
+                &mut checked,
+                &mut check_queue,
+                mode,
+                fast_mode,
+                PieceMovement::SonicDrop,
+                false,
             );
         }
 
@@ -167,13 +211,9 @@ pub fn find_moves(
     locks.into_iter().map(|(_, v)| v).collect()
 }
 
-fn lock_check(
-    piece: FallingPiece,
-    locks: &mut HashMap<FallingPiece, Placement>,
-    moves: InputList
-) {
+fn lock_check(piece: FallingPiece, locks: &mut HashMap<FallingPiece, Placement>, moves: InputList) {
     if piece.cells().iter().all(|&(_, y)| y >= 20) {
-        return
+        return;
     }
 
     // Since the first path to a location is always the shortest path to that location,
@@ -194,7 +234,7 @@ fn attempt(
     mode: MovementMode,
     fast_mode: bool,
     input: PieceMovement,
-    repeat: bool
+    repeat: bool,
 ) -> FallingPiece {
     let orig_y = piece.y;
     if input.apply(&mut piece, board) {
@@ -231,7 +271,10 @@ fn attempt(
                     moves.movements.push(PieceMovement::SonicDrop);
                 }
                 if !(mode == MovementMode::HardDropOnly && input == PieceMovement::SonicDrop) {
-                    check_queue.push(Placement { inputs: moves, location: piece });
+                    check_queue.push(Placement {
+                        inputs: moves,
+                        location: piece,
+                    });
                 }
             }
         }
@@ -241,8 +284,8 @@ fn attempt(
 
 fn zero_g_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
     use Piece::*;
-    use RotationState::*;
     use PieceMovement::*;
+    use RotationState::*;
     match p {
         O => vec![
             start(O, North, 0, &[Left, Left, Left, Left], 7),
@@ -326,20 +369,27 @@ fn zero_g_starts(p: Piece) -> Vec<(FallingPiece, InputList)> {
             start(p, South, 6, &[Cw, Right, Cw, Right], 4),
             start(p, South, 7, &[Right, Cw, Right, Cw, Right], 5),
             start(p, South, 8, &[Right, Cw, Right, Cw, Right, Right], 7),
-        ]
+        ],
     }
 }
 
 fn start(
-    p: Piece, r: RotationState, x: i32, i: &[PieceMovement], time: u32
+    p: Piece,
+    r: RotationState,
+    x: i32,
+    i: &[PieceMovement],
+    time: u32,
 ) -> (FallingPiece, InputList) {
-    (FallingPiece {
-        kind: PieceState(p, r),
-        x,
-        y: 19,
-        tspin: TspinStatus::None
-    }, InputList {
-        movements: i.iter().copied().collect(),
-        time
-    })
+    (
+        FallingPiece {
+            kind: PieceState(p, r),
+            x,
+            y: 19,
+            tspin: TspinStatus::None,
+        },
+        InputList {
+            movements: i.iter().copied().collect(),
+            time,
+        },
+    )
 }

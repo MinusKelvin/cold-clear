@@ -1,25 +1,26 @@
 // #![windows_subsystem = "windows"]
 
-use game_util::prelude::*;
-use game_util::{ GameloopCommand, LocalExecutor };
-use game_util::winit::dpi::{ PhysicalSize, LogicalSize };
-use game_util::winit::event::{ VirtualKeyCode, WindowEvent, ElementState };
-use game_util::winit::event_loop::EventLoopProxy;
-use game_util::winit::window::{ Window, WindowBuilder };
-use gilrs::{ Gilrs, Gamepad, GamepadId };
-use battle::GameConfig;
-use serde::de::DeserializeOwned;
 use std::collections::HashSet;
 use std::io::prelude::*;
+
+use battle::GameConfig;
 use cold_clear::evaluation::Evaluator;
 use cold_clear::Book;
+use game_util::prelude::*;
+use game_util::winit::dpi::{LogicalSize, PhysicalSize};
+use game_util::winit::event::{ElementState, VirtualKeyCode, WindowEvent};
+use game_util::winit::event_loop::EventLoopProxy;
+use game_util::winit::window::{Window, WindowBuilder};
+use game_util::{GameloopCommand, LocalExecutor};
+use gilrs::{Gamepad, GamepadId, Gilrs};
+use serde::de::DeserializeOwned;
 
-mod player_draw;
 mod battle_ui;
-mod res;
+mod input;
+mod player_draw;
 mod realtime;
 mod replay;
-mod input;
+mod res;
 
 use realtime::RealtimeGame;
 use replay::ReplayGame;
@@ -35,7 +36,7 @@ struct CCGui {
     gilrs: Gilrs,
     keys: HashSet<VirtualKeyCode>,
     p1: Option<GamepadId>,
-    p2: Option<GamepadId>
+    p2: Option<GamepadId>,
 }
 
 impl game_util::Game for CCGui {
@@ -46,7 +47,13 @@ impl game_util::Game for CCGui {
         let p1 = self.p1.map(|id| gilrs.gamepad(id));
         let p2 = self.p2.map(|id| gilrs.gamepad(id));
         self.state.update(
-            &self.el_proxy, &self.executor, &mut self.log, &mut self.res, &self.keys, p1, p2
+            &self.el_proxy,
+            &self.executor,
+            &mut self.log,
+            &mut self.res,
+            &self.keys,
+            p1,
+            p2,
         );
         GameloopCommand::Continue
     }
@@ -54,15 +61,19 @@ impl game_util::Game for CCGui {
     fn render(&mut self, _: &Window, _: f64, _smooth_delta: f64) {
         while let Some(event) = self.gilrs.next_event() {
             match event.event {
-                gilrs::EventType::Connected => if self.p1.is_none() {
-                    self.p1 = Some(event.id);
-                } else if self.p2.is_none() {
-                    self.p2 = Some(event.id);
+                gilrs::EventType::Connected => {
+                    if self.p1.is_none() {
+                        self.p1 = Some(event.id);
+                    } else if self.p2.is_none() {
+                        self.p2 = Some(event.id);
+                    }
                 }
-                gilrs::EventType::Disconnected => if self.p1 == Some(event.id) {
-                    self.p1 = None;
-                } else if self.p2 == Some(event.id) {
-                    self.p2 = None;
+                gilrs::EventType::Disconnected => {
+                    if self.p1 == Some(event.id) {
+                        self.p1 = None;
+                    } else if self.p2 == Some(event.id) {
+                        self.p2 = None;
+                    }
                 }
                 _ => {}
             }
@@ -70,9 +81,15 @@ impl game_util::Game for CCGui {
 
         const TARGET_ASPECT: f64 = 40.0 / 23.0;
         let vp = if (self.psize.width as f64 / self.psize.height as f64) < TARGET_ASPECT {
-            PhysicalSize::new(self.psize.width, (self.psize.width as f64 / TARGET_ASPECT) as u32)
+            PhysicalSize::new(
+                self.psize.width,
+                (self.psize.width as f64 / TARGET_ASPECT) as u32,
+            )
         } else {
-            PhysicalSize::new((self.psize.height as f64 * TARGET_ASPECT) as u32, self.psize.height)
+            PhysicalSize::new(
+                (self.psize.height as f64 * TARGET_ASPECT) as u32,
+                self.psize.height,
+            )
         };
         self.res.text.dpi = vp.width as f32 / 40.0;
 
@@ -80,9 +97,11 @@ impl game_util::Game for CCGui {
             self.gl.viewport(
                 ((self.psize.width - vp.width) / 2) as i32,
                 ((self.psize.height - vp.height) / 2) as i32,
-                vp.width as i32, vp.height as i32
+                vp.width as i32,
+                vp.height as i32,
             );
-            self.gl.clear_buffer_f32_slice(glow::COLOR, 0, &mut [0.0f32; 4]);
+            self.gl
+                .clear_buffer_f32_slice(glow::COLOR, 0, &mut [0.0f32; 4]);
         }
 
         self.state.render(&mut self.res);
@@ -97,11 +116,13 @@ impl game_util::Game for CCGui {
             WindowEvent::Resized(new_size) => {
                 self.psize = new_size;
             }
-            WindowEvent::KeyboardInput { input, .. } => if let Some(k) = input.virtual_keycode {
-                if input.state == ElementState::Pressed {
-                    self.keys.insert(k);
-                } else {
-                    self.keys.remove(&k);
+            WindowEvent::KeyboardInput { input, .. } => {
+                if let Some(k) = input.virtual_keycode {
+                    if input.state == ElementState::Pressed {
+                        self.keys.insert(k);
+                    } else {
+                        self.keys.remove(&k);
+                    }
                 }
             }
             _ => {}
@@ -127,7 +148,9 @@ pub fn main() {
         WindowBuilder::new()
             .with_title("Cold Clear")
             .with_inner_size(LogicalSize::new(1280.0, 720.0)),
-        60.0, true, |window, gl, el_proxy, executor| {
+        60.0,
+        true,
+        |window, gl, el_proxy, executor| {
             unsafe {
                 gl.enable(glow::BLEND);
                 gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
@@ -150,7 +173,7 @@ pub fn main() {
                 gilrs::Error::NotImplemented(g) => {
                     writeln!(log, "Gamepads are not supported on this platform.").ok();
                     g
-                },
+                }
                 e => {
                     writeln!(log, "Failure initializing gamepad support: {}", e).ok();
                     panic!()
@@ -162,20 +185,23 @@ pub fn main() {
 
             async move {
                 CCGui {
-                    log, psize,
+                    log,
+                    psize,
                     res: res::Resources::load(&gl, &executor).await,
                     el_proxy,
                     executor,
                     state: match replay_file {
                         Some(f) => Box::new(ReplayGame::new(f)),
-                        None => Box::new(RealtimeGame::new(options, 0, 0).await)
+                        None => Box::new(RealtimeGame::new(options, 0, 0).await),
                     },
-                    p1: p1_gamepad, p2: p2_gamepad, gilrs,
+                    p1: p1_gamepad,
+                    p2: p2_gamepad,
+                    gilrs,
                     keys: HashSet::new(),
-                    gl
+                    gl,
                 }
             }
-        }
+        },
     );
 }
 
@@ -188,7 +214,7 @@ trait State {
         res: &mut res::Resources,
         keys: &HashSet<VirtualKeyCode>,
         p1: Option<Gamepad>,
-        p2: Option<Gamepad>
+        p2: Option<Gamepad>,
     );
     fn render(&mut self, res: &mut res::Resources);
     fn event(&mut self, _res: &mut res::Resources, _event: &WindowEvent) {}
@@ -197,7 +223,7 @@ trait State {
 #[derive(Serialize, Deserialize, Clone)]
 struct Options {
     p1: PlayerConfig<cold_clear::evaluation::Standard>,
-    p2: PlayerConfig<cold_clear::evaluation::Standard>
+    p2: PlayerConfig<cold_clear::evaluation::Standard>,
 }
 
 impl Default for Options {
@@ -206,7 +232,7 @@ impl Default for Options {
         p2.is_bot = true;
         Options {
             p1: PlayerConfig::default(),
-            p2
+            p2,
         }
     }
 }
@@ -227,42 +253,57 @@ where
     E::Value: Serialize + DeserializeOwned,
 {
     pub async fn to_player(
-        &self, board: libtetris::Board
+        &self,
+        board: libtetris::Board,
     ) -> (Box<dyn input::InputSource>, String) {
         use crate::input::BotInput;
         if self.is_bot {
             let mut name = format!("Cold Clear\n{}", self.bot_config.weights.name());
             if self.bot_config.speed_limit != 0 {
-                name.push_str(
-                    &format!("\n{:.1}%", 100.0 / (self.bot_config.speed_limit + 1) as f32)
-                );
+                name.push_str(&format!(
+                    "\n{:.1}%",
+                    100.0 / (self.bot_config.speed_limit + 1) as f32
+                ));
             }
             #[cfg(not(target_arch = "wasm32"))]
-            let result = (Box::new(BotInput::new(cold_clear::Interface::launch(
-                board,
-                self.bot_config.options,
-                self.bot_config.weights.clone(),
-                self.bot_config.book_path.as_ref().and_then(|path| {
-                    let mut book_cache = self.bot_config.book_cache.borrow_mut();
-                    match &*book_cache {
-                        Some(b) => Some(b.clone()),
-                        None => {
-                            let book = Book::load(path).ok()?;
-                            let book = std::sync::Arc::new(book);
-                            *book_cache = Some(book.clone());
-                            Some(book)
-                        }
-                    }
-                })
-            ), self.bot_config.speed_limit)) as Box<_>, name);
+            let result = (
+                Box::new(BotInput::new(
+                    cold_clear::Interface::launch(
+                        board,
+                        self.bot_config.options,
+                        self.bot_config.weights.clone(),
+                        self.bot_config.book_path.as_ref().and_then(|path| {
+                            let mut book_cache = self.bot_config.book_cache.borrow_mut();
+                            match &*book_cache {
+                                Some(b) => Some(b.clone()),
+                                None => {
+                                    let book = Book::load(path).ok()?;
+                                    let book = std::sync::Arc::new(book);
+                                    *book_cache = Some(book.clone());
+                                    Some(book)
+                                }
+                            }
+                        }),
+                    ),
+                    self.bot_config.speed_limit,
+                )) as Box<_>,
+                name,
+            );
 
             #[cfg(target_arch = "wasm32")]
-            let result = (Box::new(BotInput::new(cold_clear::Interface::launch(
-                "./worker.js",
-                board,
-                self.bot_config.options,
-                self.bot_config.weights.clone()
-            ).await, self.bot_config.speed_limit)) as Box<_>, name);
+            let result = (
+                Box::new(BotInput::new(
+                    cold_clear::Interface::launch(
+                        "./worker.js",
+                        board,
+                        self.bot_config.options,
+                        self.bot_config.weights.clone(),
+                    )
+                    .await,
+                    self.bot_config.speed_limit,
+                )) as Box<_>,
+                name,
+            );
 
             result
         } else {
@@ -279,7 +320,7 @@ struct BotConfig<E> {
     speed_limit: u32,
     book_path: Option<String>,
     #[serde(skip)]
-    book_cache: std::rc::Rc<std::cell::RefCell<Option<std::sync::Arc<Book>>>>
+    book_cache: std::rc::Rc<std::cell::RefCell<Option<std::sync::Arc<Book>>>>,
 }
 
 #[derive(Default)]

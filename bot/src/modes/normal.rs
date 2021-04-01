@@ -1,17 +1,18 @@
-use serde::{ Serialize, Deserialize };
 use enum_map::EnumMap;
 use libtetris::*;
 use opening_book::Book;
+use serde::{Deserialize, Serialize};
+
 // use crate::tree::{ ChildData, TreeState, NodeId };
-use crate::dag::{ DagState, NodeId, ChildData };
-use crate::Options;
+use crate::dag::{ChildData, DagState, NodeId};
 use crate::evaluation::Evaluator;
+use crate::Options;
 
 pub struct BotState<E: Evaluator> {
     tree: DagState<E::Value, E::Reward>,
     options: Options,
     forced_analysis_lines: Vec<Vec<FallingPiece>>,
-    pub outstanding_thinks: u32
+    pub outstanding_thinks: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -25,7 +26,7 @@ pub struct Thinker {
 pub enum ThinkResult<V, R> {
     Known(NodeId, Vec<ChildData<V, R>>),
     Speculated(NodeId, EnumMap<Piece, Option<Vec<ChildData<V, R>>>>),
-    Unmark(NodeId)
+    Unmark(NodeId),
 }
 
 impl<E: Evaluator> BotState<E> {
@@ -34,29 +35,32 @@ impl<E: Evaluator> BotState<E> {
             tree: DagState::new(board, options.use_hold),
             options,
             forced_analysis_lines: vec![],
-            outstanding_thinks: 0
+            outstanding_thinks: 0,
         }
     }
 
     /// Prepare a thinking cycle.
-    /// 
-    /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find 
+    ///
+    /// Returns `Err(true)` if a thinking cycle can be preformed, but it couldn't find
     pub fn think(&mut self) -> Result<Thinker, bool> {
         if (!self.min_thinking_reached() || self.tree.nodes() < self.options.max_nodes)
-                && !self.tree.is_dead() {
-            if let Some((node, board)) = self.tree.find_and_mark_leaf(
-                &mut self.forced_analysis_lines
-            ) {
+            && !self.tree.is_dead()
+        {
+            if let Some((node, board)) = self
+                .tree
+                .find_and_mark_leaf(&mut self.forced_analysis_lines)
+            {
                 self.outstanding_thinks += 1;
                 return Ok(Thinker {
-                    node, board,
+                    node,
+                    board,
                     options: self.options,
                 });
             } else {
-                return Err(true)
+                return Err(true);
             }
         } else {
-            return Err(false)
+            return Err(false);
         }
     }
 
@@ -65,7 +69,7 @@ impl<E: Evaluator> BotState<E> {
         match result {
             ThinkResult::Known(node, children) => self.tree.update_known(node, children),
             ThinkResult::Speculated(node, children) => self.tree.update_speculated(node, children),
-            ThinkResult::Unmark(node) => self.tree.unmark(node)
+            ThinkResult::Unmark(node) => self.tree.unmark(node),
         }
     }
 
@@ -99,9 +103,9 @@ impl<E: Evaluator> BotState<E> {
     }
 
     pub fn min_thinking_reached(&self) -> bool {
-        self.tree.nodes() > self.options.min_nodes &&
-            self.forced_analysis_lines.is_empty() &&
-            !self.tree.get_next_candidates().is_empty()
+        self.tree.nodes() > self.options.min_nodes
+            && self.forced_analysis_lines.is_empty()
+            && !self.tree.get_next_candidates().is_empty()
     }
 
     pub fn suggest_move(
@@ -111,12 +115,12 @@ impl<E: Evaluator> BotState<E> {
         incoming: u32,
     ) -> Option<(Move, crate::Info)> {
         if !self.min_thinking_reached() {
-            return None
+            return None;
         }
 
         let candidates = self.tree.get_next_candidates();
         if candidates.is_empty() {
-            return None
+            return None;
         }
         let mut book_move = None;
         if let Some(book) = book {
@@ -148,8 +152,16 @@ impl<E: Evaluator> BotState<E> {
             crate::Info::Book
         } else {
             crate::Info::Normal(Info {
-                nodes: if book_move.is_some() { 0 } else { self.tree.nodes() },
-                depth: if book_move.is_some() { 6 } else { self.tree.depth() as u32 },
+                nodes: if book_move.is_some() {
+                    0
+                } else {
+                    self.tree.nodes()
+                },
+                depth: if book_move.is_some() {
+                    6
+                } else {
+                    self.tree.depth() as u32
+                },
                 original_rank: child.original_rank,
                 plan,
             })
@@ -157,13 +169,20 @@ impl<E: Evaluator> BotState<E> {
 
         let inputs = find_moves(
             self.tree.board(),
-            self.options.spawn_rule.spawn(child.mv.kind.0, self.tree.board()).unwrap(),
-            self.options.mode
-        ).into_iter().find(|p| p.location == child.mv).unwrap().inputs;
+            self.options
+                .spawn_rule
+                .spawn(child.mv.kind.0, self.tree.board())
+                .unwrap(),
+            self.options.mode,
+        )
+        .into_iter()
+        .find(|p| p.location == child.mv)
+        .unwrap()
+        .inputs;
         let mv = Move {
             hold: child.hold,
             inputs: inputs.movements,
-            expected_location: child.mv
+            expected_location: child.mv,
         };
 
         return Some((mv, info));
@@ -194,8 +213,10 @@ impl Thinker {
                 ThinkResult::Unmark(self.node)
             }
         } else {
-            if self.options.use_hold && self.board.hold_piece.is_none() &&
-                    self.board.get_next_next_piece().is_none() {
+            if self.options.use_hold
+                && self.board.hold_piece.is_none()
+                && self.board.get_next_next_piece().is_none()
+            {
                 // Next known, hold unknown => Speculate
                 if self.options.speculate {
                     let mut children = EnumMap::new();
@@ -222,28 +243,32 @@ impl Thinker {
     }
 
     fn make_children<E: Evaluator>(
-        &self, mut board: Board, eval: &E
+        &self,
+        mut board: Board,
+        eval: &E,
     ) -> Vec<ChildData<E::Value, E::Reward>> {
         let mut children = vec![];
 
         let next = board.advance_queue().unwrap();
         let spawned = match self.options.spawn_rule.spawn(next, &board) {
             Some(spawned) => spawned,
-            None => return children
+            None => return children,
         };
 
         self.add_children(&mut children, &board, eval, spawned, false);
 
         if self.options.use_hold {
-            let hold = board.hold(next).unwrap_or_else(|| board.advance_queue().unwrap());
+            let hold = board
+                .hold(next)
+                .unwrap_or_else(|| board.advance_queue().unwrap());
             if hold == next {
-                return children
+                return children;
             }
             let spawned = match self.options.spawn_rule.spawn(hold, &board) {
                 Some(spawned) => spawned,
-                None => return children
+                None => return children,
             };
-        
+
             self.add_children(&mut children, &board, eval, spawned, true);
         }
 
@@ -256,24 +281,22 @@ impl Thinker {
         board: &Board,
         eval: &E,
         spawned: FallingPiece,
-        hold: bool
+        hold: bool,
     ) {
         for mv in find_moves(&board, spawned, self.options.mode) {
-            let can_be_hd = board.above_stack(&mv.location) &&
-            board.column_heights().iter().all(|&y| y < 18);
+            let can_be_hd =
+                board.above_stack(&mv.location) && board.column_heights().iter().all(|&y| y < 18);
             let mut result = board.clone();
             let lock = result.lock_piece(mv.location);
             // Don't add deaths by lock out, don't add useless mini tspins
             if !lock.locked_out && !(can_be_hd && lock.placement_kind == PlacementKind::MiniTspin) {
                 let move_time = mv.inputs.time + if hold { 1 } else { 0 };
-                let (evaluation, reward) = eval.evaluate(
-                    &lock, &result, move_time, spawned.kind.0
-                );
+                let (evaluation, reward) = eval.evaluate(&lock, &result, move_time, spawned.kind.0);
                 children.push(ChildData {
                     evaluation,
                     reward,
                     board: result,
-                    mv: mv.location
+                    mv: mv.location,
                 });
             }
         }
@@ -285,5 +308,5 @@ pub struct Info {
     pub nodes: u32,
     pub depth: u32,
     pub original_rank: u32,
-    pub plan: Vec<(FallingPiece, LockResult)>
+    pub plan: Vec<(FallingPiece, LockResult)>,
 }

@@ -1,15 +1,16 @@
-use battle::Replay;
-use serde::{ Serialize, Deserialize };
-use std::collections::{ HashSet, VecDeque };
-use std::path::PathBuf;
+use std::collections::{HashSet, VecDeque};
 use std::fs::File;
-use battle::Battle;
-use libtetris::Controller;
-use gilrs::Gamepad;
+use std::path::PathBuf;
+
+use battle::{Battle, Replay};
 use game_util::text::Alignment;
 use game_util::winit::event::VirtualKeyCode;
 use game_util::winit::event_loop::EventLoopProxy;
 use game_util::LocalExecutor;
+use gilrs::Gamepad;
+use libtetris::Controller;
+use serde::{Deserialize, Serialize};
+
 use crate::battle_ui::BattleUi;
 use crate::res::Resources;
 
@@ -20,29 +21,33 @@ pub struct ReplayGame {
     updates: VecDeque<(Controller, Controller)>,
     p1_info_updates: VecDeque<Option<cold_clear::Info>>,
     p2_info_updates: VecDeque<Option<cold_clear::Info>>,
-    start_delay: u32
+    start_delay: u32,
 }
 
 impl ReplayGame {
     pub fn new(file: impl Into<PathBuf>) -> Self {
         let file = file.into();
         let InfoReplay {
-            replay, p1_info_updates, p2_info_updates
-        } = bincode::deserialize_from(
-            libflate::deflate::Decoder::new(File::open(&file).unwrap())
-        ).unwrap();
+            replay,
+            p1_info_updates,
+            p2_info_updates,
+        } = bincode::deserialize_from(libflate::deflate::Decoder::new(File::open(&file).unwrap()))
+            .unwrap();
         let battle = Battle::new(
-            replay.p1_config, replay.p2_config,
-            replay.p1_seed, replay.p2_seed,
-            replay.garbage_seed
+            replay.p1_config,
+            replay.p2_config,
+            replay.p1_seed,
+            replay.p2_seed,
+            replay.garbage_seed,
         );
         ReplayGame {
             ui: BattleUi::new(&battle, replay.p1_name, replay.p2_name),
             battle,
             updates: replay.updates,
-            p1_info_updates, p2_info_updates,
+            p1_info_updates,
+            p2_info_updates,
             start_delay: 500,
-            file
+            file,
         }
     }
 }
@@ -56,15 +61,16 @@ impl crate::State for ReplayGame {
         res: &mut Resources,
         _keys: &HashSet<VirtualKeyCode>,
         _p1: Option<Gamepad>,
-        _p2: Option<Gamepad>
+        _p2: Option<Gamepad>,
     ) {
         if self.start_delay == 0 {
             if let Some((p1_controller, p2_controller)) = self.updates.pop_front() {
                 let update = self.battle.update(p1_controller, p2_controller);
                 self.ui.update(
-                    res, update,
+                    res,
+                    update,
                     self.p1_info_updates.pop_front().flatten(),
-                    self.p2_info_updates.pop_front().flatten()
+                    self.p2_info_updates.pop_front().flatten(),
                 );
             } else {
                 let replay;
@@ -74,7 +80,7 @@ impl crate::State for ReplayGame {
                             match bincode::deserialize_from(libflate::deflate::Decoder::new(f)) {
                                 Ok(r) => {
                                     replay = r;
-                                    break
+                                    break;
                                 }
                                 Err(_) => {}
                             }
@@ -82,11 +88,17 @@ impl crate::State for ReplayGame {
                         Err(_) => {}
                     }
                 }
-                let InfoReplay { replay, p1_info_updates, p2_info_updates } = replay;
+                let InfoReplay {
+                    replay,
+                    p1_info_updates,
+                    p2_info_updates,
+                } = replay;
                 let battle = Battle::new(
-                    replay.p1_config, replay.p2_config,
-                    replay.p1_seed, replay.p2_seed,
-                    replay.garbage_seed
+                    replay.p1_config,
+                    replay.p2_config,
+                    replay.p1_seed,
+                    replay.p2_seed,
+                    replay.garbage_seed,
                 );
                 self.ui = BattleUi::new(&battle, replay.p1_name, replay.p2_name);
                 self.battle = battle;
@@ -104,15 +116,21 @@ impl crate::State for ReplayGame {
         if self.start_delay != 0 {
             res.text.draw_text(
                 &format!("{}", self.start_delay / 60 + 1),
-                9.5, 12.25,
+                9.5,
+                12.25,
                 Alignment::Center,
-                [0xFF; 4], 3.0, 0
+                [0xFF; 4],
+                3.0,
+                0,
             );
             res.text.draw_text(
                 &format!("{}", self.start_delay / 60 + 1),
-                29.5, 12.25,
+                29.5,
+                12.25,
                 Alignment::Center,
-                [0xFF; 4], 3.0, 0
+                [0xFF; 4],
+                3.0,
+                0,
             );
         }
         self.ui.draw(res);
@@ -123,5 +141,5 @@ impl crate::State for ReplayGame {
 pub struct InfoReplay {
     pub replay: Replay,
     pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
-    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>,
 }

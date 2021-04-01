@@ -1,14 +1,18 @@
-use libtetris::*;
-use battle::{ Event, PieceMoveExecutor };
-use game_util::winit::event::VirtualKeyCode;
-use gilrs::{ Gamepad, Axis, Button };
-use serde::{ Serialize, Deserialize };
 use std::collections::HashSet;
+
+use battle::{Event, PieceMoveExecutor};
+use game_util::winit::event::VirtualKeyCode;
+use gilrs::{Axis, Button, Gamepad};
+use libtetris::*;
+use serde::{Deserialize, Serialize};
 
 pub trait InputSource {
     fn controller(&self, keys: &HashSet<VirtualKeyCode>, gamepad: Option<Gamepad>) -> Controller;
     fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
+        &mut self,
+        board: &Board<ColoredRow>,
+        events: &[Event],
+        incoming: u32,
     ) -> Option<cold_clear::Info>;
 }
 
@@ -16,7 +20,7 @@ pub struct BotInput {
     interface: cold_clear::Interface,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     controller: Controller,
-    speed_limit: u32
+    speed_limit: u32,
 }
 
 impl BotInput {
@@ -36,7 +40,10 @@ impl InputSource for BotInput {
     }
 
     fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
+        &mut self,
+        board: &Board<ColoredRow>,
+        events: &[Event],
+        incoming: u32,
     ) -> Option<cold_clear::Info> {
         for event in events {
             match event {
@@ -47,7 +54,8 @@ impl InputSource for BotInput {
                     }
                 }
                 Event::GarbageAdded(_) => {
-                    self.interface.reset(board.get_field(), board.b2b_bonus, board.combo);
+                    self.interface
+                        .reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
                 _ => {}
             }
@@ -58,13 +66,14 @@ impl InputSource for BotInput {
             info = Some(i);
             self.executing = Some((
                 mv.expected_location,
-                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), self.speed_limit)
+                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), self.speed_limit),
             ));
         }
         if let Some((expected, ref mut executor)) = self.executing {
             if let Some(loc) = executor.update(&mut self.controller, board, events) {
                 if loc != expected {
-                    self.interface.reset(board.get_field(), board.b2b_bonus, board.combo);
+                    self.interface
+                        .reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
                 self.executing = None;
             }
@@ -87,7 +96,7 @@ struct Config<T> {
     rotate_right: T,
     hard_drop: T,
     soft_drop: T,
-    hold: T
+    hold: T,
 }
 
 impl Default for Config<VirtualKeyCode> {
@@ -113,7 +122,7 @@ impl Default for Config<GamepadControl> {
             rotate_right: GamepadControl::Button(Button::East),
             hard_drop: GamepadControl::Button(Button::DPadUp),
             soft_drop: GamepadControl::Button(Button::DPadDown),
-            hold: GamepadControl::Button(Button::LeftTrigger)
+            hold: GamepadControl::Button(Button::LeftTrigger),
         }
     }
 }
@@ -121,27 +130,33 @@ impl Default for Config<GamepadControl> {
 impl InputSource for UserInput {
     fn controller(&self, keys: &HashSet<VirtualKeyCode>, gamepad: Option<Gamepad>) -> Controller {
         Controller {
-            left: self.read_input(
-                keys, gamepad, self.keyboard.left, self.gamepad.left
-            ),
-            right: self.read_input(
-                keys, gamepad, self.keyboard.right, self.gamepad.right
-            ),
+            left: self.read_input(keys, gamepad, self.keyboard.left, self.gamepad.left),
+            right: self.read_input(keys, gamepad, self.keyboard.right, self.gamepad.right),
             rotate_left: self.read_input(
-                keys, gamepad, self.keyboard.rotate_left, self.gamepad.rotate_left
+                keys,
+                gamepad,
+                self.keyboard.rotate_left,
+                self.gamepad.rotate_left,
             ),
             rotate_right: self.read_input(
-                keys, gamepad, self.keyboard.rotate_right, self.gamepad.rotate_right
+                keys,
+                gamepad,
+                self.keyboard.rotate_right,
+                self.gamepad.rotate_right,
             ),
             hard_drop: self.read_input(
-                keys, gamepad, self.keyboard.hard_drop, self.gamepad.hard_drop
+                keys,
+                gamepad,
+                self.keyboard.hard_drop,
+                self.gamepad.hard_drop,
             ),
             soft_drop: self.read_input(
-                keys, gamepad, self.keyboard.soft_drop, self.gamepad.soft_drop
+                keys,
+                gamepad,
+                self.keyboard.soft_drop,
+                self.gamepad.soft_drop,
             ),
-            hold: self.read_input(
-                keys, gamepad, self.keyboard.hold, self.gamepad.hold
-            ),
+            hold: self.read_input(keys, gamepad, self.keyboard.hold, self.gamepad.hold),
         }
     }
 
@@ -153,14 +168,17 @@ impl InputSource for UserInput {
 impl UserInput {
     fn read_input(
         &self,
-        keys: &HashSet<VirtualKeyCode>, controller: Option<Gamepad>,
-        keyboard: VirtualKeyCode, gamepad: GamepadControl
+        keys: &HashSet<VirtualKeyCode>,
+        controller: Option<Gamepad>,
+        keyboard: VirtualKeyCode,
+        gamepad: GamepadControl,
     ) -> bool {
-        keys.contains(&keyboard) || controller.map_or(false, |c| match gamepad {
-            GamepadControl::Button(button) => c.is_pressed(button),
-            GamepadControl::PositiveAxis(axis) => c.value(axis) > 0.5,
-            GamepadControl::NegativeAxis(axis) => c.value(axis) < -0.5,
-        })
+        keys.contains(&keyboard)
+            || controller.map_or(false, |c| match gamepad {
+                GamepadControl::Button(button) => c.is_pressed(button),
+                GamepadControl::PositiveAxis(axis) => c.value(axis) > 0.5,
+                GamepadControl::NegativeAxis(axis) => c.value(axis) < -0.5,
+            })
     }
 }
 
@@ -168,5 +186,5 @@ impl UserInput {
 enum GamepadControl {
     Button(Button),
     NegativeAxis(Axis),
-    PositiveAxis(Axis)
+    PositiveAxis(Axis),
 }

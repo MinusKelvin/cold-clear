@@ -1,14 +1,15 @@
-use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
-use battle::{ Event, PieceMoveExecutor };
-use std::time::{ Instant, Duration };
+use std::time::{Duration, Instant};
+
+use battle::{Event, PieceMoveExecutor};
 use cold_clear::evaluation::Evaluator;
+use libtetris::{Board, ColoredRow, Controller, FallingPiece};
 
 pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     time_budget: Duration,
     bot: cold_clear::BotState<E>,
-    eval: E
+    eval: E,
 }
 
 const THINK_AMOUNT: Duration = Duration::from_millis(4);
@@ -20,7 +21,7 @@ impl<E: Evaluator> BotInput<E> {
             executing: None,
             time_budget: Duration::new(0, 0),
             bot: cold_clear::BotState::new(board, Default::default()),
-            eval
+            eval,
         };
         for _ in 0..180 {
             // equivalent of 3 realtime seconds of thinking
@@ -40,7 +41,7 @@ impl<E: Evaluator> BotInput<E> {
                 Err(_) => {
                     // can't think anymore
                     self.time_budget = THINK_AMOUNT;
-                    break
+                    break;
                 }
             }
             self.time_budget += start.elapsed();
@@ -49,7 +50,10 @@ impl<E: Evaluator> BotInput<E> {
     }
 
     pub fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
+        &mut self,
+        board: &Board<ColoredRow>,
+        events: &[Event],
+        incoming: u32,
     ) -> Option<cold_clear::Info> {
         self.think();
 
@@ -63,14 +67,15 @@ impl<E: Evaluator> BotInput<E> {
                             info = Some(inf);
                             self.executing = Some((
                                 mv.expected_location,
-                                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), 0)
+                                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), 0),
                             ));
                             self.bot.advance_move(mv.expected_location);
                         };
                     }
                 }
                 Event::GarbageAdded(_) => {
-                    self.bot.reset(board.get_field(), board.b2b_bonus, board.combo);
+                    self.bot
+                        .reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
                 _ => {}
             }
@@ -79,7 +84,8 @@ impl<E: Evaluator> BotInput<E> {
         if let Some((expected, ref mut executor)) = self.executing {
             if let Some(loc) = executor.update(&mut self.controller, board, events) {
                 if loc != expected {
-                    self.bot.reset(board.get_field(), board.b2b_bonus, board.combo);
+                    self.bot
+                        .reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
                 self.executing = None;
             }

@@ -1,5 +1,6 @@
 use libtetris::*;
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
+
 use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -42,7 +43,7 @@ pub struct Standard {
     pub use_bag: bool,
     pub timed_jeopardy: bool,
     pub stack_pc_damage: bool,
-    pub sub_name: Option<String>
+    pub sub_name: Option<String>,
 }
 
 impl Default for Standard {
@@ -85,7 +86,7 @@ impl Default for Standard {
             use_bag: true,
             timed_jeopardy: true,
             stack_pc_damage: false,
-            sub_name: None
+            sub_name: None,
         }
     }
 }
@@ -128,7 +129,7 @@ impl Standard {
             use_bag: true,
             timed_jeopardy: false,
             stack_pc_damage: false,
-            sub_name: None
+            sub_name: None,
         }
     }
 }
@@ -147,14 +148,18 @@ impl Evaluator for Standard {
     }
 
     fn pick_move(
-        &self, candidates: Vec<MoveCandidate<Value>>, incoming: u32
+        &self,
+        candidates: Vec<MoveCandidate<Value>>,
+        incoming: u32,
     ) -> MoveCandidate<Value> {
         let mut backup = None;
         for mv in candidates.into_iter() {
-            if incoming == 0 || mv.board.column_heights()[3..6].iter().all(
-                |h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20
-            ) {
-                return mv
+            if incoming == 0
+                || mv.board.column_heights()[3..6]
+                    .iter()
+                    .all(|h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20)
+            {
+                return mv;
             }
 
             match backup {
@@ -168,7 +173,11 @@ impl Evaluator for Standard {
     }
 
     fn evaluate(
-        &self, lock: &LockResult, board: &Board, move_time: u32, placed: Piece
+        &self,
+        lock: &LockResult,
+        board: &Board,
+        move_time: u32,
+        placed: Piece,
     ) -> (Value, Reward) {
         let mut transient_eval = 0;
         let mut acc_eval = 0;
@@ -219,7 +228,7 @@ impl Evaluator for Standard {
         if placed == Piece::T {
             match lock.placement_kind {
                 PlacementKind::Tspin1 | PlacementKind::Tspin2 | PlacementKind::Tspin3 => {}
-                _ => acc_eval += self.wasted_t
+                _ => acc_eval += self.wasted_t,
             }
         }
 
@@ -259,10 +268,10 @@ impl Evaluator for Standard {
                 .or_else(|| {
                     let tst = tst_twist_left(&board).or_else(|| tst_twist_right(&board))?;
                     cave_tslot(&board, tst).or_else(|| {
-                        let corners = board.occupied(tst.x-1, tst.y-1) as usize
-                            + board.occupied(tst.x+1, tst.y-1) as usize
-                            + board.occupied(tst.x-1, tst.y+1) as usize
-                            + board.occupied(tst.x+1, tst.y+1) as usize;
+                        let corners = board.occupied(tst.x - 1, tst.y - 1) as usize
+                            + board.occupied(tst.x + 1, tst.y - 1) as usize
+                            + board.occupied(tst.x - 1, tst.y + 1) as usize
+                            + board.occupied(tst.x + 1, tst.y + 1) as usize;
                         if corners >= 3 && board.on_stack(&tst) {
                             Some(tst)
                         } else {
@@ -274,13 +283,13 @@ impl Evaluator for Standard {
                 .or_else(|| fin_right(&board));
             let result = match cutout_location {
                 Some(location) => cutout_tslot(board.clone(), location),
-                None => break
+                None => break,
             };
             transient_eval += self.tslot[result.lines];
             if let Some(b) = result.result {
                 board = b;
             } else {
-                break
+                break;
             }
         }
 
@@ -295,7 +304,7 @@ impl Evaluator for Standard {
         }
 
         let mut depth = 0;
-        'yloop: for y in board.column_heights()[well] .. 20 {
+        'yloop: for y in board.column_heights()[well]..20 {
             for x in 0..10 {
                 if x as usize != well && !board.occupied(x, y) {
                     break 'yloop;
@@ -310,11 +319,12 @@ impl Evaluator for Standard {
         }
 
         if self.row_transitions != 0 {
-            transient_eval += self.row_transitions * (0..40)
-                .map(|y| *board.get_row(y))
-                .map(|r| (r | 0b1_00000_00000) ^ (1 | r << 1))
-                .map(|d| d.count_ones() as i32)
-                .sum::<i32>();
+            transient_eval += self.row_transitions
+                * (0..40)
+                    .map(|y| *board.get_row(y))
+                    .map(|r| (r | 0b1_00000_00000) ^ (1 | r << 1))
+                    .map(|d| d.count_ones() as i32)
+                    .sum::<i32>();
         }
 
         if self.bumpiness | self.bumpiness_sq != 0 {
@@ -323,8 +333,9 @@ impl Evaluator for Standard {
             transient_eval += bump_sq * self.bumpiness_sq;
         }
 
-        if self.cavity_cells | self.cavity_cells_sq |
-                self.overhang_cells | self.overhang_cells_sq != 0 {
+        if self.cavity_cells | self.cavity_cells_sq | self.overhang_cells | self.overhang_cells_sq
+            != 0
+        {
             let (cavity_cells, overhang_cells) = cavities_and_overhangs(&board);
             transient_eval += self.cavity_cells * cavity_cells;
             transient_eval += self.cavity_cells_sq * cavity_cells * cavity_cells;
@@ -338,18 +349,25 @@ impl Evaluator for Standard {
             transient_eval += self.covered_cells_sq * covered_cells_sq;
         }
 
-        (Value {
-            value: transient_eval,
-            spike: 0
-        }, Reward {
-            value: acc_eval,
-            attack: if lock.placement_kind.is_clear() { lock.garbage_sent as i32 } else { -1 }
-        })
+        (
+            Value {
+                value: transient_eval,
+                spike: 0,
+            },
+            Reward {
+                value: acc_eval,
+                attack: if lock.placement_kind.is_clear() {
+                    lock.garbage_sent as i32
+                } else {
+                    -1
+                },
+            },
+        )
     }
 }
 
 /// Evaluates the bumpiness of the playfield.
-/// 
+///
 /// The first returned value is the total amount of height change outside of an apparent well. The
 /// second returned value is the sum of the squares of the height changes outside of an apparent
 /// well.
@@ -360,7 +378,7 @@ fn bumpiness(board: &Board, well: usize) -> (i32, i32) {
     let mut prev = if well == 0 { 1 } else { 0 };
     for i in 1..10 {
         if i == well {
-            continue
+            continue;
         }
         let dh = (board.column_heights()[prev] - board.column_heights()[i]).abs();
         bumpiness += dh;
@@ -372,7 +390,7 @@ fn bumpiness(board: &Board, well: usize) -> (i32, i32) {
 }
 
 /// Evaluates the holes in the playfield.
-/// 
+///
 /// The first returned value is the number of cells that make up fully enclosed spaces (cavities).
 /// The second is the number of cells that make up partially enclosed spaces (overhangs).
 fn cavities_and_overhangs(board: &Board) -> (i32, i32) {
@@ -382,20 +400,20 @@ fn cavities_and_overhangs(board: &Board) -> (i32, i32) {
     for y in 0..*board.column_heights().iter().max().unwrap() {
         for x in 0..10 {
             if board.occupied(x as i32, y) || y >= board.column_heights()[x] {
-                continue
+                continue;
             }
 
             if x > 1 {
-                if board.column_heights()[x-1] <= y-1 && board.column_heights()[x-2] <= y {
+                if board.column_heights()[x - 1] <= y - 1 && board.column_heights()[x - 2] <= y {
                     overhangs += 1;
-                    continue
+                    continue;
                 }
             }
 
             if x < 8 {
-                if board.column_heights()[x+1] <= y-1 && board.column_heights()[x+2] <= y {
+                if board.column_heights()[x + 1] <= y - 1 && board.column_heights()[x + 2] <= y {
                     overhangs += 1;
-                    continue
+                    continue;
                 }
             }
 
@@ -407,7 +425,7 @@ fn cavities_and_overhangs(board: &Board) -> (i32, i32) {
 }
 
 /// Evaluates how covered holes in the playfield are.
-/// 
+///
 /// The first returned value is the number of filled cells cover the topmost hole in the columns.
 /// The second value is the sum of the squares of those values.
 fn covered_cells(board: &Board) -> (i32, i32) {
@@ -556,32 +574,34 @@ fn cave_tslot(board: &Board, mut starting_point: FallingPiece) -> Option<Falling
     match starting_point.kind.1 {
         RotationState::East => {
             // Check:
-            // []<>      <>  
+            // []<>      <>
             // ..<><>  []<><>[]
             // []<>[]    <>....
             //           []..[]
-            if !board.occupied(x-1, y) &&
-                board.occupied(x-1, y-1) &&
-                board.occupied(x+1, y-1) &&
-                board.occupied(x-1, y+1)
+            if !board.occupied(x - 1, y)
+                && board.occupied(x - 1, y - 1)
+                && board.occupied(x + 1, y - 1)
+                && board.occupied(x - 1, y + 1)
             {
                 Some(FallingPiece {
-                    x, y,
+                    x,
+                    y,
                     kind: PieceState(Piece::T, RotationState::South),
-                    tspin: TspinStatus::None
+                    tspin: TspinStatus::None,
                 })
-            } else if !board.occupied(x+1, y-1) &&
-                !board.occupied(x+2, y-1) &&
-                !board.occupied(x+1, y-2) &&
-                board.occupied(x-1, y) &&
-                board.occupied(x+2, y) &&
-                board.occupied(x, y-2) &&
-                board.occupied(x+2, y-2)
+            } else if !board.occupied(x + 1, y - 1)
+                && !board.occupied(x + 2, y - 1)
+                && !board.occupied(x + 1, y - 2)
+                && board.occupied(x - 1, y)
+                && board.occupied(x + 2, y)
+                && board.occupied(x, y - 2)
+                && board.occupied(x + 2, y - 2)
             {
                 Some(FallingPiece {
-                    x: x+1, y: y-1,
+                    x: x + 1,
+                    y: y - 1,
                     kind: PieceState(Piece::T, RotationState::South),
-                    tspin: TspinStatus::None
+                    tspin: TspinStatus::None,
                 })
             } else {
                 None
@@ -593,40 +613,42 @@ fn cave_tslot(board: &Board, mut starting_point: FallingPiece) -> Option<Falling
             // <><>..  []<><>[]
             // []<>[]  ....<>
             //         []..[]
-            if !board.occupied(x+1, y) &&
-                board.occupied(x+1, y+1) &&
-                board.occupied(x+1, y-1) &&
-                board.occupied(x-1, y-1)
+            if !board.occupied(x + 1, y)
+                && board.occupied(x + 1, y + 1)
+                && board.occupied(x + 1, y - 1)
+                && board.occupied(x - 1, y - 1)
             {
                 Some(FallingPiece {
-                    x, y,
+                    x,
+                    y,
                     kind: PieceState(Piece::T, RotationState::South),
-                    tspin: TspinStatus::None
+                    tspin: TspinStatus::None,
                 })
-            } else if !board.occupied(x-1, y-1) &&
-                !board.occupied(x-2, y-1) &&
-                !board.occupied(x-1, y-2) &&
-                board.occupied(x+1, y) &&
-                board.occupied(x-2, y) &&
-                board.occupied(x-2, y-2) &&
-                board.occupied(x, y-2)
+            } else if !board.occupied(x - 1, y - 1)
+                && !board.occupied(x - 2, y - 1)
+                && !board.occupied(x - 1, y - 2)
+                && board.occupied(x + 1, y)
+                && board.occupied(x - 2, y)
+                && board.occupied(x - 2, y - 2)
+                && board.occupied(x, y - 2)
             {
                 Some(FallingPiece {
-                    x: x-1, y: y-1,
+                    x: x - 1,
+                    y: y - 1,
                     kind: PieceState(Piece::T, RotationState::South),
-                    tspin: TspinStatus::None
+                    tspin: TspinStatus::None,
                 })
             } else {
                 None
             }
         }
-        _ => None
+        _ => None,
     }
 }
 
 struct Cutout {
     lines: usize,
-    result: Option<Board>
+    result: Option<Board>,
 }
 
 fn cutout_tslot(mut board: Board, mut piece: FallingPiece) -> Cutout {
@@ -635,31 +657,35 @@ fn cutout_tslot(mut board: Board, mut piece: FallingPiece) -> Cutout {
 
     match result.placement_kind {
         PlacementKind::Tspin => Cutout {
-            lines: 0, result: None
+            lines: 0,
+            result: None,
         },
         PlacementKind::Tspin1 => Cutout {
-            lines: 1, result: None
+            lines: 1,
+            result: None,
         },
         PlacementKind::Tspin2 => Cutout {
-            lines: 2, result: Some(board)
+            lines: 2,
+            result: Some(board),
         },
         PlacementKind::Tspin3 => Cutout {
-            lines: 3, result: Some(board)
+            lines: 3,
+            result: Some(board),
         },
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub struct Reward {
     value: i32,
-    attack: i32
+    attack: i32,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 pub struct Value {
     value: i32,
-    spike: i32
+    spike: i32,
 }
 
 impl std::ops::Add for Value {
@@ -667,7 +693,7 @@ impl std::ops::Add for Value {
     fn add(self, rhs: Self) -> Self {
         Value {
             value: self.value + rhs.value,
-            spike: self.spike + rhs.spike
+            spike: self.spike + rhs.spike,
         }
     }
 }
@@ -681,7 +707,7 @@ impl std::ops::Add<Reward> for Value {
                 0
             } else {
                 self.spike + rhs.attack
-            }
+            },
         }
     }
 }
@@ -691,7 +717,7 @@ impl std::ops::Div<usize> for Value {
     fn div(self, rhs: usize) -> Self {
         Value {
             value: self.value / rhs as i32,
-            spike: self.spike / rhs as i32
+            spike: self.spike / rhs as i32,
         }
     }
 }
@@ -701,7 +727,7 @@ impl std::ops::Mul<usize> for Value {
     fn mul(self, rhs: usize) -> Self {
         Value {
             value: self.value * rhs as i32,
-            spike: self.spike * rhs as i32
+            spike: self.spike * rhs as i32,
         }
     }
 }
@@ -710,13 +736,13 @@ impl Evaluation<Reward> for Value {
     fn modify_death(self) -> Self {
         Value {
             value: self.value - 1000,
-            spike: 0
+            spike: 0,
         }
     }
 
     fn weight(self, min: &Value, rank: usize) -> i64 {
         let e = (self.value - min.value) as i64 + 10;
-        e * e / (rank*rank + 1) as i64
+        e * e / (rank * rank + 1) as i64
     }
 
     fn improve(&mut self, new_result: Self) {

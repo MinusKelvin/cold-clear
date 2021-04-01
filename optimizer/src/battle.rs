@@ -1,15 +1,16 @@
-use libtetris::{ Board, ColoredRow, FallingPiece, Controller };
-use battle::{ Battle, Replay, Event, PieceMoveExecutor, GameConfig };
-use cold_clear::evaluation::Evaluator;
-use rand::prelude::*;
-use serde::{ Serialize, Deserialize };
 use std::collections::VecDeque;
+
+use battle::{Battle, Event, GameConfig, PieceMoveExecutor, Replay};
+use cold_clear::evaluation::Evaluator;
+use libtetris::{Board, ColoredRow, Controller, FallingPiece};
+use rand::prelude::*;
+use serde::{Deserialize, Serialize};
 
 pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
     executing: Option<(FallingPiece, PieceMoveExecutor)>,
     bot: cold_clear::BotState<E>,
-    eval: E
+    eval: E,
 }
 
 const THINK_AMOUNT: usize = 10;
@@ -20,7 +21,7 @@ impl<E: Evaluator> BotInput<E> {
             controller: Controller::default(),
             executing: None,
             bot: cold_clear::BotState::new(board, Default::default()),
-            eval
+            eval,
         };
         for _ in 0..180 {
             // equivalent of 3 realtime seconds of thinking
@@ -37,14 +38,17 @@ impl<E: Evaluator> BotInput<E> {
                 }
                 Err(_) => {
                     // can't think anymore
-                    break
+                    break;
                 }
             }
         }
     }
 
     pub fn update(
-        &mut self, board: &Board<ColoredRow>, events: &[Event], incoming: u32
+        &mut self,
+        board: &Board<ColoredRow>,
+        events: &[Event],
+        incoming: u32,
     ) -> Option<cold_clear::Info> {
         self.think();
 
@@ -58,14 +62,15 @@ impl<E: Evaluator> BotInput<E> {
                             info = Some(inf);
                             self.executing = Some((
                                 mv.expected_location,
-                                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), 0)
+                                PieceMoveExecutor::new(mv.hold, mv.inputs.into_iter().collect(), 0),
                             ));
                             self.bot.advance_move(mv.expected_location)
                         };
                     }
                 }
                 Event::GarbageAdded(_) => {
-                    self.bot.reset(board.get_field(), board.b2b_bonus, board.combo);
+                    self.bot
+                        .reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
                 _ => {}
             }
@@ -74,7 +79,8 @@ impl<E: Evaluator> BotInput<E> {
         if let Some((expected, ref mut executor)) = self.executing {
             if let Some(loc) = executor.update(&mut self.controller, board, events) {
                 if loc != expected {
-                    self.bot.reset(board.get_field(), board.b2b_bonus, board.combo);
+                    self.bot
+                        .reset(board.get_field(), board.b2b_bonus, board.combo);
                 }
                 self.executing = None;
             }
@@ -84,11 +90,15 @@ impl<E: Evaluator> BotInput<E> {
 }
 
 pub fn do_battle(
-    p1: impl Evaluator + Clone, p2: impl Evaluator + Clone
+    p1: impl Evaluator + Clone,
+    p2: impl Evaluator + Clone,
 ) -> Option<(InfoReplay, bool)> {
     let mut battle = Battle::new(
-        GameConfig::default(), GameConfig::default(),
-        thread_rng().gen(), thread_rng().gen(), thread_rng().gen()
+        GameConfig::default(),
+        GameConfig::default(),
+        thread_rng().gen(),
+        thread_rng().gen(),
+        thread_rng().gen(),
     );
 
     battle.replay.p1_name = format!("Cold Clear\n{}", p1.name());
@@ -106,12 +116,12 @@ pub fn do_battle(
         p1_info_updates.push_back(p1.update(
             &battle.player_1.board,
             &update.player_1.events,
-            battle.player_1.garbage_queue
+            battle.player_1.garbage_queue,
         ));
         p2_info_updates.push_back(p2.update(
             &battle.player_2.board,
             &update.player_2.events,
-            battle.player_2.garbage_queue
+            battle.player_2.garbage_queue,
         ));
 
         for event in &update.player_1.events {
@@ -135,8 +145,9 @@ pub fn do_battle(
             }
         }
 
-        if battle.replay.updates.len() > 54000 { // 15 minutes
-            return None
+        if battle.replay.updates.len() > 54000 {
+            // 15 minutes
+            return None;
         }
     }
 
@@ -146,16 +157,19 @@ pub fn do_battle(
         p2_info_updates.push_back(None);
     }
 
-    Some((InfoReplay {
-        replay: battle.replay,
-        p1_info_updates,
-        p2_info_updates
-    }, p1_won))
+    Some((
+        InfoReplay {
+            replay: battle.replay,
+            p1_info_updates,
+            p2_info_updates,
+        },
+        p1_won,
+    ))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InfoReplay {
     pub replay: Replay,
     pub p1_info_updates: VecDeque<Option<cold_clear::Info>>,
-    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>
+    pub p2_info_updates: VecDeque<Option<cold_clear::Info>>,
 }
