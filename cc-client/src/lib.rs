@@ -194,7 +194,7 @@ trait State {
     fn event(&mut self, _res: &mut res::Resources, _event: &WindowEvent) {}
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Options {
     p1: PlayerConfig<cold_clear::evaluation::Standard>,
     p2: PlayerConfig<cold_clear::evaluation::Standard>
@@ -211,7 +211,7 @@ impl Default for Options {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 struct PlayerConfig<E: Default> {
     controls: input::UserInput,
@@ -247,8 +247,7 @@ where
                     match &*book_cache {
                         Some(b) => Some(b.clone()),
                         None => {
-                            let buf = std::io::BufReader::new(std::fs::File::open(path).ok()?);
-                            let book = Book::load(buf).ok()?;
+                            let book = Book::load(path).ok()?;
                             let book = std::sync::Arc::new(book);
                             *book_cache = Some(book.clone());
                             Some(book)
@@ -272,7 +271,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 struct BotConfig<E> {
     weights: E,

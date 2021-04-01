@@ -1,4 +1,4 @@
-use opening_book::{ Book, BookBuilder, Position };
+use opening_book::{ MemoryBook, BookBuilder, Position };
 use libtetris::FallingPiece;
 use std::sync::atomic::AtomicBool;
 use std::collections::{ HashSet, HashMap };
@@ -120,7 +120,7 @@ fn main() {
         let t = std::time::Instant::now();
         let mut iter = book_set.iter().map(|&n| {
             let f = std::fs::File::open(&format!("pc-{}.ccbook", n)).unwrap();
-            Book::load(std::io::BufReader::new(f)).unwrap()
+            MemoryBook::load(std::io::BufReader::new(f)).unwrap()
         });
         let mut book = iter.next().unwrap();
         for (i, b) in iter.enumerate() {
@@ -137,7 +137,7 @@ fn main() {
     let t = std::time::Instant::now();
     let mut iter = (0..7).map(|n| {
         let f = std::fs::File::open(&format!("fullpc-{}.ccbook", n)).unwrap();
-        Book::load(std::io::BufReader::new(f)).unwrap()
+        MemoryBook::load(std::io::BufReader::new(f)).unwrap()
     });
     let mut book = iter.next().unwrap();
     for (i, b) in iter.enumerate() {

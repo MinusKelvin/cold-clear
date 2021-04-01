@@ -2,7 +2,9 @@ use libtetris::{ FallingPiece, Piece, RotationState, Board };
 use enumset::EnumSet;
 use serde::{ Serialize, Deserialize };
 use std::collections::HashMap;
-use std::io::prelude::*;
+use std::fs::File;
+use std::io::{SeekFrom, prelude::*};
+use std::path::Path;
 
 const NEXT_PIECES: usize = 4;
 
@@ -11,10 +13,20 @@ mod builder;
 #[cfg(feature = "builder")]
 pub use builder::BookBuilder;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Book(HashMap<Position, Box<[(Sequence, Option<CompactPiece>)]>>);
+pub struct Book(BookType);
 
-impl Book {
+enum BookType {
+    Memory(MemoryBook),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MemoryBook(HashMap<Position, Row>);
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+struct Row(Box<[(Sequence, Option<CompactPiece>)]>);
+
+impl MemoryBook {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load(from: impl BufRead) -> Result<Self, bincode::Error> {
         bincode::deserialize_from(zstd::Decoder::new(from)?)
@@ -47,24 +59,54 @@ impl Book {
         } else {
             next.insert(q.next()?);
         }
-        let q = [q.next()?, q.next()?, q.next()?, q.next()?];
-        self.suggest_move_raw(position, next, q)
+        let queue = [q.next()?, q.next()?, q.next()?, q.next()?];
+        self.0.get(&position)?.lookup(&Sequence { next, queue })
     }
 
-    fn suggest_move_raw(
-        &self, pos: Position, next: EnumSet<Piece>, queue: [Piece; NEXT_PIECES]
-    ) -> Option<FallingPiece> {
-        let to_find = Sequence { next, queue };
-        let moves = self.0.get(&pos)?;
-        match moves.binary_search_by_key(&to_find, |&(s,_)| s) {
-            Result::Ok(i) => moves[i].1.map(Into::into),
-            Result::Err(i) => moves[i-1].1.map(Into::into)
+    pub fn merge(&mut self, other: MemoryBook) {
+        for (pos, data) in other.0 {
+            self.0.entry(pos).or_insert(data);
+        }
+    }
+}
+
+impl Row {
+    fn lookup(&self, seq: &Sequence) -> Option<FallingPiece> {
+        match self.0.binary_search_by_key(seq, |&(s,_)| s) {
+            Result::Ok(i) => self.0[i].1.map(Into::into),
+            Result::Err(i) => self.0[i-1].1.map(Into::into)
+        }
+    }
+}
+
+impl From<MemoryBook> for Book {
+    fn from(v: MemoryBook) -> Book {
+        Book(BookType::Memory(v))
+    }
+}
+
+impl Book {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, bincode::Error> {
+        let mut file = File::open(path)?;
+        let mut magic = [0; 4];
+        file.read_exact(&mut magic)?;
+        file.seek(SeekFrom::Start(0))?;
+        match u32::from_le_bytes(magic) {
+            // this is just the zstd header since saved memory books are just zstd'd bincode
+            0xFD2FB528 => MemoryBook::load(std::io::BufReader::new(file)).map(Into::into),
+            _ => Err(serde::de::Error::custom("Invalid file"))
         }
     }
 
-    pub fn merge(&mut self, other: Book) {
-        for (pos, data) in other.0 {
-            self.0.entry(pos).or_insert(data);
+    #[cfg(target_arch = "wasm32")]
+    pub fn load(from: impl BufRead) -> Result<Self, bincode::Error> {
+        MemoryBook::load(from).map(Into::into)
+    }
+
+    pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
+        match &self.0 {
+            BookType::Memory(b) => b.suggest_move(state),
         }
     }
 }

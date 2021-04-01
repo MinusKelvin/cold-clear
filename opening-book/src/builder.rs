@@ -197,14 +197,14 @@ impl BookBuilder {
         self.data.keys().copied()
     }
 
-    pub fn compile(mut self, roots: &[Position]) -> Book {
+    pub fn compile(mut self, roots: &[Position]) -> MemoryBook {
         self.data.retain(|_, v| !v.values.is_empty());
         let mut book = HashMap::new();
         let mut to_compile = roots.to_vec();
         while let Some(pos) = to_compile.pop() {
             book.entry(pos).or_insert_with(|| {
                 let moves = self.build_position(&pos);
-                for &(_, m) in &moves {
+                for &(_, m) in &*moves.0 {
                     if let Some(p) = m {
                         let next = pos.advance(p.into()).0;
                         if self.data.contains_key(&next) {
@@ -212,13 +212,13 @@ impl BookBuilder {
                         }
                     }
                 }
-                moves.into_boxed_slice()
+                moves
             });
         }
-        Book(book)
+        MemoryBook(book)
     }
 
-    fn build_position(&mut self, pos: &Position) -> Vec<(Sequence, Option<CompactPiece>)> {
+    fn build_position(&mut self, pos: &Position) -> Row {
         let mut values = self.data.remove(pos).unwrap().values.into_iter();
         let (mut current_run_start, _, mut current_tie) = values.next().unwrap();
         let mut compressed_row = vec![];
@@ -237,7 +237,7 @@ impl BookBuilder {
         compressed_row.sort_by_key(|&(s, _)| s);
         compressed_row.dedup_by_key(|&mut (_, m)| m);
         compressed_row.shrink_to_fit();
-        compressed_row
+        Row(compressed_row.into_boxed_slice())
     }
 }
 

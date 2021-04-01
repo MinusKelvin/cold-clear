@@ -527,8 +527,7 @@ unsafe extern "C" fn cc_fast_weights(weights: *mut CCWeights) {
 unsafe extern "C" fn cc_load_book_from_file(path: *const c_char) -> *const CCBook {
     let result = (|| {
         let path = CStr::from_ptr(path).to_str().ok()?;
-        let file = std::io::BufReader::new(std::fs::File::open(path).ok()?);
-        Some(Arc::new(cold_clear::Book::load(file).ok()?))
+        Some(Arc::new(cold_clear::Book::load(path).ok()?))
     })();
     match result {
         Some(book) => Arc::into_raw(book),
