@@ -343,3 +343,31 @@ impl From<OptionNanF32> for Option<f32> {
         }
     }
 }
+
+pub fn possible_sequences(
+    mut q: Vec<Piece>,
+    bag: EnumSet<Piece>,
+) -> Vec<([Piece; NEXT_PIECES], EnumSet<Piece>)> {
+    fn solve(
+        q: &mut Vec<Piece>,
+        bag: EnumSet<Piece>,
+        out: &mut Vec<([Piece; NEXT_PIECES], EnumSet<Piece>)>,
+    ) {
+        use std::convert::TryFrom;
+        match <&[_; NEXT_PIECES]>::try_from(&**q) {
+            Ok(&q) => out.push((q, bag)),
+            Err(_) => {
+                for p in bag {
+                    let new_bag = refill_if_empty(bag - p);
+                    q.push(p);
+                    solve(q, new_bag, out);
+                    q.pop();
+                }
+            }
+        }
+    }
+
+    let mut result = vec![];
+    solve(&mut q, bag, &mut result);
+    result
+}
