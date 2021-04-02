@@ -13,3 +13,6 @@ members = [
     "opening-book/pc-gen",
     "tbi"
 ]
+
+[profile.release]
+lto = true

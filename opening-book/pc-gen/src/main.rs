@@ -190,8 +190,8 @@ fn main() {
         println!("{}%", i * 100 / 6);
     }
     println!("Saving book...");
-    let f = std::fs::File::create("pc.ccbook").unwrap();
-    book.save(std::io::BufWriter::new(f)).unwrap();
+    let f = std::fs::File::create("pc.ccdb").unwrap();
+    book.save_as_disk_book(std::io::BufWriter::new(f)).unwrap();
     println!("Took {:?}", t.elapsed());
 }
 

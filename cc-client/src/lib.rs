@@ -277,7 +277,7 @@ where
                             match &*book_cache {
                                 Some(b) => Some(b.clone()),
                                 None => {
-                                    let book = Book::load(path).ok()?;
+                                    let book = Book::load(path).unwrap();
                                     let book = std::sync::Arc::new(book);
                                     *book_cache = Some(book.clone());
                                     Some(book)

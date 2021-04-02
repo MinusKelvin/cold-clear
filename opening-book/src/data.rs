@@ -22,7 +22,7 @@ pub(crate) struct Sequence {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CompactPiece(std::num::NonZeroU16);
+pub(crate) struct CompactPiece(pub(crate) std::num::NonZeroU16);
 
 impl Position {
     pub fn advance(&self, mv: FallingPiece) -> (Position, f32) {
@@ -236,5 +236,11 @@ impl From<CompactPiece> for FallingPiece {
             y: (v.0.get() >> 9 & 0b111111) as i32,
             tspin: libtetris::TspinStatus::None,
         }
+    }
+}
+
+impl CompactPiece {
+    pub fn from_u16(v: u16) -> Option<Self> {
+        std::num::NonZeroU16::new(v).map(CompactPiece)
     }
 }
