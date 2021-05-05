@@ -11,7 +11,7 @@ members = [
     "optimizer",
     "opening-book/book-builder",
     "opening-book/pc-gen",
-    "tbi"
+    "tbp"
 ]
 
 [profile.release]

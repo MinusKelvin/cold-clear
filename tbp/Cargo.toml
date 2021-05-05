@@ -1,5 +1,5 @@
 [package]
-name = "tbi"
+name = "tbp"
 version = "0.1.0"
 authors = ["MinusKelvin <mark.carlson@minuskelvin.net>"]
 edition = "2018"
@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 cold-clear = { path = "../bot" }
 libtetris = { path = "../libtetris" }
+tbp = { git = "https://github.com/tetris-bot-protocol/tbp-rs", branch = "main" }
 serde = { version = "1.0.124", features = ["derive"] }
 serde-big-array = "0.3.2"
 serde_json = "1.0.64"
