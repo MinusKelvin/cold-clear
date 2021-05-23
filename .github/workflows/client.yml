@@ -21,12 +21,16 @@ jobs:
       uses: actions/upload-artifact@v1.0.0
       with:
         name: win64
-        path: target/release/cc-client.exe
+        path: |
+          target/release/cc-client.exe
+          cc-client/res/
     - name: Artifact
       uses: actions/upload-artifact@v1.0.0
       with:
         name: win32
-        path: target/i686-pc-windows-msvc/release/cc-client.exe
+        path: |
+          target/i686-pc-windows-msvc/release/cc-client.exe
+          cc-client/res/
 
   build-linux:
     runs-on: ubuntu-latest
@@ -40,4 +44,6 @@ jobs:
       uses: actions/upload-artifact@v1.0.0
       with:
         name: linux
-        path: target/release/cc-client
+        path: |
+          target/release/cc-client
+          cc-client/res/
