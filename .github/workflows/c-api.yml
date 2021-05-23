@@ -18,12 +18,12 @@ jobs:
         cargo build --release -p c-api
         cargo build --release --target=i686-pc-windows-msvc -p c-api
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: win64
         path: target/release/cold_clear.dll
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: win32
         path: target/i686-pc-windows-msvc/release/cold_clear.dll
@@ -35,7 +35,7 @@ jobs:
     - name: Build
       run: cargo build --release -p c-api
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: linux
         path: target/release/libcold_clear.so
@@ -55,12 +55,12 @@ jobs:
         cargo ndk --platform 21 --target armv7-linux-androideabi build --release
         cargo ndk --platform 21 --target aarch64-linux-android build --release
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: android_armv7
         path: target/armv7-linux-androideabi/release/libcold_clear.so
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: android_aarch64
         path: target/aarch64-linux-android/release/libcold_clear.so

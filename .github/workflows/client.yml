@@ -18,14 +18,14 @@ jobs:
         cargo build --release --bin cc-client
         cargo build --release --target=i686-pc-windows-msvc --bin cc-client
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: win64
         path: |
           target/release/cc-client.exe
           cc-client/res/
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: win32
         path: |
@@ -41,7 +41,7 @@ jobs:
     - name: Build
       run: cargo build --release --bin cc-client
     - name: Artifact
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v2
       with:
         name: linux
         path: |
