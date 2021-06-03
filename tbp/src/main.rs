@@ -1,5 +1,6 @@
 use std::io::{stdout, Result};
 
+use tbp::randomizer::RandomizerState;
 use tbp::{BotMessage, FrontendMessage};
 
 fn main() -> Result<()> {
@@ -14,7 +15,7 @@ fn main() -> Result<()> {
 
     loop {
         match receive() {
-            FrontendMessage::Rules {} => {
+            FrontendMessage::Rules { randomizer: _ } => {
                 send(&BotMessage::Ready);
             }
             FrontendMessage::Start {
@@ -23,11 +24,15 @@ fn main() -> Result<()> {
                 combo,
                 back_to_back,
                 board,
+                randomizer,
             } => {
                 let mut b = libtetris::Board::new();
                 b.hold_piece = hold.map(from_tbp_piece);
                 for piece in queue {
                     b.add_next_piece(from_tbp_piece(piece));
+                }
+                if let RandomizerState::SevenBag { bag_state } = &randomizer {
+                    b.bag = bag_state.iter().copied().map(from_tbp_piece).collect();
                 }
                 b.combo = combo;
                 b.b2b_bonus = back_to_back;
@@ -42,7 +47,7 @@ fn main() -> Result<()> {
                 bot = Some(cold_clear::Interface::launch(
                     b,
                     cold_clear::Options {
-                        speculate: false,
+                        speculate: matches!(randomizer, RandomizerState::SevenBag { .. }),
                         ..Default::default()
                     },
                     cold_clear::evaluation::Standard::default(),
