@@ -541,6 +541,15 @@ unsafe extern "C" fn cc_load_book_from_file(path: *const c_char) -> *const CCBoo
 }
 
 #[no_mangle]
+unsafe extern "C" fn cc_load_book_from_memory(data: *const c_char, length: u32) -> *const CCBook {
+    let data = std::slice::from_raw_parts(data as *const u8, length as usize);
+    match cold_clear::MemoryBook::load(data).ok() {
+        Some(book) => Arc::into_raw(Arc::new(book.into())),
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
 unsafe extern "C" fn cc_destroy_book(book: *const CCBook) {
     Arc::from_raw(book);
 }

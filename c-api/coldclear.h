@@ -262,12 +262,22 @@ void cc_default_weights(CCWeights *weights);
 void cc_fast_weights(CCWeights *weights);
 
 /*
- * Loads the specified opening book from the specified file path.
+ * Loads an opening book from the specified file path.
+ * This supports both `.ccbook` and `.ccdb` books.
  * If an error occurs, `NULL` is returned instead.
  * 
  * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_book`.
  */
 CCBook *cc_load_book_from_file(const char *path);
+
+/*
+ * Loads an opening book from the specified book file contents.
+ * This only supports `.ccbook` books.
+ * If an error occurs, `NULL` is returned instead.
+ * 
+ * Lifetime: The returned pointer is valid until it is passed to `cc_destroy_book`.
+ */
+CCBook *cc_load_book_from_memory(uint8_t *data, uint32_t length);
 
 /* Unloads a previously loaded book. */
 void cc_destroy_book(CCBook *book);

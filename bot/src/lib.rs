@@ -1,4 +1,4 @@
-pub use opening_book::Book;
+pub use opening_book::{Book, MemoryBook};
 use serde::{Deserialize, Serialize};
 
 #[macro_use]
