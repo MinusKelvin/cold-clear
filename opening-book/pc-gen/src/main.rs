@@ -139,7 +139,7 @@ fn main() {
             [[false; 10]; 40],
             initial_bag.bag,
             initial_bag.hold,
-            false,
+            Default::default(),
             0,
         )
         .into();
@@ -200,8 +200,14 @@ fn process_soln(
     bag: BagWithHold,
 ) -> ArrayVec<[(Position, FallingPiece); 10]> {
     let mut poses = ArrayVec::new();
-    let mut pos: Position =
-        libtetris::Board::new_with_state([[false; 10]; 40], bag.bag, bag.hold, false, 0).into();
+    let mut pos: Position = libtetris::Board::new_with_state(
+        [[false; 10]; 40],
+        bag.bag,
+        bag.hold,
+        Default::default(),
+        0,
+    )
+    .into();
     let mut b = pcf::BitBoard(0);
     for p in soln {
         let mv = libtetris::FallingPiece::from(*p.srs_piece(b).first().unwrap());

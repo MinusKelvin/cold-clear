@@ -35,7 +35,11 @@ fn main() -> Result<()> {
                     b.bag = bag_state.iter().copied().map(from_tbp_piece).collect();
                 }
                 b.combo = combo;
-                b.b2b_bonus = back_to_back;
+                #[cfg(feature = "tetrio_garbage")]
+                let b2b = if back_to_back { 1 } else { 0 };
+                #[cfg(not(feature = "tetrio_garbage"))]
+                let b2b = back_to_back;
+                b.b2b_bonus = b2b;
                 let mut field = [[false; 10]; 40];
                 for y in 0..40 {
                     for x in 0..10 {

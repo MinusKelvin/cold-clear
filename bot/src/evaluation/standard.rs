@@ -240,6 +240,12 @@ impl Evaluator for Standard {
         };
         acc_eval += self.move_time * move_time;
 
+        #[cfg(feature = "tetrio_garbage")]
+        if board.b2b_bonus > 0 {
+            transient_eval += self.back_to_back;
+        }
+
+        #[cfg(not(feature = "tetrio_garbage"))]
         if board.b2b_bonus {
             transient_eval += self.back_to_back;
         }

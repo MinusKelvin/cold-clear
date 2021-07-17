@@ -12,6 +12,9 @@ pub struct Board<R = u16> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
     pub combo: u32,
+    #[cfg(feature = "tetrio_garbage")]
+    pub b2b_bonus: u32,
+    #[cfg(not(feature = "tetrio_garbage"))]
     pub b2b_bonus: bool,
     pub hold_piece: Option<Piece>,
     next_pieces: VecDeque<Piece>,
@@ -36,6 +39,9 @@ impl<R: Row> Board<R> {
             cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
             combo: 0,
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_bonus: 0,
+            #[cfg(not(feature = "tetrio_garbage"))]
             b2b_bonus: false,
             hold_piece: None,
             next_pieces: VecDeque::new(),
@@ -48,13 +54,14 @@ impl<R: Row> Board<R> {
         field: [[bool; 10]; 40],
         bag_remain: EnumSet<Piece>,
         hold: Option<Piece>,
-        b2b: bool,
+        #[cfg(feature = "tetrio_garbage")] b2b: u32,
+        #[cfg(not(feature = "tetrio_garbage"))] b2b: bool,
         combo: u32,
     ) -> Self {
         let mut board = Board {
             cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
-            combo: combo,
+            combo,
             b2b_bonus: b2b,
             hold_piece: hold,
             next_pieces: VecDeque::new(),
@@ -179,6 +186,18 @@ impl<R: Row> Board<R> {
 
         let mut did_b2b = false;
         if placement_kind.is_clear() {
+            #[cfg(feature = "tetrio_garbage")]
+            if placement_kind.is_hard() {
+                if self.b2b_bonus > 0 {
+                    garbage_sent += 1;
+                    did_b2b = true;
+                }
+                self.b2b_bonus += 1;
+            } else {
+                self.b2b_bonus = 0;
+            }
+
+            #[cfg(not(feature = "tetrio_garbage"))]
             if placement_kind.is_hard() {
                 if self.b2b_bonus {
                     garbage_sent += 1;

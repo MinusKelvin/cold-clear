@@ -94,14 +94,14 @@ impl Interface {
     /// Note: combo is not the same as the displayed combo in guideline games. Here, it is the
     /// number of consecutive line clears achieved. So, generally speaking, if "x Combo" appears
     /// on the screen, you need to use x+1 here.
-    pub fn reset(&self, field: [[bool; 10]; 40], b2b_active: bool, combo: u32) {
-        self.send
-            .send(BotMsg::Reset {
-                field,
-                b2b: b2b_active,
-                combo,
-            })
-            .ok();
+    pub fn reset(
+        &self,
+        field: [[bool; 10]; 40],
+        #[cfg(feature = "tetrio_garbage")] b2b: u32,
+        #[cfg(not(feature = "tetrio_garbage"))] b2b: bool,
+        combo: u32,
+    ) {
+        self.send.send(BotMsg::Reset { field, b2b, combo }).ok();
     }
 
     /// Specifies a line that Cold Clear should analyze before making any moves.
