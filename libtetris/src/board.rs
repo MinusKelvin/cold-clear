@@ -189,7 +189,6 @@ impl<R: Row> Board<R> {
             #[cfg(feature = "tetrio_garbage")]
             if placement_kind.is_hard() {
                 if self.b2b_bonus > 0 {
-                    garbage_sent += 1;
                     did_b2b = true;
                 }
                 self.b2b_bonus += 1;
@@ -208,11 +207,30 @@ impl<R: Row> Board<R> {
                 self.b2b_bonus = false;
             }
 
-            if self.combo as usize >= COMBO_GARBAGE.len() {
-                garbage_sent += COMBO_GARBAGE.last().unwrap();
-            } else {
-                garbage_sent += COMBO_GARBAGE[self.combo as usize];
-            }
+            #[cfg(feature = "tetrio_garbage")]
+                {
+                    // garbage here is an f32 to make the calculation as accurate to the
+                    // tetrio javascript code as possible
+                    const B2B_BONUS_LOG: f32 = 0.8;
+                    const COMBO_MINIFIER_LOG: f32 = 1.25;
+
+                    let mut garbage = garbage_sent as f32;
+                    if did_b2b {
+                        let log = ((self.b2b_bonus as f32 - 1.0) * B2B_BONUS_LOG).ln_1p();
+                        let a = (1.0 + log).floor() + if self.b2b_bonus == 2 { 0.0 } else { (1.0 + log.fract()) / 3.0 };
+
+                        garbage += a;
+                    }
+
+                    garbage *= 1.0 + 0.25 * self.combo as f32;
+                    garbage = (self.combo as f32 * COMBO_MINIFIER_LOG).ln_1p().max(garbage);
+                    garbage_sent = garbage as u32;
+                }
+
+            #[cfg(not(feature = "tetrio_garbage"))]
+                {
+                    garbage_sent += COMBO_GARBAGE[(self.combo as usize).min(COMBO_GARBAGE.len() - 1)];
+                }
 
             self.combo += 1;
         } else {
@@ -220,6 +238,11 @@ impl<R: Row> Board<R> {
         }
 
         let perfect_clear = self.column_heights == [0; 10];
+        #[cfg(feature = "tetrio_garbage")]
+        if perfect_clear {
+            garbage_sent += 10;
+        }
+        #[cfg(not(feature = "tetrio_garbage"))]
         if perfect_clear {
             garbage_sent = 10;
         }
@@ -250,7 +273,7 @@ impl<R: Row> Board<R> {
         hold
     }
 
-    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item = Piece> + 'a {
+    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item=Piece> + 'a {
         self.next_pieces.iter().copied()
     }
 
