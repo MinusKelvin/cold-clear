@@ -1,11 +1,19 @@
-use libtetris::*;
 use serde::{Deserialize, Serialize};
+
+use libtetris::*;
 
 use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Standard {
+    #[cfg(feature = "tetrio_garbage")]
+    pub b2b_chain: i32,
+    #[cfg(feature = "tetrio_garbage")]
+    pub b2b_chain_log: i32,
+    #[cfg(feature = "tetrio_garbage")]
+    pub combo_multiplier: i32,
+
     pub back_to_back: i32,
     pub bumpiness: i32,
     pub bumpiness_sq: i32,
@@ -49,6 +57,13 @@ pub struct Standard {
 impl Default for Standard {
     fn default() -> Self {
         Standard {
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain: 0,
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain_log: 0,
+            #[cfg(feature = "tetrio_garbage")]
+            combo_multiplier: 0,
+
             back_to_back: 52,
             bumpiness: -24,
             bumpiness_sq: -7,
@@ -94,6 +109,13 @@ impl Default for Standard {
 impl Standard {
     pub fn fast_config() -> Self {
         Standard {
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain: 0,
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain_log: 0,
+            #[cfg(feature = "tetrio_garbage")]
+            combo_multiplier: 0,
+
             back_to_back: 10,
             bumpiness: -7,
             bumpiness_sq: -28,
@@ -156,8 +178,8 @@ impl Evaluator for Standard {
         for mv in candidates.into_iter() {
             if incoming == 0
                 || mv.board.column_heights()[3..6]
-                    .iter()
-                    .all(|h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20)
+                .iter()
+                .all(|h| incoming as i32 - mv.lock.garbage_sent as i32 + h <= 20)
             {
                 return mv;
             }
@@ -189,6 +211,11 @@ impl Evaluator for Standard {
             if lock.b2b {
                 acc_eval += self.b2b_clear;
             }
+            #[cfg(feature = "tetrio_garbage")]
+            if lock.combo > Some(0) {
+                acc_eval += self.combo_garbage * lock.garbage_sent as i32;
+            }
+            #[cfg(not(feature = "tetrio_garbage"))]
             if let Some(combo) = lock.combo {
                 let combo = combo.min(11) as usize;
                 acc_eval += self.combo_garbage * libtetris::COMBO_GARBAGE[combo] as i32;
@@ -244,11 +271,18 @@ impl Evaluator for Standard {
         if board.b2b_bonus > 0 {
             transient_eval += self.back_to_back;
         }
-
         #[cfg(not(feature = "tetrio_garbage"))]
         if board.b2b_bonus {
             transient_eval += self.back_to_back;
         }
+
+        #[cfg(feature = "tetrio_garbage")]
+            {
+                transient_eval += self.b2b_chain * board.b2b_bonus as i32;
+                transient_eval += (self.b2b_chain_log as f32 * (board.b2b_bonus as f32).ln()) as i32;
+
+                transient_eval += self.combo_multiplier * board.combo as i32;
+            }
 
         let highest_point = *board.column_heights().iter().max().unwrap() as i32;
         transient_eval += self.top_quarter * (highest_point - 15).max(0);
@@ -327,10 +361,10 @@ impl Evaluator for Standard {
         if self.row_transitions != 0 {
             transient_eval += self.row_transitions
                 * (0..40)
-                    .map(|y| *board.get_row(y))
-                    .map(|r| (r | 0b1_00000_00000) ^ (1 | r << 1))
-                    .map(|d| d.count_ones() as i32)
-                    .sum::<i32>();
+                .map(|y| *board.get_row(y))
+                .map(|r| (r | 0b1_00000_00000) ^ (1 | r << 1))
+                .map(|d| d.count_ones() as i32)
+                .sum::<i32>();
         }
 
         if self.bumpiness | self.bumpiness_sq != 0 {

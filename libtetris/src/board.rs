@@ -217,9 +217,8 @@ impl<R: Row> Board<R> {
                     let mut garbage = garbage_sent as f32;
                     if did_b2b {
                         let log = ((self.b2b_bonus as f32 - 1.0) * B2B_BONUS_LOG).ln_1p();
-                        let a = (1.0 + log).floor() + if self.b2b_bonus == 2 { 0.0 } else { (1.0 + log.fract()) / 3.0 };
 
-                        garbage += a;
+                        garbage += (1.0 + log).floor() + if self.b2b_bonus == 2 { 0.0 } else { (1.0 + log.fract()) / 3.0 };
                     }
 
                     garbage *= 1.0 + 0.25 * self.combo as f32;
