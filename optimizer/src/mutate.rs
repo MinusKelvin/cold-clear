@@ -12,6 +12,12 @@ pub trait Mutateable: Default {
 impl Mutateable for Standard {
     fn generate(sub_name: String) -> Self {
         Standard {
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain: thread_rng().gen_range(-999, 1000),
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain_log: thread_rng().gen_range(-999, 1000),
+            #[cfg(feature = "tetrio_garbage")]
+            combo_multiplier: thread_rng().gen_range(-999, 1000),
             back_to_back: thread_rng().gen_range(-999, 1000),
             bumpiness: thread_rng().gen_range(-999, 1000),
             bumpiness_sq: thread_rng().gen_range(-999, 1000),
@@ -64,13 +70,19 @@ impl Mutateable for Standard {
 
             use_bag: true,
             timed_jeopardy: true,
-            stack_pc_damage: false,
+            stack_pc_damage: cfg!(feature = "tetrio_garbage"),
             sub_name: Some(sub_name),
         }
     }
 
     fn crossover(parent1: &Self, parent2: &Self, sub_name: String) -> Self {
         Standard {
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain: crossover_gene(parent1.b2b_chain, parent2.b2b_chain),
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_chain_log: crossover_gene(parent1.b2b_chain_log, parent2.b2b_chain_log),
+            #[cfg(feature = "tetrio_garbage")]
+            combo_multiplier: crossover_gene(parent1.combo_multiplier, parent2.combo_multiplier),
             back_to_back: crossover_gene(parent1.back_to_back, parent2.back_to_back),
             bumpiness: crossover_gene(parent1.bumpiness, parent2.bumpiness),
             bumpiness_sq: crossover_gene(parent1.bumpiness_sq, parent2.bumpiness_sq),
@@ -123,7 +135,7 @@ impl Mutateable for Standard {
 
             use_bag: true,
             timed_jeopardy: true,
-            stack_pc_damage: false,
+            stack_pc_damage: cfg!(feature = "tetrio_garbage"),
             sub_name: Some(sub_name),
         }
     }

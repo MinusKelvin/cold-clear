@@ -279,7 +279,7 @@ impl Evaluator for Standard {
         #[cfg(feature = "tetrio_garbage")]
             {
                 transient_eval += self.b2b_chain * board.b2b_bonus as i32;
-                transient_eval += (self.b2b_chain_log as f32 * (board.b2b_bonus as f32).ln()) as i32;
+                transient_eval += (self.b2b_chain_log as f32 * (board.b2b_bonus as f32).ln_1p()) as i32;
 
                 transient_eval += self.combo_multiplier * board.combo as i32;
             }
