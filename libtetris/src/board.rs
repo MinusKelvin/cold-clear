@@ -209,20 +209,20 @@ impl<R: Row> Board<R> {
 
             #[cfg(feature = "tetrio_garbage")]
                 {
-                    // garbage here is an f32 to make the calculation as accurate to the
+                    // garbage here is an f64 to make the calculation as accurate to the
                     // tetrio javascript code as possible
-                    const B2B_BONUS_LOG: f32 = 0.8;
-                    const COMBO_MINIFIER_LOG: f32 = 1.25;
+                    const B2B_BONUS_LOG: f64 = 0.8;
+                    const COMBO_MINIFIER_LOG: f64 = 1.25;
 
-                    let mut garbage = garbage_sent as f32;
+                    let mut garbage = garbage_sent as f64;
                     if did_b2b {
-                        let log = ((self.b2b_bonus as f32 - 1.0) * B2B_BONUS_LOG).ln_1p();
+                        let log = ((self.b2b_bonus as f64 - 1.0) * B2B_BONUS_LOG).ln_1p();
 
                         garbage += (1.0 + log).floor() + if self.b2b_bonus == 2 { 0.0 } else { (1.0 + log.fract()) / 3.0 };
                     }
 
-                    garbage *= 1.0 + 0.25 * self.combo as f32;
-                    garbage = (self.combo as f32 * COMBO_MINIFIER_LOG).ln_1p().max(garbage);
+                    garbage *= 1.0 + 0.25 * self.combo as f64;
+                    garbage = (self.combo as f64 * COMBO_MINIFIER_LOG).ln_1p().max(garbage);
                     garbage_sent = garbage as u32;
                 }
 
