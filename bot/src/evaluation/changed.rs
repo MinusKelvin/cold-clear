@@ -213,7 +213,7 @@ impl Evaluator for Standard {
             }
 
             #[cfg(feature = "tetrio_garbage")]
-            if lock.combo > Some(0) {
+            if lock.combo.is_some() {
                 acc_eval += self.combo_garbage * lock.garbage_sent as i32;
             }
             #[cfg(not(feature = "tetrio_garbage"))]
