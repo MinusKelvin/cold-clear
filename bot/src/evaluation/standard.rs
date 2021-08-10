@@ -107,15 +107,9 @@ impl Default for Standard {
 }
 
 impl Standard {
+    #[cfg(not(feature = "tetrio_garbage"))]
     pub fn fast_config() -> Self {
         Standard {
-            #[cfg(feature = "tetrio_garbage")]
-            b2b_chain: 0,
-            #[cfg(feature = "tetrio_garbage")]
-            b2b_chain_log: 0,
-            #[cfg(feature = "tetrio_garbage")]
-            combo_multiplier: 0,
-
             back_to_back: 10,
             bumpiness: -7,
             bumpiness_sq: -28,
@@ -151,6 +145,67 @@ impl Standard {
             use_bag: true,
             timed_jeopardy: false,
             stack_pc_damage: false,
+            sub_name: None,
+        }
+    }
+
+    #[cfg(feature = "tetrio_garbage")]
+    pub fn fast_config() -> Self {
+        Standard {
+            b2b_chain: 214,
+            b2b_chain_log: 1,
+            combo_multiplier: 41,
+            back_to_back: 56,
+            bumpiness: 11,
+            bumpiness_sq: -26,
+            row_transitions: -124,
+            height: -58,
+            top_half: -765,
+            top_quarter: -499,
+            jeopardy: -5,
+            cavity_cells: -168,
+            cavity_cells_sq: -33,
+            overhang_cells: -54,
+            overhang_cells_sq: 14,
+            covered_cells: 9,
+            covered_cells_sq: -17,
+            tslot: [
+                112,
+                151,
+                35,
+                380,
+            ],
+            well_depth: 74,
+            max_well_depth: 31,
+            well_column: [
+                24,
+                6,
+                24,
+                56,
+                23,
+                310,
+                85,
+                142,
+                118,
+                33,
+            ],
+            b2b_clear: 128,
+            clear1: -141,
+            clear2: -93,
+            clear3: -63,
+            clear4: 385,
+            tspin1: 126,
+            tspin2: 559,
+            tspin3: 602,
+            mini_tspin1: -157,
+            mini_tspin2: -215,
+            perfect_clear: 988,
+            combo_garbage: 166,
+            move_time: -4,
+            wasted_t: -188,
+            use_bag: true,
+            timed_jeopardy: true,
+            stack_pc_damage: true,
             sub_name: None,
         }
     }
