@@ -8,7 +8,6 @@ use webutil::worker::{Worker, WorkerSender};
 
 use crate::evaluation::Evaluator;
 use crate::modes::{ModeSwitchedBot, Task, TaskResult};
-use crate::moves::Move;
 use crate::{BotMsg, BotPollState, Info, Options};
 
 // trait aliases (#41517) would make my life SOOOOO much easier
@@ -57,11 +56,11 @@ impl Interface {
     /// It is recommended that you call this function the frame before the piece spawns so that the
     /// bot has time to finish its current thinking cycle and supply the move.
     ///
-    /// Once a move is chosen, the bot will update its internal state to the result of the piece
-    /// being placed correctly and the move will become available by calling `poll_next_move`.
-    pub fn request_next_move(&self, incoming: u32) {
+    /// Once a move is chosen, the move will become available by calling `poll_next_move` or
+    /// `block_next_move`. To update the bot state according to this move, call `play_next_move`.
+    pub fn suggest_next_move(&self, incoming: u32) {
         if let Some(worker) = &self.0 {
-            worker.send(&BotMsg::NextMove(incoming)).ok().unwrap();
+            worker.send(&BotMsg::SuggestMove(incoming)).ok().unwrap();
         }
     }
 
@@ -90,13 +89,20 @@ impl Interface {
     /// Waits for the bot to provide the previously requested move.
     ///
     /// `None` is returned if the bot is dead.
-    pub async fn next_move(&mut self) -> Option<(Move, Info)> {
+    pub async fn block_next_move(&mut self) -> Option<(Move, Info)> {
         match self.0.as_ref()?.recv().await {
             Some(v) => Some(v),
             None => {
                 self.0 = None;
                 None
             }
+        }
+    }
+
+    /// Updates the internal bot state according to the move played.
+    pub fn play_next_move(&self, mv: FallingPiece) {
+        if let Some(worker) = &self.0 {
+            worker.send(&BotMsg::PlayMove(mv)).ok();
         }
     }
 
@@ -173,7 +179,7 @@ fn bot_thread<E>(
         // (books tend to be very large, possibly not useful?)
 
         loop {
-            let new_tasks = state.think(&eval, |mv, info| send.send(&Some((mv, info))));
+            let new_tasks = state.think(&eval, |v| send.send(&Some(v)));
             for task in new_tasks {
                 task_send.send(task).ok().unwrap();
             }

@@ -260,7 +260,10 @@ pub mod pcloop {
         pub fn think(&mut self) -> Option<PcSolver> {
             unreachable!()
         }
-        pub fn next_move(&mut self) -> Result<(Move, Info), bool> {
+        pub fn suggest_move(&mut self) -> Result<(Move, Info), bool> {
+            unreachable!()
+        }
+        pub fn play_move(&mut self, mv: FallingPiece) -> bool {
             unreachable!()
         }
         pub fn solution(&mut self, _: Option<ArrayVec<[FallingPiece; 10]>>) {
