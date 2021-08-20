@@ -25,12 +25,14 @@ pub struct Book(BookType);
 
 enum BookType {
     Memory(MemoryBook),
+    #[cfg(not(target_arch = "wasm32"))]
     Disk(DiskBook),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct MemoryBook(HashMap<Position, Row>);
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct DiskBook {
     index: HashMap<Position, (u64, u64)>,
     file: File,
@@ -144,6 +146,7 @@ impl MemoryBook {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_as_disk_book(&self, mut to: impl Write) -> bincode::Result<()> {
         to.write_all(&DiskBook::MAGIC_BYTES)?;
         let mut index = HashMap::with_capacity(self.0.len());
@@ -188,6 +191,7 @@ impl MemoryBook {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl DiskBook {
     const MAGIC_BYTES: [u8; 4] = [0xB7, 0x1E, 0xA0, 0x73];
     const MAGIC: u32 = u32::from_le_bytes(Self::MAGIC_BYTES);
@@ -282,6 +286,7 @@ impl Book {
     pub fn suggest_move(&self, state: &Board) -> Option<FallingPiece> {
         match &self.0 {
             BookType::Memory(b) => b.suggest_move(state),
+            #[cfg(not(target_arch = "wasm32"))]
             BookType::Disk(b) => b.suggest_move(state),
         }
     }
@@ -293,6 +298,7 @@ impl From<MemoryBook> for Book {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<DiskBook> for Book {
     fn from(v: DiskBook) -> Book {
         Book(BookType::Disk(v))
