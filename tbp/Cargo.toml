@@ -1,5 +1,5 @@
 [package]
-name = "tbp"
+name = "cc-tbp"
 version = "0.1.0"
 authors = ["MinusKelvin <mark.carlson@minuskelvin.net>"]
 edition = "2018"
@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 cold-clear = { path = "../bot" }
+futures = "0.3.16"
 libtetris = { path = "../libtetris" }
 serde = { version = "1.0.124", features = ["derive"] }
 serde-big-array = "0.3.2"
@@ -19,3 +20,8 @@ branch = "main"
 features = [
     "randomizer"
 ]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2.73", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4.23"
+web-sys = { version = "0.3.50", features = ["DedicatedWorkerGlobalScope"] }
