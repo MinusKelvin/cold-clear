@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 fn main() {
     if let Some(path) = std::env::var_os("CARGO_MANIFEST_DIR") {
         std::env::set_current_dir(path).ok();
