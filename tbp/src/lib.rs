@@ -177,7 +177,7 @@ mod web {
         static global: web_sys::DedicatedWorkerGlobalScope;
     }
 
-    #[wasm_bindgen(start)]
+    #[wasm_bindgen]
     pub fn start() {
         let (send, incoming) = unbounded();
         let closure = Closure::wrap(Box::new(move |e: web_sys::MessageEvent| {
