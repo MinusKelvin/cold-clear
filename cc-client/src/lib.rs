@@ -191,7 +191,11 @@ pub fn main() {
                     el_proxy,
                     executor,
                     state: match replay_file {
-                        Some(f) => Box::new(ReplayGame::new(f)),
+                        Some(f) => Box::new(ReplayGame::new(
+                            f,
+                            options.p1.show_plan,
+                            options.p2.show_plan,
+                        )),
                         None => Box::new(RealtimeGame::new(options, 0, 0).await),
                     },
                     p1: p1_gamepad,
@@ -237,13 +241,26 @@ impl Default for Options {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 struct PlayerConfig<E: Default> {
     controls: input::UserInput,
     game: GameConfig,
     bot_config: BotConfig<E>,
     is_bot: bool,
+    show_plan: bool,
+}
+
+impl<E: Default> Default for PlayerConfig<E> {
+    fn default() -> Self {
+        Self {
+            controls: Default::default(),
+            game: Default::default(),
+            bot_config: Default::default(),
+            is_bot: false,
+            show_plan: true,
+        }
+    }
 }
 
 impl<E> PlayerConfig<E>

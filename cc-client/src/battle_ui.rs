@@ -12,10 +12,24 @@ pub struct BattleUi {
 }
 
 impl BattleUi {
-    pub fn new(battle: &Battle, p1_name: String, p2_name: String) -> Self {
+    pub fn new(
+        battle: &Battle,
+        p1_name: String,
+        p1_show_plan: bool,
+        p2_name: String,
+        p2_show_plan: bool,
+    ) -> Self {
         BattleUi {
-            player_1_graphics: PlayerDrawState::new(battle.player_1.board.next_queue(), p1_name),
-            player_2_graphics: PlayerDrawState::new(battle.player_2.board.next_queue(), p2_name),
+            player_1_graphics: PlayerDrawState::new(
+                battle.player_1.board.next_queue(),
+                p1_name,
+                p1_show_plan,
+            ),
+            player_2_graphics: PlayerDrawState::new(
+                battle.player_2.board.next_queue(),
+                p2_name,
+                p2_show_plan,
+            ),
             time: 0,
         }
     }

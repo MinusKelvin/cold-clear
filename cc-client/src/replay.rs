@@ -22,10 +22,12 @@ pub struct ReplayGame {
     p1_info_updates: VecDeque<Option<cold_clear::Info>>,
     p2_info_updates: VecDeque<Option<cold_clear::Info>>,
     start_delay: u32,
+    p1_show_plan: bool,
+    p2_show_plan: bool,
 }
 
 impl ReplayGame {
-    pub fn new(file: impl Into<PathBuf>) -> Self {
+    pub fn new(file: impl Into<PathBuf>, p1_show_plan: bool, p2_show_plan: bool) -> Self {
         let file = file.into();
         let InfoReplay {
             replay,
@@ -41,13 +43,21 @@ impl ReplayGame {
             replay.garbage_seed,
         );
         ReplayGame {
-            ui: BattleUi::new(&battle, replay.p1_name, replay.p2_name),
+            ui: BattleUi::new(
+                &battle,
+                replay.p1_name,
+                p1_show_plan,
+                replay.p2_name,
+                p2_show_plan,
+            ),
             battle,
             updates: replay.updates,
             p1_info_updates,
             p2_info_updates,
             start_delay: 500,
             file,
+            p1_show_plan,
+            p2_show_plan,
         }
     }
 }
@@ -100,7 +110,13 @@ impl crate::State for ReplayGame {
                     replay.p2_seed,
                     replay.garbage_seed,
                 );
-                self.ui = BattleUi::new(&battle, replay.p1_name, replay.p2_name);
+                self.ui = BattleUi::new(
+                    &battle,
+                    replay.p1_name,
+                    self.p1_show_plan,
+                    replay.p2_name,
+                    self.p2_show_plan,
+                );
                 self.battle = battle;
                 self.updates = replay.updates;
                 self.p1_info_updates = p1_info_updates;

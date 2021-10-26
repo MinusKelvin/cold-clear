@@ -14,6 +14,7 @@ pub struct PlayerDrawState {
     statistics: Statistics,
     garbage_queue: u32,
     dead: bool,
+    show_plan: bool,
     hold_piece: Option<Piece>,
     next_queue: VecDeque<Piece>,
     game_time: u32,
@@ -31,7 +32,7 @@ enum State {
 }
 
 impl PlayerDrawState {
-    pub fn new(queue: impl IntoIterator<Item = Piece>, name: String) -> Self {
+    pub fn new(queue: impl IntoIterator<Item = Piece>, name: String, show_plan: bool) -> Self {
         PlayerDrawState {
             board: ArrayVec::from([*ColoredRow::EMPTY; 40]),
             state: State::Delay,
@@ -46,6 +47,7 @@ impl PlayerDrawState {
             clear_splash: None,
             name,
             info: None,
+            show_plan,
         }
     }
 
@@ -331,41 +333,43 @@ impl PlayerDrawState {
             0,
         );
 
-        if let Some(ref info) = self.info {
-            let mut has_pc = false;
-            for (_, l) in info.plan() {
-                if l.perfect_clear {
-                    has_pc = true;
-                }
-            }
-
-            // Draw bot plan
-            let mut y_map = [0; 40];
-            for i in 0..40 {
-                y_map[i] = i as i32;
-            }
-            for (placement, lock) in info.plan() {
-                for &(x, y, d) in &placement.cells_with_connections() {
-                    res.sprite_batch.draw(
-                        &res.sprites.plan[d.as_usize()],
-                        point2(offset_x + x as f32 + 4.0, y_map[y as usize] as f32 + 3.25),
-                        cell_color_to_color(placement.kind.0.color()),
-                    );
-                }
-                let mut new_map = [0; 40];
-                let mut j = 0;
-                for i in 0..40 {
-                    if !lock.cleared_lines.contains(&i) {
-                        new_map[j] = y_map[i as usize];
-                        j += 1;
+        if self.show_plan {
+            if let Some(ref info) = self.info {
+                let mut has_pc = false;
+                for (_, l) in info.plan() {
+                    if l.perfect_clear {
+                        has_pc = true;
                     }
                 }
-                y_map = new_map;
 
-                if !has_pc && lock.placement_kind.is_hard() && lock.placement_kind.is_clear()
-                    || lock.perfect_clear
-                {
-                    break;
+                // Draw bot plan
+                let mut y_map = [0; 40];
+                for i in 0..40 {
+                    y_map[i] = i as i32;
+                }
+                for (placement, lock) in info.plan() {
+                    for &(x, y, d) in &placement.cells_with_connections() {
+                        res.sprite_batch.draw(
+                            &res.sprites.plan[d.as_usize()],
+                            point2(offset_x + x as f32 + 4.0, y_map[y as usize] as f32 + 3.25),
+                            cell_color_to_color(placement.kind.0.color()),
+                        );
+                    }
+                    let mut new_map = [0; 40];
+                    let mut j = 0;
+                    for i in 0..40 {
+                        if !lock.cleared_lines.contains(&i) {
+                            new_map[j] = y_map[i as usize];
+                            j += 1;
+                        }
+                    }
+                    y_map = new_map;
+
+                    if !has_pc && lock.placement_kind.is_hard() && lock.placement_kind.is_clear()
+                        || lock.perfect_clear
+                    {
+                        break;
+                    }
                 }
             }
         }

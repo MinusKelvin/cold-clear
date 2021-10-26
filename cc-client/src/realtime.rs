@@ -54,7 +54,13 @@ impl RealtimeGame {
         battle.replay.p1_name = p1_name.clone();
         battle.replay.p2_name = p2_name.clone();
         RealtimeGame {
-            ui: BattleUi::new(&battle, p1_name, p2_name),
+            ui: BattleUi::new(
+                &battle,
+                p1_name,
+                options.p1.show_plan,
+                p2_name,
+                options.p2.show_plan,
+            ),
             battle,
             options: Some(options),
             p1_input,
