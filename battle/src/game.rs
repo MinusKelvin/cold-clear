@@ -414,7 +414,7 @@ impl Game {
             let mut col = rng.gen_range(0, 10);
             let mut garbage_columns = vec![];
             for _ in 0..self.garbage_queue.min(self.config.max_garbage_add) {
-                if rng.gen_bool(1.0 / 3.0) {
+                if rng.gen_bool(self.config.garbage_messiness.into_inner()) {
                     col = rng.gen_range(0, 10);
                 }
                 garbage_columns.push(col);

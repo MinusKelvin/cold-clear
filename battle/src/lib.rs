@@ -1,3 +1,4 @@
+use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
 mod battle;
@@ -24,6 +25,7 @@ pub struct GameConfig {
     pub max_garbage_add: u32,
     pub move_lock_rule: u32,
     pub garbage_blocking: bool,
+    pub garbage_messiness: NotNan<f64>,
 }
 
 impl Default for GameConfig {
@@ -41,6 +43,7 @@ impl Default for GameConfig {
             max_garbage_add: 10,
             move_lock_rule: 15,
             garbage_blocking: false,
+            garbage_messiness: NotNan::new(0.3).unwrap(),
         }
     }
 }
@@ -59,6 +62,7 @@ impl GameConfig {
             max_garbage_add: 20,
             move_lock_rule: 15,
             garbage_blocking: true,
+            garbage_messiness: NotNan::new(0.0).unwrap(),
         }
     }
 }
