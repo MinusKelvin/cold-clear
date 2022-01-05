@@ -18,8 +18,7 @@ serde-big-array = "0.3.2"
 serde_json = "1.0.64"
 
 [dependencies.tbp]
-git = "https://github.com/tetris-bot-protocol/tbp-rs"
-branch = "main"
+version = "1.0"
 features = [
     "randomizer"
 ]
