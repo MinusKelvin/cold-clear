@@ -141,6 +141,18 @@ impl<R: Row> Board<R> {
         }
     }
 
+    pub fn set_cell_color(&mut self, x: i32, y: i32, color: CellColor) {
+        self.cells[y as usize].set(x as usize, color);
+        let h = &mut self.column_heights[x as usize];
+        if color != CellColor::Empty {
+            *h = (*h).max(y + 1);
+        } else if *h == y + 1 {
+            while *h > 0 && !self.cells[*h as usize - 1].get(x as usize) {
+                *h -= 1;
+            }
+        }
+    }
+
     pub fn obstructed(&self, piece: &FallingPiece) -> bool {
         piece.cells().iter().any(|&(x, y)| self.occupied(x, y))
     }
