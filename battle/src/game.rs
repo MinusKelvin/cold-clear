@@ -403,6 +403,7 @@ impl Game {
             events.push(Event::GameOver);
         } else if locked.cleared_lines.is_empty() {
             self.state = GameState::SpawnDelay(self.config.spawn_delay);
+            self.send_garbage(events);
             self.receive_garbage(events, garbage_rng);
         } else {
             self.attacking += locked.garbage_sent;
