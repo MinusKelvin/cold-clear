@@ -1,10 +1,11 @@
 use std::collections::VecDeque;
 
+use rand::prelude::*;
+use serde::{Deserialize, Serialize};
+
 use battle::{Battle, Event, GameConfig, PieceMoveExecutor, Replay};
 use cold_clear::evaluation::Evaluator;
 use libtetris::{Board, ColoredRow, Controller, FallingPiece};
-use rand::prelude::*;
-use serde::{Deserialize, Serialize};
 
 pub struct BotInput<E: Evaluator> {
     pub controller: Controller,
@@ -93,9 +94,14 @@ pub fn do_battle(
     p1: impl Evaluator + Clone,
     p2: impl Evaluator + Clone,
 ) -> Option<(InfoReplay, bool)> {
+    #[cfg(feature = "tetrio_garbage")]
+    let config = GameConfig::fast_config();
+    #[cfg(not(feature = "tetrio_garbage"))]
+    let config = GameConfig::default();
+
     let mut battle = Battle::new(
-        GameConfig::default(),
-        GameConfig::default(),
+        config,
+        config,
         thread_rng().gen(),
         thread_rng().gen(),
         thread_rng().gen(),

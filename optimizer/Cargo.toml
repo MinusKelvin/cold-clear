@@ -15,3 +15,6 @@ serde_json = "1"
 bincode = "1"
 libflate = "0.1"
 rand = "0.7.0"
+
+[features]
+tetrio_garbage = ["cold-clear/tetrio_garbage"]

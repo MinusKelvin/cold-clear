@@ -31,3 +31,6 @@ webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "5a54126" }
 futures-util = "0.3"
 getrandom = { version = "0.1", features = ["wasm-bindgen"] }
 console_error_panic_hook = "0.1.6"
+
+[features]
+tetrio_garbage = ["libtetris/tetrio_garbage"]
