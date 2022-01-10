@@ -202,9 +202,17 @@ impl Game {
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
                 let mut events = vec![Event::EndOfLineClearDelay];
+                #[cfg(not(feature = "tetrio_garbage"))]
                 if !self.config.garbage_blocking {
                     self.send_garbage(&mut events);
                     self.receive_garbage(&mut events, garbage_rng);
+                }
+                #[cfg(feature = "tetrio_garbage")]
+                {
+                    self.send_garbage(&mut events);
+                    if !self.config.garbage_blocking {
+                        self.receive_garbage(&mut events, garbage_rng);
+                    }
                 }
                 events
             }

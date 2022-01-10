@@ -17,4 +17,4 @@ libflate = "0.1"
 rand = "0.7.0"
 
 [features]
-tetrio_garbage = ["cold-clear/tetrio_garbage"]
+tetrio_garbage = ["cold-clear/tetrio_garbage", "libtetris/tetrio_garbage", "battle/tetrio_garbage"]
