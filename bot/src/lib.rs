@@ -1,9 +1,6 @@
 pub use opening_book::{Book, MemoryBook};
 use serde::{Deserialize, Serialize};
 
-#[macro_use]
-extern crate rental;
-
 mod dag;
 pub mod evaluation;
 mod modes;
