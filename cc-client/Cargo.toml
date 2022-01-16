@@ -33,3 +33,6 @@ wasm-bindgen-futures = "0.4"
 
 [build-dependencies]
 build-utils = { git = "https://github.com/MinusKelvin/game-util-rs", rev = "4a39948" }
+
+[features]
+tetrio_garbage = ["cold-clear/tetrio_garbage", "libtetris/tetrio_garbage", "battle/tetrio_garbage"]

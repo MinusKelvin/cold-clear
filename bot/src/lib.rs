@@ -37,6 +37,9 @@ enum BotMsg {
     Reset {
         #[serde(with = "BigArray")]
         field: [[bool; 10]; 40],
+        #[cfg(feature = "tetrio_garbage")]
+        b2b: u32,
+        #[cfg(not(feature = "tetrio_garbage"))]
         b2b: bool,
         combo: u32,
     },

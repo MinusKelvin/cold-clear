@@ -32,7 +32,7 @@ impl Position {
                 field[y][x] = self.rows[y] & 1 << x != 0;
             }
         }
-        let mut board = Board::new_with_state(field, self.bag, self.extra, false, 0);
+        let mut board = Board::new_with_state(field, self.bag, self.extra, Default::default(), 0);
         let soft_drop = !board.above_stack(&mv);
         let clear = board.lock_piece(mv).placement_kind.is_clear();
         let mut position = *self;

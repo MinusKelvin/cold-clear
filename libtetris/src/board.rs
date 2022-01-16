@@ -12,6 +12,9 @@ pub struct Board<R = u16> {
     cells: ArrayVec<[R; 40]>,
     column_heights: [i32; 10],
     pub combo: u32,
+    #[cfg(feature = "tetrio_garbage")]
+    pub b2b_bonus: u32,
+    #[cfg(not(feature = "tetrio_garbage"))]
     pub b2b_bonus: bool,
     pub hold_piece: Option<Piece>,
     next_pieces: VecDeque<Piece>,
@@ -36,6 +39,9 @@ impl<R: Row> Board<R> {
             cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
             combo: 0,
+            #[cfg(feature = "tetrio_garbage")]
+            b2b_bonus: 0,
+            #[cfg(not(feature = "tetrio_garbage"))]
             b2b_bonus: false,
             hold_piece: None,
             next_pieces: VecDeque::new(),
@@ -48,13 +54,14 @@ impl<R: Row> Board<R> {
         field: [[bool; 10]; 40],
         bag_remain: EnumSet<Piece>,
         hold: Option<Piece>,
-        b2b: bool,
+        #[cfg(feature = "tetrio_garbage")] b2b: u32,
+        #[cfg(not(feature = "tetrio_garbage"))] b2b: bool,
         combo: u32,
     ) -> Self {
         let mut board = Board {
             cells: [*R::EMPTY; 40].into(),
             column_heights: [0; 10],
-            combo: combo,
+            combo,
             b2b_bonus: b2b,
             hold_piece: hold,
             next_pieces: VecDeque::new(),
@@ -191,6 +198,17 @@ impl<R: Row> Board<R> {
 
         let mut did_b2b = false;
         if placement_kind.is_clear() {
+            #[cfg(feature = "tetrio_garbage")]
+            if placement_kind.is_hard() {
+                if self.b2b_bonus > 0 {
+                    did_b2b = true;
+                }
+                self.b2b_bonus += 1;
+            } else {
+                self.b2b_bonus = 0;
+            }
+
+            #[cfg(not(feature = "tetrio_garbage"))]
             if placement_kind.is_hard() {
                 if self.b2b_bonus {
                     garbage_sent += 1;
@@ -201,11 +219,29 @@ impl<R: Row> Board<R> {
                 self.b2b_bonus = false;
             }
 
-            if self.combo as usize >= COMBO_GARBAGE.len() {
-                garbage_sent += COMBO_GARBAGE.last().unwrap();
-            } else {
-                garbage_sent += COMBO_GARBAGE[self.combo as usize];
-            }
+            #[cfg(feature = "tetrio_garbage")]
+                {
+                    // garbage here is an f64 to make the calculation as accurate to the
+                    // tetrio javascript code as possible
+                    const B2B_BONUS_LOG: f64 = 0.8;
+                    const COMBO_MINIFIER_LOG: f64 = 1.25;
+
+                    let mut garbage = garbage_sent as f64;
+                    if did_b2b {
+                        let log = ((self.b2b_bonus as f64 - 1.0) * B2B_BONUS_LOG).ln_1p();
+
+                        garbage += (1.0 + log).floor() + if self.b2b_bonus == 2 { 0.0 } else { (1.0 + log.fract()) / 3.0 };
+                    }
+
+                    garbage *= 1.0 + 0.25 * self.combo as f64;
+                    garbage = (self.combo as f64 * COMBO_MINIFIER_LOG).ln_1p().max(garbage);
+                    garbage_sent = garbage as u32;
+                }
+
+            #[cfg(not(feature = "tetrio_garbage"))]
+                {
+                    garbage_sent += COMBO_GARBAGE[(self.combo as usize).min(COMBO_GARBAGE.len() - 1)];
+                }
 
             self.combo += 1;
         } else {
@@ -213,6 +249,11 @@ impl<R: Row> Board<R> {
         }
 
         let perfect_clear = self.column_heights == [0; 10];
+        #[cfg(feature = "tetrio_garbage")]
+        if perfect_clear {
+            garbage_sent += 10;
+        }
+        #[cfg(not(feature = "tetrio_garbage"))]
         if perfect_clear {
             garbage_sent = 10;
         }
@@ -243,7 +284,7 @@ impl<R: Row> Board<R> {
         hold
     }
 
-    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item = Piece> + 'a {
+    pub fn next_queue<'a>(&'a self) -> impl DoubleEndedIterator<Item=Piece> + 'a {
         self.next_pieces.iter().copied()
     }
 

@@ -166,6 +166,9 @@ struct SimplifiedBoard<'c> {
     combo: u32,
     bag: EnumSet<Piece>,
     reserve: Piece,
+    #[cfg(feature = "tetrio_garbage")]
+    back_to_back: u32,
+    #[cfg(not(feature = "tetrio_garbage"))]
     back_to_back: bool,
     reserve_is_hold: bool,
 }
@@ -611,7 +614,13 @@ impl<E: Evaluation<R> + 'static, R: Clone + 'static> DagState<E, R> {
         plan
     }
 
-    pub fn reset(&mut self, field: [[bool; 10]; 40], b2b: bool, combo: u32) -> Option<i32> {
+    pub fn reset(
+        &mut self,
+        field: [[bool; 10]; 40],
+        #[cfg(feature = "tetrio_garbage")] b2b: u32,
+        #[cfg(not(feature = "tetrio_garbage"))] b2b: bool,
+        combo: u32,
+    ) -> Option<i32> {
         let garbage_lines;
         if b2b == self.board.b2b_bonus && combo == self.board.combo {
             let mut b = Board::<u16>::new();

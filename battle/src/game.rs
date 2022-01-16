@@ -202,8 +202,17 @@ impl Game {
             GameState::LineClearDelay(0) => {
                 self.state = GameState::SpawnDelay(self.config.spawn_delay);
                 let mut events = vec![Event::EndOfLineClearDelay];
+                #[cfg(not(feature = "tetrio_garbage"))]
                 if !self.config.garbage_blocking {
-                    self.deal_garbage(&mut events, garbage_rng);
+                    self.send_garbage(&mut events);
+                    self.receive_garbage(&mut events, garbage_rng);
+                }
+                #[cfg(feature = "tetrio_garbage")]
+                {
+                    self.send_garbage(&mut events);
+                    if !self.config.garbage_blocking {
+                        self.receive_garbage(&mut events, garbage_rng);
+                    }
                 }
                 events
             }
@@ -394,21 +403,26 @@ impl Game {
             events.push(Event::GameOver);
         } else if locked.cleared_lines.is_empty() {
             self.state = GameState::SpawnDelay(self.config.spawn_delay);
-            self.deal_garbage(events, garbage_rng);
+            self.send_garbage(events);
+            self.receive_garbage(events, garbage_rng);
         } else {
             self.attacking += locked.garbage_sent;
             self.state = GameState::LineClearDelay(self.config.line_clear_delay);
         }
     }
 
-    fn deal_garbage(&mut self, events: &mut Vec<Event>, rng: &mut impl Rng) {
+    fn send_garbage(&mut self, events: &mut Vec<Event>) {
         if self.attacking > self.garbage_queue {
             self.attacking -= self.garbage_queue;
+            events.push(Event::GarbageSent(self.attacking));
             self.garbage_queue = 0;
         } else {
             self.garbage_queue -= self.attacking;
-            self.attacking = 0;
         }
+        self.attacking = 0;
+    }
+
+    fn receive_garbage(&mut self, events: &mut Vec<Event>, rng: &mut impl Rng) {
         if self.garbage_queue > 0 {
             let mut dead = false;
             let mut col = rng.gen_range(0, 10);
@@ -426,9 +440,6 @@ impl Game {
                 events.push(Event::GameOver);
                 self.state = GameState::GameOver;
             }
-        } else if self.attacking > 0 {
-            events.push(Event::GarbageSent(self.attacking));
-            self.attacking = 0;
         }
     }
 }
