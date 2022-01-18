@@ -33,8 +33,16 @@ impl Position {
             }
         }
         let mut board = Board::new_with_state(field, self.bag, self.extra, false, 0);
-        let soft_drop = !board.above_stack(&mv);
-        let clear = board.lock_piece(mv).placement_kind.is_clear();
+        let soft_dropped = !board.above_stack(&mv);
+        let is_tspin = soft_dropped && mv.kind.0 == Piece::T && (
+            board.occupied(mv.x - 1, mv.y - 1) as u8 + board.occupied(mv.x + 1, mv.y - 1) as u8 +
+            board.occupied(mv.x - 1, mv.y + 1) as u8 + board.occupied(mv.x + 1, mv.y + 1) as u8
+        ) >= 3;
+        let lock = board.lock_piece(mv);
+        let long_moves = match is_tspin && lock.cleared_lines.len() >= 2 {
+            true => 0, // prefer tspin doubles
+            false => soft_dropped as u8 + lock.placement_kind.is_clear() as u8,
+        };
         let mut position = *self;
         for y in 0..10 {
             position.rows[y] = *board.get_row(y as i32);
@@ -52,7 +60,7 @@ impl Position {
                 position.bag = EnumSet::all();
             }
         }
-        (position, soft_drop as u8 as f32 + clear as u8 as f32)
+        (position, long_moves as f32)
     }
 
     pub fn next_possibilities(&self) -> Vec<(EnumSet<Piece>, EnumSet<Piece>)> {
