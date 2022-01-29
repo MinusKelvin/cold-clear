@@ -100,6 +100,11 @@ impl Game {
             current.rotate_left,
         );
         update_input(
+            &mut self.used.rotate_180,
+            self.prev.rotate_180,
+            current.rotate_180,
+        );
+        update_input(
             &mut self.used.soft_drop,
             self.prev.soft_drop,
             current.soft_drop,
@@ -262,6 +267,18 @@ impl Game {
                 if self.used.rotate_left {
                     if falling.piece.ccw(&self.board) {
                         self.used.rotate_left = false;
+                        falling.rotation_move_count += 1;
+                        falling.lock_delay = self.config.lock_delay;
+                        if falling.piece.tspin != TspinStatus::None {
+                            events.push(Event::PieceTSpined);
+                        } else {
+                            events.push(Event::PieceRotated);
+                        }
+                    }
+                }
+                if self.used.rotate_180 {
+                    if falling.piece.flip(&self.board) {
+                        self.used.rotate_180 = false;
                         falling.rotation_move_count += 1;
                         falling.lock_delay = self.config.lock_delay;
                         if falling.piece.tspin != TspinStatus::None {
